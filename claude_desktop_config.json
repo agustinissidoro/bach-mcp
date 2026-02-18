@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "max-bridge": {
+      "command": "C:/Users/agust/anaconda3/envs/bach-mcp/python.exe",
+      "args": ["C:/Users/agust/bach-mcp/py/dummy_mcp.py"]
+    }
+  }
+}
