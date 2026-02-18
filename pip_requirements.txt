@@ -31,7 +31,7 @@ jupyter_core==5.9.1
 matplotlib-inline==0.2.1
 mcp==1.26.0
 nest-asyncio==1.6.0
-packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1769093650/work
+packaging==24.2
 parso==0.8.6
 platformdirs==4.9.2
 prompt_toolkit==3.0.52
@@ -47,7 +47,6 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 python-multipart==0.0.22
 python-osc==1.9.3
-pywin32==311
 pyzmq==27.1.0
 referencing==0.37.0
 rpds-py==0.30.0

@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import signal
 import sys
+import threading
 import time
+from collections import deque
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Deque, Dict, Optional
 
 from tcp import TCPSend, TCPServer
-
-CommandHandler = Callable[[Dict[str, Any]], Any]
 
 
 def _log(message: str) -> None:
@@ -33,8 +33,26 @@ class MCPConfig:
     idle_sleep_seconds: float = 0.2
 
 
+@dataclass
+class BridgeMessage:
+    """Canonical message envelope shared by Max and Claude."""
+
+    type: str
+    data: str
+    raw: str
+    received_at: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "type": self.type,
+            "data": self.data,
+            "raw": self.raw,
+            "received_at": self.received_at,
+        }
+
+
 class BachMCPServer:
-    """Owns MCP lifecycle, command routing, and TCP transport wiring."""
+    """Owns MCP lifecycle and TCP transport wiring."""
 
     def __init__(self, config: Optional[MCPConfig] = None):
         self.config = config or MCPConfig()
@@ -47,12 +65,9 @@ class BachMCPServer:
             port=self.config.outgoing_port,
         )
         self.running = False
-        self._command_handlers: Dict[str, CommandHandler] = {}
-        self._register_builtin_commands()
-
-    def register_command(self, command: str, handler: CommandHandler) -> None:
-        """Register a command handler callable."""
-        self._command_handlers[command] = handler
+        self._incoming_messages: Deque[BridgeMessage] = deque(maxlen=500)
+        self._incoming_lock = threading.Lock()
+        self._incoming_event = threading.Event()
 
     def start(self) -> None:
         """Start server and bind incoming message handler."""
@@ -79,7 +94,7 @@ class BachMCPServer:
         _log("BACH MCP - Stopped")
 
     def run_forever(self) -> None:
-        """Run server loop until interrupted or shutdown command is received."""
+        """Run server loop until interrupted."""
         self.start()
         self._install_signal_handlers()
 
@@ -91,19 +106,72 @@ class BachMCPServer:
         finally:
             self.stop()
 
-    def send_json(self, payload: Dict[str, Any]) -> bool:
-        """Send JSON payload to Max through outgoing TCP transport."""
-        return self.sender.send(payload)
+    def send_score(self, score_llll: str) -> bool:
+        """Send raw llll score to Max."""
+        return self.sender.send(score_llll)
 
-    def emit_event(self, name: str, payload: Optional[Dict[str, Any]] = None) -> bool:
-        """Emit MCP event toward Max clients."""
-        return self.send_json(
-            {
-                "type": "event",
-                "event": name,
-                "payload": payload or {},
-            }
-        )
+    def send_info(self, message: str) -> bool:
+        """Send plain process message to Max."""
+        return self.sender.send(message)
+
+    def pop_next_incoming(self, message_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Pop oldest incoming message from Max, optionally filtered by type."""
+        with self._incoming_lock:
+            if not self._incoming_messages:
+                self._incoming_event.clear()
+                return None
+            if message_type is None:
+                message = self._incoming_messages.popleft()
+                if not self._incoming_messages:
+                    self._incoming_event.clear()
+                return message.to_dict()
+
+            for index, message in enumerate(self._incoming_messages):
+                if message.type != message_type:
+                    continue
+                selected = self._incoming_messages[index]
+                del self._incoming_messages[index]
+                if not self._incoming_messages:
+                    self._incoming_event.clear()
+                return selected.to_dict()
+            return None
+
+    def get_latest_incoming(self, message_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Return latest incoming message without consuming it."""
+        with self._incoming_lock:
+            if not self._incoming_messages:
+                return None
+            if message_type is None:
+                return self._incoming_messages[-1].to_dict()
+            for message in reversed(self._incoming_messages):
+                if message.type == message_type:
+                    return message.to_dict()
+            return None
+
+    def wait_for_incoming(
+        self,
+        timeout_seconds: float = 10.0,
+        message_type: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Wait for next incoming message from Max (consuming read)."""
+        deadline = time.time() + max(0.0, timeout_seconds)
+        while True:
+            message = self.pop_next_incoming(message_type=message_type)
+            if message is not None:
+                return message
+
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                return None
+
+            has_data = self._incoming_event.wait(timeout=min(remaining, 0.25))
+            if not has_data and remaining <= 0:
+                return None
+
+    def incoming_queue_size(self) -> int:
+        """Return number of queued incoming Max messages."""
+        with self._incoming_lock:
+            return len(self._incoming_messages)
 
     def _install_signal_handlers(self) -> None:
         def _handle_signal(signum, frame):  # noqa: ARG001
@@ -113,110 +181,44 @@ class BachMCPServer:
         if hasattr(signal, "SIGTERM"):
             signal.signal(signal.SIGTERM, _handle_signal)
 
-    def _register_builtin_commands(self) -> None:
-        self.register_command("ping", self._cmd_ping)
-        self.register_command("status", self._cmd_status)
-        self.register_command("echo", self._cmd_echo)
-        self.register_command("shutdown", self._cmd_shutdown)
-
     def _handle_incoming_message(self, raw_message: str) -> None:
-        command, payload, request_id = self._parse_command(raw_message)
-        if not command:
-            self._send_response(
-                command="invalid",
-                request_id=request_id,
-                ok=False,
-                data={"error": "Invalid command payload"},
-            )
-            return
-
-        result = self._dispatch_command(command, payload)
-        self._send_response(
-            command=command,
-            request_id=request_id,
-            ok=result["ok"],
-            data=result,
-        )
-
-    def _parse_command(
-        self, raw_message: str
-    ) -> Tuple[Optional[str], Dict[str, Any], Optional[Any]]:
         text = raw_message.strip()
         if not text:
-            return None, {}, None
+            return
+        parsed = self._parse_incoming(text)
+        with self._incoming_lock:
+            self._incoming_messages.append(parsed)
+            self._incoming_event.set()
+        _log(f"Queued incoming Max message type={parsed.type}")
 
-        try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError:
-            # Fallback: a plain-text message is interpreted as command name.
-            return text, {}, None
+    def _parse_incoming(self, text: str) -> BridgeMessage:
+        """Parse incoming raw text using envelope if present."""
+        message_type = "llll" if self._looks_like_llll(text) else "info"
+        data = text
 
-        if not isinstance(parsed, dict):
-            return None, {}, None
+        if text.startswith("{") and text.endswith("}"):
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                candidate_type = str(parsed.get("type") or "").strip().lower()
+                if candidate_type in {"llll", "info"}:
+                    message_type = candidate_type
+                    data = str(parsed.get("data", ""))
+                elif "message" in parsed:
+                    message_type = "info"
+                    data = str(parsed.get("message", ""))
 
-        command = parsed.get("command") or parsed.get("name")
-        request_id = parsed.get("id")
-        payload = parsed.get("payload", {})
+        return BridgeMessage(
+            type=message_type,
+            data=data,
+            raw=text,
+            received_at=time.time(),
+        )
 
-        if not command:
-            return None, {}, request_id
-
-        if payload is None:
-            payload = {}
-        elif not isinstance(payload, dict):
-            payload = {"value": payload}
-
-        return str(command), payload, request_id
-
-    def _dispatch_command(self, command: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        handler = self._command_handlers.get(command)
-        if handler is None:
-            return {"ok": False, "error": f"Unknown command: {command}"}
-
-        try:
-            result = handler(payload)
-            return {"ok": True, "result": result}
-        except Exception as exc:  # pragma: no cover - defensive for runtime transport loop
-            return {"ok": False, "error": str(exc)}
-
-    def _send_response(
-        self,
-        command: str,
-        request_id: Optional[Any],
-        ok: bool,
-        data: Dict[str, Any],
-    ) -> None:
-        response: Dict[str, Any] = {
-            "type": "response",
-            "command": command,
-            "ok": ok,
-        }
-        if request_id is not None:
-            response["id"] = request_id
-        response.update(data)
-        self.send_json(response)
-
-    def _cmd_ping(self, payload: Dict[str, Any]) -> Dict[str, Any]:  # noqa: ARG002
-        return {"pong": True, "timestamp": time.time()}
-
-    def _cmd_status(self, payload: Dict[str, Any]) -> Dict[str, Any]:  # noqa: ARG002
-        return {
-            "running": self.running,
-            "incoming": {
-                "host": self.config.incoming_host,
-                "port": self.config.incoming_port,
-            },
-            "outgoing": {
-                "host": self.config.outgoing_host,
-                "port": self.config.outgoing_port,
-                "connected": self.sender.connected,
-            },
-            "commands": sorted(self._command_handlers.keys()),
-        }
-
-    def _cmd_echo(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        return payload
-
-    def _cmd_shutdown(self, payload: Dict[str, Any]) -> Dict[str, Any]:  # noqa: ARG002
-        self.running = False
-        return {"message": "Shutdown requested"}
+    @staticmethod
+    def _looks_like_llll(text: str) -> bool:
+        """Heuristic for raw llll strings."""
+        stripped = text.strip()
+        return stripped.startswith("[") and stripped.endswith("]")
