@@ -69,9 +69,14 @@ class MaxTCPClient extends EventEmitter {
   // Send message to server
   send(message) {
     if (this.connected && this.socket) {
-      this.socket.write(message);
+      const payload = message.endsWith('\n') ? message : `${message}\n`;
+      this.socket.write(payload);
+      Max.post(`[Bach TCP Client] Sent message: ${message}`);
       return true;
     } else {
+      Max.post(
+        `[Bach TCP Client] Failed to send message (connected=${this.connected}): ${message}`
+      );
       return false;
     }
   }
@@ -111,18 +116,43 @@ global.maxTCPClient.on('disconnected', () => {
 });
 
 // Register handlers for Max messages
+function formatMaxAtom(value) {
+  if (Array.isArray(value)) {
+    return `[ ${value.map(formatMaxAtom).join(' ')} ]`;
+  }
+  return String(value);
+}
+
+if (Max.MESSAGE_TYPES && Max.MESSAGE_TYPES.ALL) {
+  Max.addHandler(Max.MESSAGE_TYPES.ALL, (...args) => {
+    Max.post(`[Bach TCP Client] ALL handler args: ${JSON.stringify(args)}`);
+  });
+}
+
+Max.addHandler("list", (...args) => {
+  Max.post(`[Bach TCP Client] list handler args: ${JSON.stringify(args)}`);
+});
+
+Max.addHandler("bang", () => {
+  Max.post("[Bach TCP Client] bang received");
+});
+
 Max.addHandler("sendMessage", function(...args) {
   let message = '';
+  Max.post(`[Bach TCP Client] sendMessage raw args: ${JSON.stringify(args)}`);
   
   if (args.length === 0) {
     return false;
   } else if (args.length === 1) {
-    message = String(args[0]);
+    message = formatMaxAtom(args[0]);
   } else {
-    message = args.map(arg => String(arg)).join(' ');
+    message = args.map(arg => formatMaxAtom(arg)).join(' ');
   }
   
   const result = global.maxTCPClient.send(message);
+  Max.post(
+    `[Bach TCP Client] sendMessage result=${result ? 'ok' : 'failed'} payload="${message}"`
+  );
   Max.outlet(['sent', message]);
   return result;
 });

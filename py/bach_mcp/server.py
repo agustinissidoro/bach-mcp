@@ -219,6 +219,10 @@ class BachMCPServer:
 
     @staticmethod
     def _looks_like_llll(text: str) -> bool:
-        """Heuristic for raw llll strings."""
+        """Heuristic for raw llll strings, with optional selector prefix."""
         stripped = text.strip()
-        return stripped.startswith("[") and stripped.endswith("]")
+        if stripped.startswith("[") and stripped.endswith("]"):
+            return True
+        if stripped.lower().startswith("roll [") and stripped.endswith("]"):
+            return True
+        return False
