@@ -1047,43 +1047,96 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         return _send_max_message(" ".join(parts))
 
     @mcp.tool()
-    def sel(start_ms: float, end_ms: float) -> Dict[str, Any]:
-        """Select all notation items within a time range in bach.roll.
+    def sel(arguments: str) -> Dict[str, Any]:
+        """Select notation items in bach.roll using the full bach sel syntax.
 
-        Always selects items in the given range, regardless of their current
-        selection state. Previously selected items outside the range are deselected.
+        The sel message adds notation items to the current selection.
+        Always use the raw arguments string — the syntax is too varied to parameterize.
 
-        Use select() to toggle selection in a range instead.
-        Use unselect() to deselect a specific range.
-        Use clearselection() to deselect everything at once.
+        SELECTION MODES:
 
-        Parameters:
-        - start_ms: start of the time range in milliseconds
-        - end_ms:   end of the time range in milliseconds
+        Time/pitch range (basic):
+        sel <start_ms> <end_ms> <min_cents> <max_cents> [voice]
+        Use [] or nil to leave a bound open.
+        - sel(arguments="1000 3000 6000 7200")        notes between 1-3s, C4-C5
+        - sel(arguments="1000 3000 [] []")             notes between 1-3s, any pitch
+        - sel(arguments="[] [] 4800 6000")             notes below middle C
+        - sel(arguments="[] [] [] [] 2")               all notes in voice 2
+        - sel(arguments="1000 3000 [] [] [1 3 4]")     voices 1, 3 and 4
 
-        Examples (exact string sent to Max):
-        - sel(0, 1000)    -> "sel 0.0 1000.0"
-        - sel(500, 2000)  -> "sel 500.0 2000.0"
+        Everything / category:
+        - sel(arguments="all")                         select everything
+        - sel(arguments="notes")                       all notes
+        - sel(arguments="chords")                      all chords
+        - sel(arguments="markers")                     all markers
+        - sel(arguments="breakpoints")                 all breakpoints
+        - sel(arguments="tails")                       all tails
+
+        By index (negative = count from end):
+        - sel(arguments="chord 3")                     3rd chord of voice 1
+        - sel(arguments="chord 2 4")                   4th chord of voice 2
+        - sel(arguments="chord -1 -1")                 last chord of last voice
+        - sel(arguments="chord [1 3] [2 2] [-2 5]")    multiple chords
+        - sel(arguments="note 3 4 -1")                 last note of 4th chord, voice 3
+        - sel(arguments="note [1 3 2] [1 3 3]")        multiple notes
+        - sel(arguments="marker 5")                    5th marker
+        - sel(arguments="marker -2")                   second-to-last marker
+        - sel(arguments="voice 2")                     2nd voice
+
+        By name:
+        - sel(arguments="John")                        items named 'John'
+        - sel(arguments="John Lennon")                 items named both 'John' and 'Lennon'
+
+        Conditional (note if, chord if, marker if, breakpoint if, tail if):
+        Uses expr-like expressions. Available symbolic variables:
+        onset, duration, velocity, cents, tail, voice, part,
+        numnotes, numchords, index, chordindex, noteindex
+
+        - sel(arguments="note if velocity == 100")
+        - sel(arguments="note if cents == 6000")               all middle C's
+        - sel(arguments="note if [cents % 1200] == 0")         all C's (any octave)
+        - sel(arguments="note if voice == 2")                  notes in voice 2
+        - sel(arguments="note if [cents < 6000] && [duration < 1000]")
+        - sel(arguments="chord if random(0,100)<50")           random ~50% of chords
+        - sel(arguments="marker if onset > 5000")              markers after 5s
+        - sel(arguments="breakpoint if [cents > 7200] && [velocity > 100]")
+        - sel(arguments="tail if cents > 6000")                tails above middle C
+
+        Markers by role:
+        - sel(arguments="markers @role none")          markers with no role
+        - sel(arguments="markers @role barline")       barline markers
+
+        Use select() for involutive (toggle) selection with the same syntax.
+        Use unselect() to deselect a time range.
+        Use clearselection() to deselect everything.
         """
-        return _send_max_message(f"sel {float(start_ms)} {float(end_ms)}")
+        arguments = arguments.strip()
+        if not arguments:
+            return {"ok": False, "message": "arguments cannot be empty"}
+        return _send_max_message(f"sel {arguments}")
 
     @mcp.tool()
-    def select(start_ms: float, end_ms: float) -> Dict[str, Any]:
-        """Involutive time-range selection in bach.roll.
+    def select(arguments: str) -> Dict[str, Any]:
+        """Involutive selection in bach.roll — same syntax as sel() but toggles selection state.
 
-        Works like sel() but toggles selection state: items in the range that are
-        already selected become deselected, and unselected items become selected.
-        This mirrors the behavior of shift-clicking a selection rectangle in the UI.
+        Items that are already selected become deselected, and unselected items become
+        selected. This mirrors shift-clicking a selection rectangle in the UI.
 
-        Use sel() when you want to force-select a range.
-        Use select() when you want to toggle selection in a range (e.g. adding to
-        or subtracting from an existing selection).
+        The syntax is identical to sel() in every way, with one exception:
+        "select all" always selects everything (non-involutive).
+
+        Refer to sel() for the full syntax documentation and examples.
 
         Examples (exact string sent to Max):
-        - select(0, 1000)    -> "select 0.0 1000.0"
-        - select(500, 2000)  -> "select 500.0 2000.0"
+        - select(arguments="all")                   -> "select all" (always selects all)
+        - select(arguments="note if voice == 2")    -> toggle notes in voice 2
+        - select(arguments="1000 3000 [] []")       -> toggle notes between 1-3s
+        - select(arguments="chord 3")               -> toggle 3rd chord of voice 1
         """
-        return _send_max_message(f"select {float(start_ms)} {float(end_ms)}")
+        arguments = arguments.strip()
+        if not arguments:
+            return {"ok": False, "message": "arguments cannot be empty"}
+        return _send_max_message(f"select {arguments}")
 
     @mcp.tool()
     def unselect(start_ms: float, end_ms: float) -> Dict[str, Any]:
@@ -1372,5 +1425,858 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         inner = " ".join(parts)
         command = f"[slotinfo [{slot_number} {inner}]]"
         return _send_max_message(command)
+
+    @mcp.tool()
+    def erasebreakpoints() -> Dict[str, Any]:
+        """Delete all pitch breakpoints from the currently selected notes in bach.roll.
+
+        Removes all intermediate breakpoints, leaving only the default
+        notehead (start) and tail (end) positions. This effectively removes
+        any glissandi from the selected notes.
+
+        Always operates on the current selection. Use sel() to select notes first.
+
+        Example (exact string sent to Max):
+        - erasebreakpoints() -> "erasebreakpoints"
+        """
+        return _send_max_message("erasebreakpoints")
+
+    @mcp.tool()
+    def eraseslot(slot: str) -> Dict[str, Any]:
+        """Clear the content of a slot for all currently selected notes in bach.roll.
+
+        Removes the data stored in the specified slot without affecting the
+        slot definition (slotinfo). The slot remains defined, just empty.
+
+        Always operates on the current selection. Use sel() to select notes first.
+
+        Parameters:
+        - slot: which slot to clear. Can be:
+            - a slot number as string (e.g. "4")
+            - a slot name (e.g. "amplienv")
+            - "active"  - the currently open slot window
+            - "all"     - clear all slots
+
+        Examples (exact string sent to Max):
+        - eraseslot("4")          -> "eraseslot 4"
+        - eraseslot("20")         -> "eraseslot 20" (clears dynamics)
+        - eraseslot("22")         -> "eraseslot 22" (clears articulations)
+        - eraseslot("amplienv")   -> "eraseslot amplienv"
+        - eraseslot("active")     -> "eraseslot active"
+        - eraseslot("all")        -> "eraseslot all"
+        """
+        slot = slot.strip()
+        if not slot:
+            return {"ok": False, "message": "slot cannot be empty"}
+        return _send_max_message(f"eraseslot {slot}")
+
+    @mcp.tool()
+    def exportimage(
+        filename: str = "",
+        view: str = "",
+        mspersystem: float = -1.0,
+        adaptwidth: int = -1,
+        dpi: int = -1,
+        systemvshift: int = -1,
+    ) -> Dict[str, Any]:
+        """Export the current bach.roll score as a PNG image.
+
+        If no filename is provided, a save dialog box will open in Max.
+        Images are always exported in PNG format.
+
+        Parameters:
+        - filename: output file path (e.g. "/tmp/score.png"). Leave empty for dialog.
+
+        - view: export view mode. Options:
+            - "raw"       - exports the current visible portion of the score as-is
+            - "line"      - exports the whole score as a single horizontal system (default)
+            - "multiline" - splits the score into multiple image files, one per system.
+                            System length is set via mspersystem.
+            - "scroll"    - like multiline but all systems collected into one tall image.
+                            System length is set via mspersystem.
+
+        - mspersystem: length of each system in milliseconds (for multiline/scroll modes).
+                       Leave at -1.0 to use the object's current domain width.
+
+        - adaptwidth: controls how mspersystem affects image width:
+            - 0 = change horizontal zoom to fit image to object width (default)
+            - 1 = change object width to preserve current zoom
+            Leave at -1 to use bach's default (0).
+
+        - dpi: dots per inch for the exported image. Leave at -1 for default (72).
+
+        - systemvshift: vertical separation between systems in pixels (scroll/multiline).
+                        Leave at -1 for default (0).
+
+        Examples (exact string sent to Max):
+        - exportimage()
+          -> dialog box
+        - exportimage("/tmp/score.png")
+          -> "exportimage /tmp/score.png"
+        - exportimage("/tmp/score.png", view="line")
+          -> "exportimage /tmp/score.png @view line"
+        - exportimage("/tmp/score.png", view="scroll", mspersystem=5000)
+          -> "exportimage /tmp/score.png @view scroll @mspersystem 5000.0"
+        - exportimage("/tmp/score.png", view="multiline", mspersystem=5000, systemvshift=10)
+          -> "exportimage /tmp/score.png @view multiline @mspersystem 5000.0 @systemvshift 10"
+        """
+        parts = ["exportimage"]
+        filename = filename.strip()
+        if filename:
+            parts.append(filename)
+        if view.strip():
+            parts.append(f"@view {view.strip()}")
+        if mspersystem >= 0:
+            parts.append(f"@mspersystem {float(mspersystem)}")
+        if adaptwidth >= 0:
+            parts.append(f"@adaptwidth {int(adaptwidth)}")
+        if dpi >= 0:
+            parts.append(f"@dpi {int(dpi)}")
+        if systemvshift >= 0:
+            parts.append(f"@systemvshift {int(systemvshift)}")
+        return _send_max_message(" ".join(parts))
+
+    @mcp.tool()
+    def merge(
+        threshold_ms: float = -1.0,
+        threshold_cents: float = -1.0,
+        selection: bool = False,
+        time_policy_set: bool = False,
+        time_policy: int = 0,
+        pitch_policy_set: bool = False,
+        pitch_policy: int = 0,
+    ) -> Dict[str, Any]:
+        """Merge chords too close in time and/or notes too close in pitch in bach.roll.
+
+        Two separate operations can be performed independently or together:
+        1. TIME merging: chords within threshold_ms are merged into one chord
+        2. PITCH merging: notes within threshold_cents are merged into one note
+
+        Set either threshold to -1 to skip that merging direction.
+
+        Parameters:
+        - threshold_ms: time threshold in milliseconds. Chords closer than this
+                        are merged. Set to -1 to skip time merging.
+
+        - threshold_cents: pitch threshold in cents. Notes closer in pitch than
+                           this are merged. Set to -1 to skip pitch merging.
+
+        - selection: if True, only merge currently selected elements.
+                     if False, apply to the whole score (default).
+
+        - time_policy_set: set to True to include time_policy in the command.
+        - time_policy: how to align the merged chord in time:
+            - -1 = align to the leftmost (earliest) chord
+            -  0 = align to the average onset (default)
+            -  1 = align to the rightmost (latest) chord
+
+        - pitch_policy_set: set to True to include pitch_policy in the command.
+        - pitch_policy: how to set pitch/velocity of merged note:
+            - -1 = use the bottommost pitch/velocity
+            -  0 = use the average pitch/velocity (default)
+            -  1 = use the topmost pitch/velocity
+
+        Note: merging also applies to markers. To avoid affecting markers,
+        select only chords first and use selection=True.
+
+        Examples (exact string sent to Max):
+        - merge(threshold_ms=200, threshold_cents=10)
+          -> "merge 200.0 10.0"
+        - merge(threshold_ms=200, threshold_cents=-1)
+          -> "merge 200.0 -1.0" (time merging only)
+        - merge(threshold_ms=-1, threshold_cents=10)
+          -> "merge -1.0 10.0" (pitch merging only)
+        - merge(selection=True, threshold_ms=200, threshold_cents=10)
+          -> "merge selection 200.0 10.0"
+        - merge(threshold_ms=200, threshold_cents=10,
+                time_policy_set=True, time_policy=-1,
+                pitch_policy_set=True, pitch_policy=1)
+          -> "merge 200.0 10.0 -1 1"
+        """
+        parts = ["merge"]
+        if selection:
+            parts.append("selection")
+        parts.append(str(float(threshold_ms)))
+        parts.append(str(float(threshold_cents)))
+        if time_policy_set:
+            parts.append(str(int(time_policy)))
+        if pitch_policy_set:
+            parts.append(str(int(pitch_policy)))
+        return _send_max_message(" ".join(parts))
+
+    @mcp.tool()
+    def subroll(
+        voices: str = "[]",
+        time_lapse: str = "[]",
+        selective_options: str = "",
+        onset_only: bool = False,
+        timeout_seconds: float = 15.0,
+    ) -> str:
+        """Extract and return a portion of bach.roll as llll gathered syntax.
+
+        Outputs only certain voices within a certain time interval, sending the
+        result back from Max. Useful for extracting subsections of a score.
+
+        Parameters:
+        - voices: llll of voice numbers to extract, as a string.
+                  Use "[]" or "nil" to extract all voices.
+                  Examples: "[1 2 4]", "[1 3]", "[]"
+
+        - time_lapse: llll of [start_ms end_ms] to extract, as a string.
+                      Use "[]" or "nil" for the full duration.
+                      Use a negative end_ms to extract until end of score.
+                      Examples: "[1000 3000]", "[2000 -1]", "[]"
+
+        - selective_options: optional list of header sections to include in output.
+                             By default all header is included. Use "[body]" to
+                             output only the musical content with no header.
+                             Options: body, clefs, markers, keys, voicenames, etc.
+                             Examples: "[body]", "[clefs markers body]"
+
+        - onset_only: if True, only extracts notes whose onset falls within the
+                      time range (no partial notes). Adds "onset" before voices.
+
+        - timeout_seconds: how long to wait for Max to respond.
+
+        Examples (exact string sent to Max):
+        - subroll(voices="[1 2 4]", time_lapse="[1000 3000]")
+          -> "subroll [1 2 4] [1000 3000]"
+        - subroll(voices="[]", time_lapse="[1000 3000]")
+          -> "subroll [] [1000 3000]" (all voices, 1-3s)
+        - subroll(voices="[1 2]", time_lapse="[]")
+          -> "subroll [1 2] []" (voices 1 and 2, full duration)
+        - subroll(voices="[1 3]", time_lapse="[2000 -1]")
+          -> "subroll [1 3] [2000 -1]" (from 2s to end)
+        - subroll(voices="[1 3]", time_lapse="[2000 -1]", onset_only=True)
+          -> "subroll onset [1 3] [2000 -1]"
+        - subroll(voices="[4 5]", time_lapse="[1000 3000]", selective_options="[body]")
+          -> "subroll [4 5] [1000 3000] [body]"
+        - subroll(voices="[4 5]", time_lapse="[1000 3000]", selective_options="[clefs markers body]")
+          -> "subroll [4 5] [1000 3000] [clefs markers body]"
+        """
+        parts = ["subroll"]
+        if onset_only:
+            parts.append("onset")
+        parts.append(voices.strip())
+        parts.append(time_lapse.strip())
+        if selective_options.strip():
+            parts.append(selective_options.strip())
+        command = " ".join(parts)
+        return _request_max_and_wait(command, timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def tail(expression: str) -> Dict[str, Any]:
+        """Set or modify the tail position (end point) of selected notes in bach.roll.
+
+        The tail is the end position of a note in milliseconds. Always operates
+        on the current selection — use sel() to select notes first.
+
+        The expression can be:
+
+        SIMPLE VALUE:
+        A number sets the absolute tail position in milliseconds.
+        - tail("1000")        set tail at 1000ms
+        - tail("= 1000")      same (explicit assignment)
+        - tail("= 30000")     make all selected notes end together at 30s
+
+        RELATIVE MODIFICATION via llll [value function]:
+        function is one of: plus, minus, times, div
+        - tail("= [tail plus 1000]")    lengthen all notes by 1s
+        - tail("= [tail minus 500]")    shorten all notes by 500ms
+        - tail("= [duration times 2]")  double the duration of all notes
+
+        EQUATION using symbolic variables (preceded by "= "):
+        Available variables: onset, duration, velocity, cents, tail, voice, part,
+        numnotes, numchords, index, chordindex, noteindex
+        - tail("= onset + random[0, 1000]")   random duration up to 1s after onset
+        - tail("= onset + duration * 2")      double each note's duration
+
+        LIST OF VALUES (one per note in chord, bottom to top):
+        - tail("1000 2000 3000")   different tails per note
+
+        Examples (exact string sent to Max):
+        - tail("1000")                         -> "tail 1000"
+        - tail("= 1000")                       -> "tail = 1000"
+        - tail("= tail + 1000")                -> "tail = tail + 1000"
+        - tail("= onset + random[0, 1000]")    -> "tail = onset + random[0, 1000]"
+        """
+        expression = expression.strip()
+        if not expression:
+            return {"ok": False, "message": "expression cannot be empty"}
+        return _send_max_message(f"tail {expression}")
+
+    @mcp.tool()
+    def write(filename: str = "") -> Dict[str, Any]:
+        """Save the full bach.roll content in native llll format (.llll file).
+
+        Saves all score content including slotinfo, header, voices, notes, markers,
+        and all other data in bach's native binary format with full precision.
+
+        If no filename is provided, a save dialog box will open in Max.
+        For human-readable text export, use writetxt() instead.
+        For MIDI export, use exportmidi() instead.
+
+        Parameters:
+        - filename: output file path (e.g. "myfile.llll"). Leave empty for dialog.
+
+        Examples (exact string sent to Max):
+        - write()               -> "write" (dialog box)
+        - write("myfile.llll")  -> "write myfile.llll"
+        """
+        filename = filename.strip()
+        command = f"write {filename}" if filename else "write"
+        return _send_max_message(command)
+
+    @mcp.tool()
+    def writetxt(
+        filename: str = "",
+        maxdecimals: int = -1,
+        indent: str = "",
+        maxdepth: int = -2,
+        wrap: int = -1,
+    ) -> Dict[str, Any]:
+        """Save the full bach.roll content as a human-readable text file (.txt).
+
+        Saves all score content in llll text format. The result is a readable,
+        editable text file, but floating-point precision is approximate.
+        For lossless saving, use write() instead.
+
+        If no filename is provided, a save dialog box will open in Max.
+
+        Parameters:
+        - filename: output file path (e.g. "myfile.txt"). Leave empty for dialog.
+
+        - maxdecimals: floating-point precision (number of decimal digits).
+                       Leave at -1 for bach's default (10).
+
+        - indent: indentation style for nested sublists.
+                  - "tab"      - indent with tabs (default)
+                  - an integer - indent with that many spaces per level
+                  Leave empty for bach's default ("tab").
+
+        - maxdepth: maximum depth at which sublists are placed on new lines.
+                    - -1 = no limit (default, full indentation)
+                    - positive = only indent up to that depth
+                    Leave at -2 to use bach's default (-1).
+
+        - wrap: maximum number of characters per line.
+                - 0 = no wrapping (default)
+                Leave at -1 for bach's default (0).
+
+        Examples (exact string sent to Max):
+        - writetxt()
+          -> "writetxt" (dialog box)
+        - writetxt("myfile.txt")
+          -> "writetxt myfile.txt"
+        - writetxt("myfile.txt", maxdecimals=3)
+          -> "writetxt myfile.txt @maxdecimals 3"
+        - writetxt("myfile.txt", maxdecimals=3, wrap=40)
+          -> "writetxt myfile.txt @maxdecimals 3 @wrap 40"
+        - writetxt("myfile.txt", maxdepth=1)
+          -> "writetxt myfile.txt @maxdepth 1"
+        """
+        parts = ["writetxt"]
+        filename = filename.strip()
+        if filename:
+            parts.append(filename)
+        if maxdecimals >= 0:
+            parts.append(f"@maxdecimals {int(maxdecimals)}")
+        if indent.strip():
+            parts.append(f"@indent {indent.strip()}")
+        if maxdepth >= -1:
+            parts.append(f"@maxdepth {int(maxdepth)}")
+        if wrap >= 0:
+            parts.append(f"@wrap {int(wrap)}")
+        return _send_max_message(" ".join(parts))
+
+    @mcp.tool()
+    def set_appearance(attribute: str, value: str) -> Dict[str, Any]:
+        """Set a display/appearance attribute of bach.roll.
+
+        Sends the message "<attribute> <value>" directly to Max.
+        For example: set_appearance("ruler", "1") sends "ruler 1" to Max.
+
+        All values are plain strings. RGBA colors are given as "r g b a"
+        with floats from 0.0 to 1.0. Toggle values are integers (0=off, 1=on).
+
+        RULER:
+        - ruler               0=never, 1=above, 2=below, 3=both
+                              sends: "ruler 1"
+        - rulercolor          r g b a
+                              sends: "rulercolor 0. 0. 0. 1."
+        - rulerlabels         0=off, 1=on
+                              sends: "rulerlabels 1"
+        - rulerlabelsfontsize float (e.g. "8")
+                              sends: "rulerlabelsfontsize 8"
+        - rulermode           0=fixed, 1=smart
+                              sends: "rulermode 1"
+
+        SCROLLBARS:
+        - scrollbarcolor      r g b a
+                              sends: "scrollbarcolor 0.3 0.3 0.3 1."
+        - showscrollbar       0=always hide, 1=show if needed (default)
+                              sends: "showscrollbar 1"
+        - showvscrollbar      0=always hide, 1=show if needed (default)
+                              sends: "showvscrollbar 1"
+
+        SELECTION COLORS:
+        - selectedlegendcolor r g b a  (legend shown at top left on click)
+                              sends: "selectedlegendcolor 0.2 0.2 0.2 1."
+        - selectioncolor      r g b a  (selected noteheads, accidentals, duration lines)
+                              sends: "selectioncolor 0.8 0. 0.8 1."
+
+        ACCIDENTALS:
+        - showaccidentalspreferences
+                              0=classically (default)
+                              1=always
+                              2=altered notes
+                              3=altered notes no repetition
+                              4=altered notes no naturals
+                              5=never
+                              sends: "showaccidentalspreferences 4"
+                              NOTE: modes 2 and 3 can be slow in bach.roll.
+
+        SHOW/HIDE ELEMENTS (0=off, 1=on unless noted):
+        - showannotations           sends: "showannotations 1"
+        - showarticulations         sends: "showarticulations 1"
+        - showarticulationsextensions  sends: "showarticulationsextensions 1"
+        - showauxclefs              sends: "showauxclefs 1"
+        - showborder                sends: "showborder 1"
+        - showclefs                 sends: "showclefs 1"
+        - showdurations             sends: "showdurations 1"
+        - showdynamics              sends: "showdynamics 1"
+        - showfocus                 sends: "showfocus 1"
+        - showhairpins              sends: "showhairpins 1"
+        - showledgerlines           0=never, 1=standard, 2=always refer to main staves
+                                    sends: "showledgerlines 1"
+        - showlyrics                sends: "showlyrics 1"
+        - showmarkers               sends: "showmarkers 1"
+        - shownotenames             sends: "shownotenames 0"
+        - showpartcolors            sends: "showpartcolors 0"
+        - showplayhead              sends: "showplayhead 0"
+        - showslotlabels            sends: "showslotlabels 1"
+        - showslotlegend            sends: "showslotlegend 1"
+        - showslotnumbers           sends: "showslotnumbers 1"
+        - showsolocolor             0=never, 1=when selected, 2=when not selected, 3=always
+                                    sends: "showsolocolor 2"
+        - showstems                 0=none, 1=main stem only, 2=main and auxiliary (default)
+                                    sends: "showstems 2"
+        - showtails                 sends: "showtails 1"
+        - showvoicenames            sends: "showvoicenames 1"
+
+        GROUPS:
+        - showgroups                0=none, 1=lines, 2=colors, 3=lines and colors, 4=beams (default)
+                                    sends: "showgroups 4"
+
+        VELOCITY DISPLAY:
+        - showvelocity              0=none (default), 1=colorscale, 2=colorspectrum,
+                                    3=alpha, 4=duration line width, 5=notehead size
+                                    sends: "showvelocity 2"
+
+        STEMS AND GRID:
+        - stemcolor                 r g b a (stem color)
+                                    sends: "stemcolor 0. 0. 0. 1."
+        - subdivisiongridcolor      r g b a (grid subdivision line color)
+                                    sends: "subdivisiongridcolor 0. 0. 0. 0.1"
+
+        VOICE NAMES:
+        - voicenamesalign           1=left, 2=center, 3=right
+                                    sends: "voicenamesalign 1"
+        - voicenamesfont            font name as symbol (e.g. "Arial")
+                                    sends: "voicenamesfont Arial"
+        - voicenamesfontsize        float (rescaled with vzoom)
+                                    sends: "voicenamesfontsize 11"
+
+        VOICE SPACING:
+        - voicespacing              space-separated floats, one more than number of voices.
+                                    First = space above voice 1, last = space below last voice,
+                                    middle values = space between consecutive voices.
+                                    All values are pixels (rescaled with vzoom).
+                                    sends: "voicespacing 10. 20. 20. 10."
+
+        ZOOM:
+        - vzoom                     vertical zoom percentage, or "auto" to link to object height.
+                                    sends: "vzoom auto" or "vzoom 100"
+        - zoom                      horizontal zoom percentage (100 = default)
+                                    sends: "zoom 100."
+
+        Examples (exact string sent to Max):
+        - set_appearance("ruler", "1")                      -> "ruler 1"
+        - set_appearance("rulercolor", "0. 0. 0. 1.")       -> "rulercolor 0. 0. 0. 1."
+        - set_appearance("showdurations", "0")              -> "showdurations 0"
+        - set_appearance("selectioncolor", "0.8 0. 0.8 1.") -> "selectioncolor 0.8 0. 0.8 1."
+        - set_appearance("showvelocity", "2")               -> "showvelocity 2"
+        - set_appearance("showgroups", "4")                 -> "showgroups 4"
+        - set_appearance("showaccidentalspreferences", "4") -> "showaccidentalspreferences 4"
+        """
+        attribute = attribute.strip()
+        value = value.strip()
+        if not attribute:
+            return {"ok": False, "message": "attribute cannot be empty"}
+        if not value:
+            return {"ok": False, "message": "value cannot be empty"}
+        return _send_max_message(f"{attribute} {value}")
+
+    @mcp.tool()
+    def addchord(
+        chord_llll: str,
+        voice: int = 1,
+        select: bool = False,
+    ) -> Dict[str, Any]:
+        """Add a single chord to an existing bach.roll score without rebuilding it.
+
+        Unlike send_score_to_max() which replaces the entire score, addchord()
+        inserts a new chord into the existing content. Use this for incremental
+        composition when the rest of the score should be preserved.
+
+        The chord is given in gathered syntax llll form:
+        [ onset_ms NOTE1 NOTE2 ... chord_flag ]
+
+        Each NOTE is:
+        [ pitch_cents duration_ms velocity [specifications...] note_flag ]
+
+        Specifications (optional, between velocity and note_flag, any order):
+        - [breakpoints [0 0 0] [rel_x delta_cents slope] ... [1 delta_cents slope]]
+        - [slots [slot_number CONTENT] ...]
+        - [name NAME_OR_NAMES]
+        - [graphic displayed_midicents displayed_accidental]
+
+        Pitch can be given as midicents (e.g. 6000) or note name (e.g. C5, D#4, Bb3).
+        Middle C = C5 = 6000 midicents.
+        Accidentals: # sharp, b flat, x double sharp, q quartertone sharp,
+                     d quartertone flat, ^ eighth-tone sharp, v eighth-tone flat.
+
+        chord_flag (optional bitfield): 0=normal, 1=locked, 2=muted, 4=solo
+
+        Parameters:
+        - chord_llll: the chord in gathered syntax llll form (see above)
+        - voice: voice number to add the chord to (1-indexed, default: 1)
+        - select: if True, also select the added chord (default: False)
+
+        Examples (exact string sent to Max):
+        - addchord("[1000 [6000 500 50]]")
+          -> "addchord [1000 [6000 500 50]]"
+          (middle C at 1s, 500ms, velocity 50, voice 1)
+
+        - addchord("[1000 [6000 500 50]]", voice=2)
+          -> "addchord 2 [1000 [6000 500 50]]"
+
+        - addchord("[1000 [6000 500 50]]", voice=2, select=True)
+          -> "addchord 2 [1000 [6000 500 50]] @sel 1"
+
+        - addchord("[1000 [6000 500 50] [7200 500 50]]")
+          -> "addchord [1000 [6000 500 50] [7200 500 50]]"
+          (chord with two notes: middle C and G above)
+
+        - addchord("[2000 [6000 1000 100 [slots [22 staccato] [20 ff]]]]")
+          -> chord with staccato articulation and ff dynamic
+
+        - addchord("[500 [7000 500 127] [7200 1200 100] [name paul] 0]")
+          -> named chord with two notes
+        """
+        chord_llll = chord_llll.strip()
+        if not chord_llll:
+            return {"ok": False, "message": "chord_llll cannot be empty"}
+        parts = ["addchord"]
+        if voice != 1:
+            parts.append(str(int(voice)))
+        parts.append(chord_llll)
+        if select:
+            parts.append("@sel 1")
+        return _send_max_message(" ".join(parts))
+
+    @mcp.tool()
+    def addchords(
+        chords_llll: str,
+        offset_ms: float = float("nan"),
+    ) -> Dict[str, Any]:
+        """Add multiple chords across voices to an existing bach.roll score.
+
+        Unlike send_score_to_max() which replaces the entire score, addchords()
+        inserts chords into the existing content. Use this when adding notes
+        across multiple voices without touching the rest of the score.
+
+        The chords_llll argument is structured as one llll per voice, where each
+        voice llll contains one llll per chord in gathered syntax. Use [] for
+        voices where no chords should be added.
+
+        Structure:
+        VOICE1_CHORDS VOICE2_CHORDS ...
+
+        Each VOICE_CHORDS is:
+        [ CHORD1 CHORD2 ... ]
+
+        Each CHORD is:
+        [ onset_ms NOTE1 NOTE2 ... chord_flag ]
+
+        Each NOTE is:
+        [ pitch_cents duration_ms velocity [specifications...] note_flag ]
+
+        See addchord() for the full note and chord gathered syntax documentation,
+        including specifications (breakpoints, slots, name, graphic) and
+        pitch name syntax (C5, D#4, etc.).
+
+        Parameters:
+        - chords_llll: one llll per voice containing chords in gathered syntax.
+                       Use [] for voices where no chords are added.
+
+        - offset_ms: optional time offset in milliseconds applied to all chords.
+                     Leave as nan to add chords at their literal onset times.
+
+        Examples (exact string sent to Max):
+        - addchords("[[217 [7185 492 100]] [971 [6057 492 100]]] [[1665 [7157 492 100]]]")
+          -> "addchords [[217 [7185 492 100]] [971 [6057 492 100]]] [[1665 [7157 492 100]]]"
+          (two chords in voice 1, one chord in voice 2)
+
+        - addchords("[[217 [7185 492 100]] [971 [6057 492 100]]] [[1665 [7157 492 100]]]",
+                    offset_ms=1500)
+          -> "addchords 1500 [[217 [7185 492 100]] [971 [6057 492 100]]] [[1665 [7157 492 100]]]"
+          (same, with all onsets shifted by 1.5 seconds)
+
+        - addchords("[[0 [6000 500 100]] [500 [6200 500 100]]] []")
+          -> voice 1 gets two notes, voice 2 unchanged
+
+        - addchords("[] [[0 [6000 500 100]]]")
+          -> voice 1 unchanged, voice 2 gets one note
+        """
+        import math
+        chords_llll = chords_llll.strip()
+        if not chords_llll:
+            return {"ok": False, "message": "chords_llll cannot be empty"}
+        parts = ["addchords"]
+        if not math.isnan(offset_ms):
+            parts.append(str(float(offset_ms)))
+        parts.append(chords_llll)
+        return _send_max_message(" ".join(parts))
+
+    @mcp.tool()
+    def copy(mode: str = "") -> Dict[str, Any]:
+        """Copy selected content or slot data to the global clipboard in bach.roll.
+
+        If no mode is given, copies the current selection.
+
+        Parameters:
+        - mode: what to copy. Options:
+            - ""                  copy current selection (default)
+            - "durationline"      copy the duration line
+            - "slot active"       copy content of the currently open slot window
+            - "slot N"            copy content of slot N (e.g. "slot 1")
+            - "slot all"          copy content of all slots
+            - "slotinfo N"        copy the slotinfo (structure) of slot N
+            - "slotinfo active"   copy the slotinfo of the active slot
+
+        Examples (exact string sent to Max):
+        - copy()                    -> "copy"
+        - copy("durationline")      -> "copy durationline"
+        - copy("slot 1")            -> "copy slot 1"
+        - copy("slot active")       -> "copy slot active"
+        - copy("slot all")          -> "copy slot all"
+        - copy("slotinfo 3")        -> "copy slotinfo 3"
+        """
+        mode = mode.strip()
+        command = f"copy {mode}" if mode else "copy"
+        return _send_max_message(command)
+
+    @mcp.tool()
+    def cut(mode: str = "") -> Dict[str, Any]:
+        """Cut selected content or slot data to the global clipboard in bach.roll.
+
+        Identical to copy() but also deletes the copied content afterwards.
+        If no mode is given, cuts the current selection.
+
+        Parameters:
+        - mode: what to cut. Options:
+            - ""                  cut current selection (default)
+            - "durationline"      cut the duration line
+            - "slot active"       cut content of the currently open slot window
+            - "slot N"            cut content of slot N (e.g. "slot 1")
+            - "slot all"          cut content of all slots
+
+        Examples (exact string sent to Max):
+        - cut()                 -> "cut"
+        - cut("durationline")   -> "cut durationline"
+        - cut("slot 1")         -> "cut slot 1"
+        - cut("slot active")    -> "cut slot active"
+        - cut("slot all")       -> "cut slot all"
+        """
+        mode = mode.strip()
+        command = f"cut {mode}" if mode else "cut"
+        return _send_max_message(command)
+
+    @mcp.tool()
+    def copyslot(slot_from: str, slot_to: str) -> Dict[str, Any]:
+        """Copy the content of one slot to another for all selected notes in bach.roll.
+
+        Always operates on the current selection. Use sel() to select notes first.
+
+        Parameters:
+        - slot_from: source slot — number (e.g. "2"), name (e.g. "amplienv"),
+                     or "active" for the currently open slot.
+        - slot_to:   destination slot — number, name, or "active".
+
+        Examples (exact string sent to Max):
+        - copyslot("2", "7")            -> "copyslot 2 7"
+        - copyslot("2", "active")       -> "copyslot 2 active"
+        - copyslot("amplienv", "myfunction") -> "copyslot amplienv myfunction"
+        """
+        slot_from = slot_from.strip()
+        slot_to = slot_to.strip()
+        if not slot_from or not slot_to:
+            return {"ok": False, "message": "slot_from and slot_to cannot be empty"}
+        return _send_max_message(f"copyslot {slot_from} {slot_to}")
+
+    @mcp.tool()
+    def delete(
+        transferslots: str = "",
+        empty: bool = False,
+    ) -> Dict[str, Any]:
+        """Delete all currently selected items in bach.roll.
+
+        Always operates on the current selection. Use sel() to select items first.
+
+        When deleting notes from a chord, you can optionally transfer slot content
+        to a neighbouring note in the same chord.
+
+        Parameters:
+        - transferslots: slots to transfer to a neighbouring note when deleting.
+                         Options:
+                         - ""         no transfer (default)
+                         - "all"      transfer all slots
+                         - "auto"     transfer standard slots (dynamics, lyrics,
+                                      articulations, annotations)
+                         - "20 21"    transfer specific slot numbers (space-separated)
+                         - "dynamics", "lyrics", "noteheads", "articulations",
+                           "annotation" — transfer by category name
+
+        - empty: if True, also transfer empty slots (default: False).
+                 Only relevant when transferslots is set.
+
+        Examples (exact string sent to Max):
+        - delete()
+          -> "delete"
+        - delete(transferslots="20 21")
+          -> "delete @transferslots 20 21"
+        - delete(transferslots="all")
+          -> "delete @transferslots all"
+        - delete(transferslots="all", empty=True)
+          -> "delete @transferslots all @empty 1"
+        - delete(transferslots="auto")
+          -> "delete @transferslots auto"
+        """
+        parts = ["delete"]
+        if transferslots.strip():
+            parts.append(f"@transferslots {transferslots.strip()}")
+            if empty:
+                parts.append("@empty 1")
+        return _send_max_message(" ".join(parts))
+
+    @mcp.tool()
+    def deletemarker(names: str) -> Dict[str, Any]:
+        """Delete the first marker matching the given name(s) in bach.roll.
+
+        If multiple markers match, only the first one (in temporal order) is deleted.
+        To delete by multiple names, provide them space-separated — only markers
+        having ALL the given names will match.
+
+        Parameters:
+        - names: one or more marker names, space-separated.
+
+        Examples (exact string sent to Max):
+        - deletemarker("Ringo")         -> "deletemarker Ringo"
+        - deletemarker("Ringo Starr")   -> "deletemarker Ringo Starr"
+        """
+        names = names.strip()
+        if not names:
+            return {"ok": False, "message": "names cannot be empty"}
+        return _send_max_message(f"deletemarker {names}")
+
+    @mcp.tool()
+    def deleteslotitem(
+        slot: str,
+        position: str,
+        thresh: float = float("nan"),
+    ) -> Dict[str, Any]:
+        """Delete a specific item from a slot for selected notes in bach.roll.
+
+        Always operates on the current selection. Use sel() to select notes first.
+
+        Parameters:
+        - slot: slot number or name (e.g. "3", "amplienv")
+
+        - position: either:
+            - an integer index (e.g. "2" = delete 2nd item)
+            - a wrapped X coordinate (e.g. "[0.7]" = delete item at X=0.7)
+
+        - thresh: tolerance for X coordinate matching.
+                  Leave as nan to use exact matching (default).
+
+        Examples (exact string sent to Max):
+        - deleteslotitem("3", "2")              -> "deleteslotitem 3 2"
+        - deleteslotitem("3", "[0.7]")          -> "deleteslotitem 3 [0.7]"
+        - deleteslotitem("3", "[0.7]", thresh=0.1) -> "deleteslotitem 3 [0.7] @thresh 0.1"
+        """
+        import math
+        slot = slot.strip()
+        position = position.strip()
+        if not slot or not position:
+            return {"ok": False, "message": "slot and position cannot be empty"}
+        parts = ["deleteslotitem", slot, position]
+        if not math.isnan(thresh):
+            parts.append(f"@thresh {float(thresh)}")
+        return _send_max_message(" ".join(parts))
+
+    @mcp.tool()
+    def distribute() -> Dict[str, Any]:
+        """Distribute the onsets of selected items so they are evenly spaced in time.
+
+        Always operates on the current selection. Use sel() to select items first.
+        The first and last onset are preserved; intermediate onsets are redistributed
+        evenly between them.
+
+        Example (exact string sent to Max):
+        - distribute() -> "distribute"
+        """
+        return _send_max_message("distribute")
+
+    @mcp.tool()
+    def domain(
+        start_or_duration_ms: float,
+        end_ms: float = float("nan"),
+        pad_pixels: float = float("nan"),
+    ) -> Dict[str, Any]:
+        """Set the displayed domain (visible time range) of bach.roll.
+
+        Controls what portion of the score is visible by adjusting zoom
+        and scrollbar position.
+
+        Parameters:
+        - start_or_duration_ms: if end_ms is not given, this is the total duration
+                                 of the domain in milliseconds (zoom to fit N ms).
+                                 If end_ms is given, this is the start of the
+                                 visible range in milliseconds.
+
+        - end_ms: end of the visible range in milliseconds.
+                  Leave as nan to use start_or_duration_ms as total duration.
+
+        - pad_pixels: ending pad in pixels (scaled with vzoom).
+                      Positive = end point is that many pixels before the edge.
+                      Negative = end point is past the edge.
+                      Leave as nan for no padding.
+
+        Examples (exact string sent to Max):
+        - domain(4000)                      -> "domain 4000.0"
+          (zoom so that 4 seconds are visible)
+        - domain(2000, 3000)                -> "domain 2000.0 3000.0"
+          (display from 2s to 3s)
+        - domain(2000, 3000, 10)            -> "domain 2000.0 3000.0 10.0"
+          (display from 2s to 3s, with 10px ending pad)
+        """
+        import math
+        parts = ["domain", str(float(start_or_duration_ms))]
+        if not math.isnan(end_ms):
+            parts.append(str(float(end_ms)))
+        if not math.isnan(pad_pixels):
+            parts.append(str(float(pad_pixels)))
+        return _send_max_message(" ".join(parts))
 
     return mcp
