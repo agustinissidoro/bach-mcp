@@ -399,17 +399,54 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
     def send_score_to_max(score_llll: str) -> str:
         """Send a raw llll score string directly to bach.roll to set its notation content.
 
-        Use this when you have a fully-formed llll score and want to send it as-is,
-        without the helper formatting that add_single_note provides.
+        IMPORTANT: This is the PRIMARY and PREFERRED way to write any score to bach.roll.
+        Always use this tool when writing notes, chords, or multi-voice content.
+        Do NOT use add_single_note() for score writing — use this tool instead.
+        add_single_note() exists only as a convenience for quick single-note testing.
 
-        llll is bach's native list format, using nested square brackets to encode
-        the voice > chord > note hierarchy. The outermost bracket is the voice list,
-        each voice contains chords, and each chord contains notes with their attributes.
+        SCORE FORMAT:
+        Bach.roll scores use the llll (lisp-like linked list) format. The full score
+        is prefixed with "roll" followed by one llll per voice. Each voice contains
+        chords, and each chord contains notes.
 
-        Example (two notes in one chord, one voice):
-        [ [ 0. [ 6000. 1000. 100 0 ] [ 6700. 1000. 100 0 ] 0 ] 0 ]
+        Hierarchy:
+        roll [ VOICE1 ] [ VOICE2 ] [ VOICE3 ] ...
 
-        Use add_single_note() for simple single-note cases.
+        Each VOICE is:
+        [ CHORD1 CHORD2 ... 0 ]
+
+        Each CHORD is:
+        [ onset_ms [ pitch_cents duration_ms velocity note_flag ] 0 ]
+
+        For chords with multiple notes:
+        [ onset_ms [ pitch1 dur1 vel1 flag1 ] [ pitch2 dur2 vel2 flag2 ] ... 0 ]
+
+        Pitch in midicents: middle C = 6000, one semitone = 100 cents.
+        Duration in milliseconds.
+        Velocity: 1 to 127.
+        note_flag: 0 = normal, 1 = locked, 2 = muted, 4 = solo (sum to combine).
+        The trailing 0 after the last chord in a voice is required.
+
+        EXAMPLES:
+
+        Single note, middle C, one voice:
+        "roll [ [ 0. [ 6000. 673. 100 0 ] 0 ] 0 ]"
+
+        Many notes, one voice:
+        "roll [ [ 214.775391 [ 6100. 673. 100 0 ] 0 ] [ 244.775391 [ 5400. 673. 100 0 ] 0 ] [ 1124.775391 [ 6100. 673. 100 0 ] 0 ] [ 2584.775391 [ 7100. 673. 100 0 ] 0 ] [ 3204.775391 [ 6200. 673. 100 0 ] 0 ] [ 4234.775391 [ 6000. 673. 100 0 ] 0 ] [ 5054.775391 [ 5000. 673. 100 0 ] 0 ] [ 5714.775391 [ 6000. 673. 100 0 ] 0 ] 0 ]"
+
+        Three voices:
+        "roll [ [ 0. [ 6000. 673. 100 0 ] 0 ] [ 5574.775391 [ 5900. 654. 100 0 ] 0 ] 0 ] [ [ 2724.775391 [ 6000. 654. 100 0 ] 0 ] [ 4424.775391 [ 6000. 654. 100 0 ] 0 ] 0 ] [ [ 544.775391 [ 5700. 654. 100 0 ] 0 ] [ 1214.775391 [ 9600. 654. 100 0 ] 0 ] [ 1214.775391 [ 7300. 654. 100 0 ] 0 ] [ 2524.775391 [ 6500. 654. 100 0 ] 0 ] [ 3554.775391 [ 6300. 654. 100 0 ] 0 ] [ 5394.775391 [ 5900. 654. 100 0 ] 0 ] 0 ]"
+
+        NOTE: The score string must start with "roll" followed by the voice lllls.
+        This is what bach.roll expects — it is NOT the same as the raw llll body
+        returned by dump(mode="body"), which omits the "roll" prefix and the header.
+
+        A full dump() includes slotinfo, clefs, voicenames, markers, and other header
+        data in addition to the score body. send_score_to_max() only sets the notation
+        content (notes, chords, voices) — it does not affect slotinfo or other header fields.
+
+        Use dump(mode="body") to retrieve the current score body from bach.roll.
         Use send_process_message_to_max() for commands like play, dump, clefs, etc.
         """
         score_llll = score_llll.strip()
@@ -1286,22 +1323,22 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         Examples (exact string sent to Max):
         - define_slot(1, type="function", name="frequency", key="f",
                       range_min=0, range_max=22050, representation="Hz")
-          -> "slotinfo [1 [type function] [name frequency] [key f] [range 0 22050] [representation Hz]]"
+          -> "[slotinfo [1 [type function] [name frequency] [key f] [range 0 22050] [representation Hz]]]"
 
         - define_slot(1, slope=0.5)
-          -> "slotinfo [1 [slope 0.5]]"
+          -> "[slotinfo [1 [slope 0.5]]]"
 
         - define_slot(1, width="temporal")
-          -> "slotinfo [1 [width temporal]]"
+          -> "[slotinfo [1 [width temporal]]]"
 
         - define_slot(2, type="function", name="pan", key="p",
                       range_min=-180, range_max=180, ysnap="[-180 0 180]",
                       representation="degree", width="temporal")
-          -> "slotinfo [2 [type function] [name pan] [key p] [range -180 180] [ysnap [-180 0 180]] [representation degree] [width temporal]]"
+          -> "[slotinfo [2 [type function] [name pan] [key p] [range -180 180] [ysnap [-180 0 180]]] [representation degree] [width temporal]]"
 
         - define_slot(3, type="floatmatrix", name="routing", key="r",
                       range_min=0, range_max=1, width="80", default="0.5")
-          -> "slotinfo [3 [type floatmatrix] [name routing] [key r] [range 0 1] [width 80] [default 0.5]]"
+          -> "[slotinfo [3 [type floatmatrix] [name routing] [key r] [range 0 1] [width 80] [default 0.5]]]"
         """
         import math
         if slot_number <= 0:
@@ -1333,7 +1370,7 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
             return {"ok": False, "message": "No slotinfo fields specified"}
 
         inner = " ".join(parts)
-        command = f"slotinfo [{slot_number} {inner}]"
+        command = f"[slotinfo [{slot_number} {inner}]]"
         return _send_max_message(command)
 
     return mcp
