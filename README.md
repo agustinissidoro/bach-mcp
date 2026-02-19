@@ -40,12 +40,6 @@ Into your Max Packages folder (macOS default):
 ~/Documents/Max 9/Packages/
 ```
 
-Resulting path should be:
-
-```text
-~/Documents/Max 9/Packages/bach-mcp
-```
-
 ## 5) Download Claude Desktop
 
 Download and install Claude Desktop from Anthropic:
