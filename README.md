@@ -2,44 +2,36 @@
 
 > Disclaimer: this setup is currently supported on macOS only.
 
-## Available MCP tools (current)
+## What you can do with bach-mcp (current)
 
-The server currently exposes tools to control and query `bach.roll` from an MCP client.
+Instead of manually editing everything in the Max UI, you can drive `bach.roll` from an MCP client and work at a musical level.
 
-- Score writing:
-  `add_single_note`, `send_score_to_max`.
-- Generic command bridge:
-  `send_process_message_to_max` for raw bach/Max messages that do not have a dedicated wrapper.
-- Score/query dump:
-  `dump`, `getcurrentchord`, `getnumchords`, `getnumnotes`, `getnumvoices`.
-- Score structure and display:
-  `numvoices`, `insertvoice`, `deletevoice`, `numparts`, `clefs`, `stafflines`, `voicenames`, `bgcolor`, `staffcolor`, `notecolor`.
-- Selection and editing:
-  `sel`, `select`, `unselect`, `clearselection`, `legato`, `glissando`, `explodechords`.
-- Playback and export:
-  `play`, `exportmidi`.
-- Markers:
-  `addmarker`, `deletemarker`.
-- Dynamics and velocity conversion:
-  `dynamics2velocities`, `velocities2dynamics`.
+- Write and reshape notation:
+  create notes/chords, build multi-voice material, and update score content programmatically.
+- Edit score structure:
+  add/remove/reorder voices, control staff grouping, and organize the score layout.
+- Control notation appearance:
+  set clefs, staff lines, voice names, note/staff/background colors, and other display attributes.
+- Work with expressive note data:
+  set and manipulate noteheads, articulations, dynamics, text expressions, breakpoints, and other slot-based note metadata.
+- Convert performance data:
+  map dynamics to MIDI velocities and infer dynamics from velocity values.
+- Perform score transformations:
+  apply legato/glissando operations, explode chords, and run time-range selection edits.
+- Navigate and annotate form:
+  add/remove markers, query current score state, and inspect selected material.
+- Audition and export:
+  play score regions and export MIDI for downstream DAW or notation workflows.
 
-### Possibilities
+### Slot and expression support (current)
 
-- Build, transform, and play multi-voice notation programmatically.
-- Query score state and selected material back into your MCP client workflow.
-- Automate rendering/layout settings (clefs, staff lines/colors, names) and MIDI export.
-- Use raw llll data for advanced notation structures when needed.
+- Slot workflows are already supported for expressive notation tasks (dynamics, articulations, noteheads, text, automation/function data, etc.).
+- Dedicated high-level slot management commands are still limited; advanced workflows may still require raw llll-style input.
 
-### Slot support (current)
-
-- There are no standalone, slot-dedicated MCP tools yet (e.g. `set_slot` / `get_slot`).
-- Slot workflows are already possible through:
-  `add_single_note` (`slots=` argument), `dump(mode="slotinfo")`, and raw llll with `send_score_to_max`.
-
-### Scope and support
+### Scope and platform support
 
 - Platform support: macOS only (current state of this repo).
-- The MCP layer wraps a growing subset of bach/Max messages; for uncovered commands, use `send_process_message_to_max`.
+- The MCP layer already covers many common notation and editing workflows, and can be extended over time for additional bach commands.
 
 ## 1) Clone the repo
 
