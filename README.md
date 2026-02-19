@@ -17,8 +17,6 @@ conda env create -f environment.yml
 conda activate bach-mcp
 ```
 
-If your `environment.yml` has a `prefix:` line that points to a different machine, remove that line before creating the env.
-
 ## 3) Install pip packages from `pip_requirements.txt`
 
 With the `bach-mcp` conda environment activated:
@@ -39,13 +37,13 @@ max/bach-mcp
 Into your Max Packages folder (macOS default):
 
 ```text
-~/Documents/Max 8/Packages/
+~/Documents/Max 9/Packages/
 ```
 
 Resulting path should be:
 
 ```text
-~/Documents/Max 8/Packages/bach-mcp
+~/Documents/Max 9/Packages/bach-mcp
 ```
 
 ## 5) Download Claude Desktop
