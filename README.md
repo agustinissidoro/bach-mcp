@@ -4,7 +4,7 @@
 
 ## Demo video
 
-Watch the demo on YouTube: https://www.youtube.com/watch?v=MswlB7eJNpM
+[![Watch the demo video](https://img.youtube.com/vi/MswlB7eJNpM/hqdefault.jpg)](https://www.youtube.com/watch?v=MswlB7eJNpM)
 
 ## What you can do with bach-mcp (current)
 
