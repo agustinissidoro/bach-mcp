@@ -1,4 +1,38 @@
-"""FastMCP app factory and tool/resource registration."""
+"""FastMCP app factory and tool/resource registration.
+
+SESSION PROTOCOL — READ BEFORE ANY ACTION
+==========================================
+At the very start of every new chat session, before taking any other action,
+ALWAYS call dump(mode="body") to read the current score state. This establishes
+a baseline understanding of what is already in the score.
+
+Throughout the session, precede almost every action with a dump() call to verify
+the current state before making changes. The purpose of each dump is to acquire
+enough context to act correctly — not to be a ritual. Use the narrowest dump that
+gives you what you need:
+
+- Before adding, editing, or deleting notes/voices → dump(mode="body")
+- Before changing score appearance (colors, clefs, stafflines) → dump(mode="body")
+- Before any destructive operation (clear, deletevoice, delete) → dump(mode="body")
+- After sending a score or making changes → dump(mode="body") to confirm the result
+- When the user asks about the current score → dump(mode="body") first
+
+USER OVERRIDE — the dump-first rule exists to give Claude enough context, not to
+impose a rigid workflow. If the user has already provided sufficient context (e.g.
+they are working on a known subsection of the score, they have just pasted the
+relevant llll, or they explicitly say "don't dump, just do X"), you should respect
+that and act directly without a redundant dump. Use your judgment: dump when the
+current state is genuinely unknown or uncertain; skip it when the user has already
+told you what you need to know.
+
+The only other times a pre-action dump may be skipped are:
+- Immediately after a dump that already reflects current state
+- Pure read-only queries (e.g. the very first dump itself)
+- Rapid sequential edits where state is predictable and confirmed
+
+Treat dump(mode="body") as the equivalent of "looking at the score before touching it" —
+a sensible default, not a bureaucratic requirement.
+"""
 
 from typing import Any, Dict, Optional
 
@@ -656,6 +690,201 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         return _request_max_and_wait(command=command, timeout_seconds=timeout_seconds)
 
     @mcp.tool()
+    def get_num_voices(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the current number of voices and wait for the response.
+
+        Sends "getnumvoices" to Max and returns the answer in the form:
+            numvoices <N>
+        where N is the actual number of voices in the score.
+
+        ⚠️  ALWAYS use this tool when you need to know how many voices exist.
+        Do NOT infer voice count from the number of visible staves — they differ
+        when the FG grand-staff clef is used (1 voice renders as 2 staves).
+        Do NOT rely on what was set earlier in the session; the score may have
+        changed. Query bach directly.
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getnumvoices", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_num_chords(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the number of chords in each voice and wait for the response.
+
+        Sends "getnumchords" to Max and returns the answer in the form:
+            numchords <n_voice1> <n_voice2> ...
+        where each integer is the chord count for the corresponding voice.
+
+        Use this to get a quick structural overview of the score without
+        fetching the full notation body. For full note content use dump(mode="body").
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getnumchords", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_num_notes(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the number of notes per chord per voice and wait for the response.
+
+        Sends "getnumnotes" to Max and returns the answer in the form:
+            numnotes [n1 n2 ...] [n1 n2 ...] ...
+        where each outer list is a voice and each integer is the note count
+        for the corresponding chord within that voice.
+
+        Useful to quickly inspect chord density without reading the full score body.
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getnumnotes", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_cursor(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the current playhead cursor position and wait for the response.
+
+        Sends "getcursor" to Max and returns the answer in the form:
+            cursor <position_ms>
+        where position_ms is the current cursor position in milliseconds.
+
+        See also: get_domain(), get_length()
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getcursor", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_domain(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the currently visible time domain and wait for the response.
+
+        Sends "getdomain" to Max and returns the answer in the form:
+            domain <start_ms> <end_ms>
+        where start_ms and end_ms are the beginning and end of the visible
+        portion of the score in milliseconds.
+
+        Use this before calling domain() to know the current view state,
+        or to understand what portion of the score is on screen.
+
+        See also: get_length(), get_cursor()
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getdomain", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_length(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the total score length in milliseconds and wait for the response.
+
+        Sends "getlength" to Max and returns the answer in the form:
+            length <length_ms>
+        where length_ms is the total duration of all musical content in the score.
+
+        Use this after writing content to verify the score duration, or before
+        calling domain() to set a view that fits the entire score.
+
+        See also: get_domain(), get_cursor()
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getlength", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_loop(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the current loop region and wait for the response.
+
+        Sends "getloop" to Max and returns the answer in the form:
+            loop <start_ms> <end_ms>
+        where start_ms and end_ms are the start and end of the loop region
+        in milliseconds.
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getloop", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_current_chord(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the pitches and velocities at the current cursor position.
+
+        Sends "getcurrentchord" to Max and returns the answer in the form:
+            currentchord <pitches_llll> <velocities_llll>
+        where pitches_llll is a wrapped list of midicents and velocities_llll
+        is the corresponding list of velocities for all notes sounding at the cursor.
+
+        This is a quick way to read pitch/velocity at a point in time. For richer
+        data at a time position (slots, breakpoints, etc.) use dump() with selection,
+        or the interp/sample messages via send_process_message_to_max().
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getcurrentchord", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_marker(
+        names: str = "",
+        name_first: bool = False,
+        timeout_seconds: float = 10.0,
+    ) -> str:
+        """Query bach.roll for marker information and wait for the response.
+
+        Sends "getmarker [names] [@namefirst 1]" to Max.
+
+        Without names, returns ALL markers in the form:
+            markers [pos name role] [pos name role] ...
+
+        With names (space-separated), returns the first marker matching ALL given
+        names in the form:
+            marker name pos role
+
+        Parameters:
+        - names: space-separated marker name(s) to look up. Leave empty for all markers.
+        - name_first: if True, outputs name before position in each marker llll.
+
+        Marker roles that bach recognises:
+        - "timesig"    — time signature marker (content: [numerator denominator])
+        - "tempo"      — tempo marker (content: [figure value], e.g. [1/8 50])
+        - "barline"    — measure barline (no content)
+        - "division"   — measure division (no content)
+        - "subdivision"— measure subdivision (no content)
+
+        Examples (exact string sent to Max):
+        - get_marker()                    -> "getmarker"
+        - get_marker("intro")             -> "getmarker intro"
+        - get_marker("Ringo Starr")       -> "getmarker Ringo Starr"
+        - get_marker(name_first=True)     -> "getmarker @namefirst 1"
+
+        This is a read-only query; it does not modify the score.
+        """
+        parts = ["getmarker"]
+        if name_first:
+            parts.append("@namefirst 1")
+        if names.strip():
+            parts.append(names.strip())
+        return _request_max_and_wait(" ".join(parts), timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_zoom(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the current horizontal zoom level and wait for the response.
+
+        Sends "getzoom" to Max and returns the answer in the form:
+            zoom <percentage>
+        where the value is the horizontal zoom as a percentage.
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getzoom", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_vzoom(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the current vertical zoom level and wait for the response.
+
+        Sends "getvzoom" to Max and returns the answer in the form:
+            vzoom <percentage>
+        where the value is the vertical zoom as a percentage (works even when
+        vzoom is set to "auto" in bach's attributes).
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getvzoom", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
     def bgcolor(r: float = 1.0, g: float = 1.0, b: float = 1.0, a: float = 1.0) -> Dict[str, Any]:
         """Set bach.roll background color in RGBA format.
 
@@ -680,19 +909,66 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         - "F"     — bass clef
         - "F8va"  — bass clef 8va alta (one octave up)
         - "F8"    — bass clef 8va bassa (one octave down)
+        - "FG"    — grand staff clef: treble + bass on two linked staves (ONE voice, TWO staves)
         - "alto"  — alto C clef
         - "perc"  — percussion clef
         - "auto"  — bach chooses automatically based on pitch content
         - "none"  — no clef displayed
 
-        For grand staff (piano-style), wrap multiple clefs for a single voice in brackets:
-        "[G F]" means treble + bass for one voice.
+        ─────────────────────────────────────────────────────────────
+        VOICES VS STAVES — A CRITICAL DISTINCTION
+        ─────────────────────────────────────────────────────────────
+        In bach, a "voice" is a data concept (a stream of chords in the score hierarchy),
+        while a "staff" is a visual concept (a set of lines drawn on screen). These do
+        not always map 1-to-1.
 
-        Examples (exact string sent to Max):
+        The "FG" clef assigns TWO physical staves (treble above, bass below) to a
+        SINGLE voice. The voice remains one unit in the score data — one llll, one
+        editorial stream — but it is rendered across two linked staves. This is the
+        standard way to notate piano, harp, or any grand-staff instrument in an
+        orchestral context, where you want the instrument treated as one indivisible part.
+
+            clefs("FG")       # one voice, displayed on two staves (grand staff)
+
+        ─────────────────────────────────────────────────────────────
+        CHOOSING BETWEEN 1-VOICE FG AND 2-VOICE GROUPING
+        ─────────────────────────────────────────────────────────────
+        There are two ways to create a piano-style grand staff, and the choice has
+        musical and editorial implications. When in doubt, ask the user which they need.
+
+        APPROACH A — One voice, FG clef  (orchestral / monolithic piano part):
+            numvoices(1)
+            clefs("FG")
+            numparts("1")
+            → One voice in the score. All notes belong to the same stream.
+              Right hand and left hand are not independently editable as separate voices.
+              Typical use: piano or harp in an orchestral score, where the instrument
+              is one "slot" in the ensemble and no per-hand distinction is needed.
+
+        APPROACH B — Two voices grouped as one ensemble  (chamber / solo / detailed):
+            numvoices(2)
+            clefs("G F")
+            numparts("2")
+            → Two independent voices in the score, visually merged onto one grand staff.
+              Voice 1 = right hand (treble), voice 2 = left hand (bass).
+              Each hand is a separate editorial stream: independent selection,
+              independent slot data, independent dynamics, independent colors.
+              Typical use: solo piano music, chamber music with detailed per-hand
+              notation, or any situation where LH/RH must be independently controlled.
+
+        The distinction is subtle but important. If the user asks for "a piano part"
+        without further context, prefer APPROACH A (1 voice, FG clef) and mention
+        that APPROACH B is available if per-hand editorial independence is needed.
+
+        ─────────────────────────────────────────────────────────────
+        EXAMPLES (exact string sent to Max)
+        ─────────────────────────────────────────────────────────────
         - clefs("G")          -> all voices use treble clef
-        - clefs("G F")        -> voice 1 treble, voice 2 bass
+        - clefs("F")          -> all voices use bass clef
+        - clefs("G F")        -> voice 1 treble, voice 2 bass (two separate voices)
+        - clefs("FG")         -> voice 1 is a grand staff — ONE voice, TWO staves
         - clefs("auto G F")   -> voice 1 auto, voice 2 treble, voice 3 bass
-        - clefs("[G F]")      -> voice 1 is a grand staff (treble + bass)
+        - clefs("FG G")       -> voice 1 grand staff (piano), voice 2 treble (e.g. violin)
         """
         clefs_list = clefs_list.strip()
         if not clefs_list:
@@ -715,23 +991,89 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
 
     @mcp.tool()
     def numparts(parts: str = "1") -> Dict[str, Any]:
-        """Set the part grouping for voices in bach.roll.
+        """Set the part grouping for voices in bach.roll via voice ensembles.
 
-        Defines how voices are grouped into shared staves (called "staff ensembles").
-        Each integer in the list specifies how many consecutive voices are displayed
-        on the same staff. The integers must sum to the total number of voices.
+        ─────────────────────────────────────────────────────────────
+        CONCEPT: VOICES, VOICE ENSEMBLES, AND PARTS
+        ─────────────────────────────────────────────────────────────
+        Bach does not have a native "part" concept between voices and chords.
+        The nesting hierarchy is strictly:
+            WHOLE SCORE > VOICES > CHORDS > NOTES
 
-        For instance, with 4 voices:
-        - "1 1 1 1" — each voice on its own staff (4 separate staves)
-        - "2 2"     — voices 1+2 share a staff, voices 3+4 share a staff
-        - "1 3"     — voice 1 alone, voices 2+3+4 share a staff
-        - "4"       — all four voices on a single shared staff
+        However, bach provides "voice ensembles" as a visual grouping mechanism:
+        multiple voices can be mapped onto the same staff (or multi-staff) space.
+        This closely resembles parts in traditional engraving software.
 
-        Examples (exact string sent to Max):
-        - numparts("1 1 1 1")  -> four separate staves
-        - numparts("2 2")      -> two staff ensembles of two voices each
-        - numparts("1 3")      -> one solo staff, one ensemble of three
-        - numparts("4")        -> all voices on one staff
+        The key idea: each integer in the numparts list specifies how many
+        consecutive voices are displayed together on the same staff ensemble.
+        The integers must sum to the total number of voices in the score.
+
+        ─────────────────────────────────────────────────────────────
+        EXAMPLES WITH 4 VOICES
+        ─────────────────────────────────────────────────────────────
+        "1 1 1 1" — each voice on its own staff (default, 4 separate staves)
+        "2 2"     — voices 1+2 share a staff, voices 3+4 share a staff
+        "1 3"     — voice 1 alone, voices 2+3+4 share a staff
+        "4"       — all four voices on a single shared staff or multi-staff
+
+        ─────────────────────────────────────────────────────────────
+        COMPLEX INSTRUMENTS (PIANO, HARP, ORGAN, ETC.)
+        ─────────────────────────────────────────────────────────────
+        For grand-staff instruments there are two distinct approaches. The right
+        choice depends on context — when in doubt, ask the user. See also: clefs().
+
+        APPROACH A — One voice, FG clef  (standard orchestral piano/harp part):
+            numvoices(1)
+            clefs("FG")      # FG = grand staff clef: treble + bass on two linked staves
+            numparts("1")
+            → The instrument occupies one voice in the score. It is displayed on
+              two staves but is editorially one unit. This is the normal way to
+              write piano or harp in an orchestral or ensemble score.
+
+        APPROACH B — Two voices grouped as one ensemble  (chamber / solo piano):
+            numvoices(2)
+            clefs("G F")     # voice 1 treble, voice 2 bass — two independent voices
+            numparts("2")    # group them visually into one grand-staff ensemble
+            → Two independent voices displayed together. Voice 1 = RH, voice 2 = LH.
+              Each hand is a separate editorial stream with independent selection,
+              dynamics, slot data, and colors. Use for solo or chamber music where
+              per-hand control matters.
+
+        For organ (3 staves: treble, bass, pedal) — almost always 3 separate voices:
+            numvoices(3)
+            clefs("G F F8")
+            numparts("3")    # all three voices in one ensemble
+
+        ─────────────────────────────────────────────────────────────
+        ACTIVE PART FOR EDITING
+        ─────────────────────────────────────────────────────────────
+        Within a voice ensemble, only one voice is "active" for editing at a time
+        (adding chords, linear editing mode, etc.). Use the "activepart" attribute
+        to switch which voice inside the ensemble receives new input:
+
+            send_process_message_to_max("activepart 2")
+
+        Note: activepart does not affect modifications to existing chords, and
+        Alt+drag duplicates retain their original voice. Copy-paste, however,
+        always targets the active part.
+
+        ─────────────────────────────────────────────────────────────
+        PART COLORS
+        ─────────────────────────────────────────────────────────────
+        To visually distinguish voices within a shared ensemble, enable part colors:
+
+            send_process_message_to_max("showpartcolors 1")
+
+        ─────────────────────────────────────────────────────────────
+        EXAMPLES (exact string sent to Max)
+        ─────────────────────────────────────────────────────────────
+        - numparts("1 1 1 1")  -> four separate staves (default)
+        - numparts("2 2")      -> two grand-staff ensembles of two voices each
+        - numparts("1 3")      -> one solo staff, one three-voice ensemble
+        - numparts("4")        -> all four voices in one ensemble
+        - numparts("2")        -> two voices displayed as one grand-staff ensemble (Approach B piano)
+        - numparts("3")        -> organ (three voices in one ensemble)
+        - numparts("1")        -> single voice, single staff (default for new scores)
         """
         parts = parts.strip()
         if not parts:
@@ -740,17 +1082,44 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
 
     @mcp.tool()
     def numvoices(count: int) -> Dict[str, Any]:
-        """Set the number of voices (staves) in bach.roll.
+        """Set the number of voices in bach.roll.
 
-        Each voice corresponds to one staff line in the score. Adding voices
-        adds empty staves; removing voices will delete the content of the
-        removed staves, so use with caution.
+        ─────────────────────────────────────────────────────────────
+        VOICES ≠ STAVES — READ THIS CAREFULLY
+        ─────────────────────────────────────────────────────────────
+        In bach, "voice" and "staff" are NOT the same thing.
 
+        A VOICE is a data concept: one independent stream of chords in the score
+        hierarchy (SCORE > VOICES > CHORDS > NOTES). numvoices controls how many
+        of these data streams exist.
+
+        A STAFF is a visual concept: one set of lines drawn on screen. The number
+        of staves depends on both numvoices AND the clef assigned to each voice:
+        - A voice with a simple clef (G, F, alto, perc) renders as ONE staff.
+        - A voice with the FG grand-staff clef renders as TWO staves (treble + bass).
+
+        Therefore, the number of visible staves is NOT necessarily equal to the
+        number of voices. Examples:
+
+            1 voice  + clef G   → 1 staff    (monophonic treble)
+            1 voice  + clef FG  → 2 staves   (piano grand staff, single voice)
+            2 voices + clefs G F → 2 staves  (two independent voices, two staves)
+            2 voices + clef FG G → 3 staves  (piano on 2 staves + melody on 1)
+
+        ⚠️  When you need to know how many voices are currently in the score,
+        do NOT guess from the visual staff count. Use get_num_voices() which
+        queries bach directly: "getnumvoices" → returns the true voice count.
+
+        ─────────────────────────────────────────────────────────────
+        USAGE
+        ─────────────────────────────────────────────────────────────
         count must be greater than 0.
+        Removing voices permanently deletes their content — use with caution.
 
         Examples (exact string sent to Max):
-        - numvoices(1) -> single staff (monophonic or chordal)
-        - numvoices(4) -> four staves (e.g. SATB voices)
+        - numvoices(1) -> one voice (may render as 1 or 2 staves depending on clef)
+        - numvoices(2) -> two independent voices
+        - numvoices(4) -> four voices (e.g. SATB)
         """
         if count <= 0:
             return {"ok": False, "message": "count must be > 0"}
@@ -2405,5 +2774,75 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         - clear() -> "clear"
         """
         return _send_max_message("clear")
+
+    @mcp.tool()
+    def new_default_score() -> Dict[str, Any]:
+        """Reset bach.roll to a clean default state.
+
+        This is the recommended starting point whenever you want a fresh score.
+        It performs the following operations in sequence:
+
+        1.  clear()            — removes all notes, chords, markers, and voices
+        2.  numvoices(1)       — sets exactly one voice
+        3.  clefs("G")         — treble clef on voice 1
+        4.  stafflines("5")    — standard 5-line staff
+        5.  numparts("1")      — one part (voice 1 on its own staff)
+        6.  bgcolor(1,1,1,1)   — white background
+        7.  notecolor(0,0,0,1) — black notes
+        8.  staffcolor(0,0,0,1)— black staff lines
+        9.  voicenames          — clear all voice name labels
+        10. domain(10000)      — display a 10-second visible window (10 000 ms)
+
+        After calling this tool, always follow up with dump(mode="body") to
+        confirm the score is in the expected clean state before adding content.
+
+        Returns a summary dict with the result of each step. If any step fails,
+        subsequent steps are still attempted so you get a full picture of what
+        succeeded and what did not.
+        """
+        results: Dict[str, Any] = {}
+
+        # 1. Clear all content
+        results["clear"] = _send_max_message("clear")
+
+        # 2. Single voice
+        results["numvoices"] = _send_max_message("numvoices 1")
+
+        # 3. Treble clef
+        results["clefs"] = _send_max_message("clefs G")
+
+        # 4. Standard 5-line staff
+        results["stafflines"] = _send_max_message("stafflines 5")
+
+        # 5. One part (voice 1 alone on its staff)
+        results["numparts"] = _send_max_message("numparts 1")
+
+        # 6. White background
+        results["bgcolor"] = _send_max_message("bgcolor 1.0 1.0 1.0 1.0")
+
+        # 7. Black notes
+        results["notecolor"] = _send_max_message("notecolor 0.0 0.0 0.0 1.0")
+
+        # 8. Black staff lines
+        results["staffcolor"] = _send_max_message("staffcolor 0.0 0.0 0.0 1.0")
+
+        # 9. No voice name label
+        results["voicenames"] = _send_max_message("voicenames")
+
+        # 10. Default 10-second visible domain
+        results["domain"] = _send_max_message("domain 10000.0")
+
+        all_ok = all(
+            (v.get("ok", False) if isinstance(v, dict) else bool(v))
+            for v in results.values()
+        )
+        return {
+            "ok": all_ok,
+            "message": (
+                "Default score initialised successfully." if all_ok
+                else "Default score initialised with one or more errors — check step results."
+            ),
+            "steps": results,
+        }
 
     return mcp
