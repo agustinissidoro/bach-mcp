@@ -458,41 +458,88 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         Do NOT use add_single_note() for score writing — use this tool instead.
         add_single_note() exists only as a convenience for quick single-note testing.
 
-        SCORE FORMAT:
-        Bach.roll scores use the llll (lisp-like linked list) format. The full score
-        is prefixed with "roll" followed by one llll per voice. Each voice contains
-        chords, and each chord contains notes.
+        SCORE FORMAT — GATHERED SYNTAX:
+        Bach.roll scores use the llll (lisp-like linked list) gathered syntax.
+        The full score string starts with the router symbol "roll" (optional on input,
+        always present on output), followed by optional header lllls, then one llll
+        per voice. Voices are SEPARATE top-level lllls — they are NOT wrapped in an
+        additional outer bracket.
 
-        Hierarchy:
-        roll [ VOICE1 ] [ VOICE2 ] [ VOICE3 ] ...
+        Top-level structure:
+        roll [HEADER1] [HEADER2] ... [VOICE1] [VOICE2] [VOICE3] ...
 
-        Each VOICE is:
-        [ CHORD1 CHORD2 ... 0 ]
+        When omitting headers (most common when writing a score):
+        roll [VOICE1] [VOICE2] [VOICE3] ...
 
-        Each CHORD is:
-        [ onset_ms [ pitch_cents duration_ms velocity note_flag ] 0 ]
+        ─────────────────────────────────────────────────────────────
+        HIERARCHY  (from the official bach gathered syntax docs)
+        ─────────────────────────────────────────────────────────────
 
-        For chords with multiple notes:
-        [ onset_ms [ pitch1 dur1 vel1 flag1 ] [ pitch2 dur2 vel2 flag2 ] ... 0 ]
+        NOTE (innermost):
+        [ pitch_cents duration_ms velocity flag ]
+          - pitch_cents : midicents, middle C = 6000, one semitone = 100
+          - duration_ms : duration in milliseconds
+          - velocity    : 1–127
+          - flag        : 0 = normal, 1 = locked, 2 = muted, 4 = solo (sum to combine)
+          - flag may be omitted (defaults to 0)
+          Optional specs (between velocity and flag, in any order):
+            [breakpoints ...] [slots ...] [name ...] [graphic ...]
 
-        Pitch in midicents: middle C = 6000, one semitone = 100 cents.
-        Duration in milliseconds.
-        Velocity: 1 to 127.
-        note_flag: 0 = normal, 1 = locked, 2 = muted, 4 = solo (sum to combine).
-        The trailing 0 after the last chord in a voice is required.
+        CHORD:
+        [ onset_ms NOTE1 NOTE2 ... flag ]
+          - onset_ms : chord start time in milliseconds
+          - NOTE*    : one llll per note in note gathered syntax (see above)
+          - flag     : chord-level flag (same values as note flag, default 0)
+          - flag may be omitted
 
-        EXAMPLES:
+        VOICE:
+        [ CHORD1 CHORD2 ... flag ]
+          - CHORD*  : one llll per chord in chord gathered syntax (see above)
+          - flag    : voice-level flag (default 0), may be omitted
 
-        Single note, middle C, one voice:
+        ⚠️  CRITICAL: each level (note, chord, voice) ends with an optional numeric
+            flag INSIDE its bracket, before the closing ]. This flag is 0 for normal
+            items. It is NOT an extra structural separator — it IS the flag value.
+
+        ⚠️  CRITICAL: voices are SEPARATE lllls at the top level after "roll".
+            Do NOT wrap all voices in an extra outer bracket.
+            WRONG:  roll [ [VOICE1] [VOICE2] ]
+            CORRECT: roll [VOICE1] [VOICE2]
+
+        ─────────────────────────────────────────────────────────────
+        EXAMPLES
+        ─────────────────────────────────────────────────────────────
+
+        Single note (middle C), one voice:
         "roll [ [ 0. [ 6000. 673. 100 0 ] 0 ] 0 ]"
+        Decomposed:
+          roll                              <- router symbol
+          [                                 <- voice 1 llll
+            [                               <- chord at onset 0ms
+              0.                            <- onset_ms
+              [ 6000. 673. 100 0 ]          <- note: C5, 673ms, vel 100, flag 0
+              0                             <- chord flag (0 = normal)
+            ]
+            0                               <- voice flag (0 = normal)
+          ]                                 <- end voice 1
+
+        Single note, minimal (flags omitted):
+        "roll [ [ 0. [ 6000. 673. 100 ] ] ]"
 
         Many notes, one voice:
-        "roll [ [ 214.775391 [ 6100. 673. 100 0 ] 0 ] [ 244.775391 [ 5400. 673. 100 0 ] 0 ] [ 1124.775391 [ 6100. 673. 100 0 ] 0 ] [ 2584.775391 [ 7100. 673. 100 0 ] 0 ] [ 3204.775391 [ 6200. 673. 100 0 ] 0 ] [ 4234.775391 [ 6000. 673. 100 0 ] 0 ] [ 5054.775391 [ 5000. 673. 100 0 ] 0 ] [ 5714.775391 [ 6000. 673. 100 0 ] 0 ] 0 ]"
+        "roll [ [ 214. [ 6100. 673. 100 0 ] 0 ] [ 488. [ 5400. 673. 100 0 ] 0 ] [ 1124. [ 6100. 673. 100 0 ] 0 ] 0 ]"
 
-        Three voices:
-        "roll [ [ 0. [ 6000. 673. 100 0 ] 0 ] [ 5574.775391 [ 5900. 654. 100 0 ] 0 ] 0 ] [ [ 2724.775391 [ 6000. 654. 100 0 ] 0 ] [ 4424.775391 [ 6000. 654. 100 0 ] 0 ] 0 ] [ [ 544.775391 [ 5700. 654. 100 0 ] 0 ] [ 1214.775391 [ 9600. 654. 100 0 ] 0 ] [ 1214.775391 [ 7300. 654. 100 0 ] 0 ] [ 2524.775391 [ 6500. 654. 100 0 ] 0 ] [ 3554.775391 [ 6300. 654. 100 0 ] 0 ] [ 5394.775391 [ 5900. 654. 100 0 ] 0 ] 0 ]"
+        Chord with two simultaneous notes:
+        "roll [ [ 0. [ 6000. 1000. 100 0 ] [ 6400. 1000. 100 0 ] 0 ] 0 ]"
 
-        NOTE: The score string must start with "roll" followed by the voice lllls.
+        Two voices:
+        "roll [ [ 0. [ 6000. 500. 100 0 ] 0 ] 0 ] [ [ 0. [ 5500. 500. 90 0 ] 0 ] 0 ]"
+        Decomposed:
+          roll
+          [ [ 0. [ 6000. 500. 100 0 ] 0 ] 0 ]   <- voice 1 (one chord)
+          [ [ 0. [ 5500. 500. 90  0 ] 0 ] 0 ]   <- voice 2 (one chord, separate llll)
+
+        NOTE: The score string must start with "roll" followed by one llll per voice.
         This is what bach.roll expects — it is NOT the same as the raw llll body
         returned by dump(mode="body"), which omits the "roll" prefix and the header.
 
