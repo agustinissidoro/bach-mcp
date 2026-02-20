@@ -2,6 +2,10 @@
 
 > Disclaimer: this setup is currently supported on macOS only.
 
+## Demo video
+
+Watch the demo on YouTube: https://www.youtube.com/watch?v=MswlB7eJNpM
+
 ## What you can do with bach-mcp (current)
 
 Instead of manually editing everything in the Max UI, you can drive `bach.roll` from an MCP client and work at a musical level.
