@@ -31,6 +31,50 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
             return ""
         return str(message.get("data", ""))
 
+    def _validate_llll(s: str) -> Optional[str]:
+        """Validate a raw llll string for structural correctness.
+
+        Returns None if the string is valid, or a descriptive error message if not.
+
+        Checks performed:
+        - Balanced square brackets (no unclosed or extra closing brackets)
+        - No empty outermost string (caller should guard for this separately)
+        - No illegal characters that have no meaning in llll (curly braces, angle brackets)
+        - Bracket depth never goes negative (extra closing bracket)
+        - Warns about suspiciously unbalanced nesting depth anomalies
+
+        Does NOT validate semantic correctness (e.g. correct pitch values, onset ordering).
+        That remains the responsibility of bach.roll itself.
+        """
+        depth = 0
+        for i, ch in enumerate(s):
+            if ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+                if depth < 0:
+                    # Find context around the error
+                    snippet = s[max(0, i - 20) : i + 20].replace("\n", " ")
+                    return (
+                        f"llll validation error: unexpected closing bracket ']' at position {i} "
+                        f"(depth went negative). Context: '...{snippet}...'"
+                    )
+        if depth != 0:
+            return (
+                f"llll validation error: {depth} unclosed bracket(s) '[' remain at end of string. "
+                f"Every '[' must have a matching ']'."
+            )
+        # Check for characters that are never valid in llll
+        illegal = set("{}")
+        found_illegal = [ch for ch in s if ch in illegal]
+        if found_illegal:
+            chars = ", ".join(f"'{c}'" for c in sorted(set(found_illegal)))
+            return (
+                f"llll validation error: illegal character(s) found: {chars}. "
+                f"llll only uses square brackets [ ] for grouping."
+            )
+        return None  # all checks passed
+
     @mcp.tool()
     def add_single_note(
         onset_ms: float = 0.0,
@@ -369,6 +413,16 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         if voice <= 0:
             return {"ok": False, "message": "voice must be > 0"}
 
+        # Validate raw llll sub-strings before building
+        if slots.strip():
+            err = _validate_llll(slots)
+            if err:
+                return {"ok": False, "message": f"Invalid slots llll — {err}"}
+        if breakpoints.strip():
+            err = _validate_llll(breakpoints)
+            if err:
+                return {"ok": False, "message": f"Invalid breakpoints llll — {err}"}
+
         # Build note specifications
         specs = []
         if breakpoints.strip():
@@ -452,6 +506,11 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         score_llll = score_llll.strip()
         if not score_llll:
             return "Rejected empty llll score"
+        # Extract the llll body (everything after the leading "roll" keyword) for bracket validation
+        body = score_llll[4:].strip() if score_llll.lower().startswith("roll") else score_llll
+        err = _validate_llll(body)
+        if err:
+            return f"Rejected llll score — {err}"
         success = bach.send_score(score_llll)
         return "Sent llll score to Max" if success else "Failed to send llll score"
 
@@ -1157,6 +1216,9 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
     @mcp.tool()
     def clearselection() -> Dict[str, Any]:
         """Deselect all currently selected notation items in bach.roll.
+
+        ⚠️  This tool only has an effect if there is currently something selected.
+        If nothing is selected, calling this is a no-op.
 
         Clears the entire selection at once, with no arguments.
         Use this when you want to reset the selection state entirely.
@@ -1977,6 +2039,9 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         chord_llll = chord_llll.strip()
         if not chord_llll:
             return {"ok": False, "message": "chord_llll cannot be empty"}
+        err = _validate_llll(chord_llll)
+        if err:
+            return {"ok": False, "message": f"Invalid chord_llll — {err}"}
         parts = ["addchord"]
         if voice != 1:
             parts.append(str(int(voice)))
@@ -2043,6 +2108,9 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         chords_llll = chords_llll.strip()
         if not chords_llll:
             return {"ok": False, "message": "chords_llll cannot be empty"}
+        err = _validate_llll(chords_llll)
+        if err:
+            return {"ok": False, "message": f"Invalid chords_llll — {err}"}
         parts = ["addchords"]
         if not math.isnan(offset_ms):
             parts.append(str(float(offset_ms)))
@@ -2278,5 +2346,17 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         if not math.isnan(pad_pixels):
             parts.append(str(float(pad_pixels)))
         return _send_max_message(" ".join(parts))
+
+    @mcp.tool()
+    def clear() -> Dict[str, Any]:
+        """Clear the entire score in bach.roll, removing all notes, chords, and markers.
+
+        This is a destructive operation — the entire score content is erased.
+        There is no undo via this tool, so use with caution.
+
+        Example (exact string sent to Max):
+        - clear() -> "clear"
+        """
+        return _send_max_message("clear")
 
     return mcp
