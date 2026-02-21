@@ -1,121 +1,103 @@
 # bach-mcp
 
-> Disclaimer: this setup is currently supported on macOS only.
+`bach-mcp` bridges `bach.roll` in Max with AI in two modes:
 
-## Demo video
+1. Claude mode: Claude Desktop <-> MCP (`py/main.py`) <-> Max
+2. Local mode: Ollama + Qwen (`py/main_local.py`) <-> Max
 
-[![Watch the demo video](https://img.youtube.com/vi/MswlB7eJNpM/hqdefault.jpg)](https://www.youtube.com/watch?v=MswlB7eJNpM)
+## Dependency note
 
-## What you can do with bach-mcp (current)
+Use `requirements.txt` (generated from `requirements.in`).
 
-Instead of manually editing everything in the Max UI, you can drive `bach.roll` from an MCP client and work at a musical level.
+- Do use: `requirements.txt`
+- Source file: `requirements.in`
+- Do not use: `pip_requirements.txt` (it is not part of this repo)
 
-- Write and reshape notation:
-  create notes/chords, build multi-voice material, and update score content programmatically.
-- Edit score structure:
-  add/remove/reorder voices, control staff grouping, and organize the score layout.
-- Control notation appearance:
-  set clefs, staff lines, voice names, note/staff/background colors, and other display attributes.
-- Work with expressive note data:
-  set and manipulate noteheads, articulations, dynamics, text expressions, breakpoints, and other slot-based note metadata.
-- Convert performance data:
-  map dynamics to MIDI velocities and infer dynamics from velocity values.
-- Perform score transformations:
-  apply legato/glissando operations, explode chords, and run time-range selection edits.
-- Navigate and annotate form:
-  add/remove markers, query current score state, and inspect selected material.
-- Audition and export:
-  play score regions and export MIDI for downstream DAW or notation workflows.
+## File map (what each file is for)
 
-### Slot and expression support (current)
+### Root files
 
-- Slot workflows are already supported for expressive notation tasks (dynamics, articulations, noteheads, text, automation/function data, etc.).
-- Dedicated high-level slot management commands are still limited; advanced workflows may still require raw llll-style input.
+- `README.md`: setup and usage.
+- `environment.yml`: Conda env definition (Python 3.11).
+- `requirements.in`: direct Python dependencies (`mcp`, `requests`).
+- `requirements.txt`: pinned, compiled dependency lock for pip install.
+- `claude_desktop_config.json`: example Claude Desktop MCP server config (edit absolute paths).
+- `.gitignore`: excludes cache/build/local artifacts (including `.DS_Store` and `__pycache__`).
+- `.gitattributes`: Git text normalization.
 
-### Scope and platform support
+### Python entrypoints
 
-- Platform support: macOS only (current state of this repo).
-- The MCP layer already covers many common notation and editing workflows, and can be extended over time for additional bach commands.
+- `py/main.py`: starts `BachMCPServer`, creates FastMCP app, runs MCP over stdio for Claude Desktop.
+- `py/main_local.py`: local terminal REPL mode using Ollama/Qwen.
 
-## 1) Clone the repo
+### Python package (`py/bach_mcp`)
+
+- `py/bach_mcp/__init__.py`: public exports.
+- `py/bach_mcp/server.py`: high-level bridge server (message queue, send/wait helpers, lifecycle).
+- `py/bach_mcp/tcp.py`: low-level TCP server/client classes (`3001` inbound, `3000` outbound).
+- `py/bach_mcp/mcp_app.py`: Claude-facing FastMCP tool registration (46 tools).
+- `py/bach_mcp/ollama_bridge.py`: Ollama chat client + tool-calling loop + tool executor.
+- `py/bach_mcp/ollama_utils.py`: Ollama startup, model discovery, model selection/pull menus.
+- `py/bach_mcp/tool_registry.py`: local tool schemas for Qwen (`core` and `extended` sets).
+
+### Max package files
+
+- `max/bach-mcp/patchers/bach-mcp.maxpat`: patcher containing `bach.roll`, `bach.portal`, and `node.script`.
+- `max/bach-mcp/js/bachTCP.js`: Node for Max TCP bridge.
+  - Max listens on `0.0.0.0:3000` for Python commands.
+  - Max client connects to Python on `127.0.0.1:3001` for replies/events.
+
+### Generated/non-source artifacts
+
+- `.DS_Store`, `__pycache__/`, `*.pyc`: generated files, not part of runtime logic.
+
+## Setup (shared by both modes)
+
+1. Clone:
 
 ```bash
 git clone https://github.com/agustinissidoro/bach-mcp.git
 cd bach-mcp
 ```
 
-## 2) Create the conda environment from `environment.yml`
+2. Create/activate environment:
 
 ```bash
-cd bach-mcp
 conda env create -f environment.yml
 conda activate bach-mcp
 ```
 
-## 3) Install pip packages from `pip_requirements.txt`
-
-With the `bach-mcp` conda environment activated:
+3. Install Python dependencies from `requirements.txt`:
 
 ```bash
-cd bach-mcp
-pip install -r pip_requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-## 4) Copy `max/bach-mcp` into Max Packages
+4. Install Max package:
+copy `max/bach-mcp` into Max Packages.
 
-Copy this folder:
+- macOS default: `~/Documents/Max 9/Packages/`
+- Windows default: `%USERPROFILE%\Documents\Max 9\Packages\`
 
-```text
-max/bach-mcp
-```
+5. In Max, open `max/bach-mcp/patchers/bach-mcp.maxpat` and start the Node script (`script start`).
 
-Into your Max Packages folder (macOS default):
+## Mode 1: Claude mode (MCP)
 
-```text
-~/Documents/Max 9/Packages/
-```
+1. Install Claude Desktop: `https://claude.ai/download`
+2. Point Claude Desktop to this MCP server.
 
-## 5) Download Claude Desktop
-
-Download and install Claude Desktop from Anthropic:
-
-```text
-https://claude.ai/download
-```
-
-## 6) Configure Claude Desktop MCP
-
-### Config file location
+Claude config file locations:
 
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
-### Get python path from the running conda env
-
-Activate the env, then get the absolute python path:
-
-```bash
-cd bach-mcp
-conda activate bach-mcp
-which python
-```
-
-### Set the main script path
-
-In this repo, the entrypoint is:
-
-```text
-/absolute/path/to/bach-mcp/py/main.py
-```
-
-### Example `claude_desktop_config.json`
-
-Use the repo example (`claude_desktop_config.json`) and update the absolute paths:
+Example:
 
 ```json
 {
   "mcpServers": {
     "bach-mcp": {
-      "command": "/absolute/path/to/miniconda3/envs/bach-mcp/bin/python",
+      "command": "/absolute/path/to/python",
       "args": ["/absolute/path/to/bach-mcp/py/main.py"],
       "cwd": "/absolute/path/to/bach-mcp"
     }
@@ -123,4 +105,65 @@ Use the repo example (`claude_desktop_config.json`) and update the absolute path
 }
 ```
 
-Then fully quit and reopen Claude Desktop.
+Then fully restart Claude Desktop.
+
+## Mode 2: Local mode (Ollama + Qwen)
+
+1. Install Ollama: `https://ollama.com`
+2. Start local mode:
+
+```bash
+python py/main_local.py
+```
+
+What happens:
+
+- Ensures Ollama is running (starts `ollama serve` if needed).
+- Shows an interactive model picker (installed models).
+- If no models exist, offers pull/download from known Qwen tags.
+- Starts a terminal chat loop and routes tool calls to Max through the same TCP bridge.
+- Uses the `core` tool tier by default in this entrypoint (`BridgeConfig.extended_tools=False`).
+
+Optional for larger local models (32B/72B):
+
+```bash
+python py/bach_mcp/ollama_bridge.py
+```
+
+That REPL auto-enables `extended` tools for 32B/72B tags.
+
+## Ollama + Qwen implementation details
+
+Local mode uses these components:
+
+1. Model lifecycle (`py/bach_mcp/ollama_utils.py`)
+- `QWEN_MODELS` defines known Qwen tags and preference order.
+- `ensure_ollama_running()` checks `/api/tags` and starts Ollama when needed.
+- `select_model()` displays installed models and supports pulling new ones.
+
+2. Bridge config (`py/bach_mcp/ollama_bridge.py`)
+- `BridgeConfig` defines model, fallback models, temperature, token limits, TCP ports, and tool tier.
+- Default transport is the same as Claude mode: outgoing `3000`, incoming `3001`.
+
+3. Tool-calling loop (`py/bach_mcp/ollama_bridge.py`)
+- `OllamaClient.chat()` calls Ollama `/api/chat` with `tools`.
+- `OllamaBridge._run_tool_loop()` executes iterative tool rounds (up to `max_tool_rounds`).
+- On missing model, it can switch to installed fallback models from the configured list.
+
+4. Tool execution (`py/bach_mcp/ollama_bridge.py` + `py/bach_mcp/tool_registry.py`)
+- `tool_registry.py` defines two local tool sets:
+  - Core: 12 tools (default, best for smaller models)
+  - Extended: 46 tools total (core + advanced)
+- `ToolExecutor` maps called tool names to Max commands via `BachMCPServer`.
+
+5. Shared Max transport (`py/bach_mcp/server.py` + `py/bach_mcp/tcp.py`)
+- Same transport stack for both modes.
+- Commands go to Max on port `3000`; responses/events come back on `3001`.
+
+## Optional: regenerate `requirements.txt`
+
+If you change `requirements.in`, rebuild the lock file with pip-tools:
+
+```bash
+pip-compile --output-file=requirements.txt requirements.in
+```
