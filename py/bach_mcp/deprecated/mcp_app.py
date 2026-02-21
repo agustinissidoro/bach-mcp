@@ -109,6 +109,7 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
             )
         return None  # all checks passed
 
+    @mcp.tool()
     def add_single_note(
         onset_ms: float = 0.0,
         pitch_cents: float = 6000.0,
@@ -596,20 +597,23 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
 
     @mcp.tool()
     def send_process_message_to_max(message: str) -> str:
-        """ESCAPE HATCH — send a raw command to Max/MSP that has no dedicated tool.
+        """Send a plain command or instruction to bach.roll in Max/MSP (non-score text).
 
-        ⚠️  Only use this when NO dedicated tool exists for the command.
-        Every common bach.roll command (play, stop, clefs, bgcolor, numvoices,
-        sel, dump, addchord, etc.) has its own tool — use those instead.
-        This tool exists solely for undocumented or rarely-used Max messages.
+        Use this for any message that is not notation data — i.e., anything that is
+        not an llll score. This includes commands like play, stop, clefs, bgcolor,
+        numvoices, and so on.
 
-        Fire-and-forget: sends the string but does not wait for a response.
-        If you need a response, use dump() or a dedicated get_* tool.
+        Unlike send_score_to_max() (which sets notation content via llll) and dump()
+        (which requests data back from Max), this tool is fire-and-forget:
+        it sends the command but does not wait for or return any response.
 
-        Example valid uses (commands with no dedicated tool):
-        - "activepart 2"          switch active part inside a voice ensemble
-        - "showpartcolors 1"      enable part color highlighting
-        - "ruler 1"               show ruler (use set_appearance() instead if possible)
+        Examples:
+        - "play"
+        - "stop"
+        - "clefs G F"
+
+        Prefer the dedicated tools (play, clefs, bgcolor, etc.) when available,
+        and fall back to this tool for commands that don't have a dedicated wrapper.
         """
         message = message.strip()
         if not message:
@@ -686,17 +690,131 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         return _request_max_and_wait(command=command, timeout_seconds=timeout_seconds)
 
     @mcp.tool()
+    def get_num_voices(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the current number of voices and wait for the response.
+
+        Sends "getnumvoices" to Max and returns the answer in the form:
+            numvoices <N>
+        where N is the actual number of voices in the score.
+
+        ⚠️  ALWAYS use this tool when you need to know how many voices exist.
+        Do NOT infer voice count from the number of visible staves — they differ
+        when the FG grand-staff clef is used (1 voice renders as 2 staves).
+        Do NOT rely on what was set earlier in the session; the score may have
+        changed. Query bach directly.
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getnumvoices", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_num_chords(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the number of chords in each voice and wait for the response.
+
+        Sends "getnumchords" to Max and returns the answer in the form:
+            numchords <n_voice1> <n_voice2> ...
+        where each integer is the chord count for the corresponding voice.
+
+        Use this to get a quick structural overview of the score without
+        fetching the full notation body. For full note content use dump(mode="body").
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getnumchords", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_num_notes(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the number of notes per chord per voice and wait for the response.
+
+        Sends "getnumnotes" to Max and returns the answer in the form:
+            numnotes [n1 n2 ...] [n1 n2 ...] ...
+        where each outer list is a voice and each integer is the note count
+        for the corresponding chord within that voice.
+
+        Useful to quickly inspect chord density without reading the full score body.
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getnumnotes", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_cursor(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the current playhead cursor position and wait for the response.
+
+        Sends "getcursor" to Max and returns the answer in the form:
+            cursor <position_ms>
+        where position_ms is the current cursor position in milliseconds.
+
+        See also: get_domain(), get_length()
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getcursor", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_domain(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the currently visible time domain and wait for the response.
+
+        Sends "getdomain" to Max and returns the answer in the form:
+            domain <start_ms> <end_ms>
+        where start_ms and end_ms are the beginning and end of the visible
+        portion of the score in milliseconds.
+
+        Use this before calling domain() to know the current view state,
+        or to understand what portion of the score is on screen.
+
+        See also: get_length(), get_cursor()
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getdomain", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
     def get_length(timeout_seconds: float = 10.0) -> str:
-        """Query bach.roll for the total score length in milliseconds.
+        """Query bach.roll for the total score length in milliseconds and wait for the response.
 
-        Returns: length <length_ms>
+        Sends "getlength" to Max and returns the answer in the form:
+            length <length_ms>
+        where length_ms is the total duration of all musical content in the score.
 
-        Useful after writing content to verify duration, or before calling
-        domain() to zoom the view to fit the whole score.
+        Use this after writing content to verify the score duration, or before
+        calling domain() to set a view that fits the entire score.
+
+        See also: get_domain(), get_cursor()
 
         This is a read-only query; it does not modify the score.
         """
         return _request_max_and_wait("getlength", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_loop(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the current loop region and wait for the response.
+
+        Sends "getloop" to Max and returns the answer in the form:
+            loop <start_ms> <end_ms>
+        where start_ms and end_ms are the start and end of the loop region
+        in milliseconds.
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getloop", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_current_chord(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the pitches and velocities at the current cursor position.
+
+        Sends "getcurrentchord" to Max and returns the answer in the form:
+            currentchord <pitches_llll> <velocities_llll>
+        where pitches_llll is a wrapped list of midicents and velocities_llll
+        is the corresponding list of velocities for all notes sounding at the cursor.
+
+        This is a quick way to read pitch/velocity at a point in time. For richer
+        data at a time position (slots, breakpoints, etc.) use dump() with selection,
+        or the interp/sample messages via send_process_message_to_max().
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getcurrentchord", timeout_seconds=timeout_seconds)
 
     @mcp.tool()
     def get_marker(
@@ -741,16 +859,45 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
             parts.append(names.strip())
         return _request_max_and_wait(" ".join(parts), timeout_seconds=timeout_seconds)
 
+    @mcp.tool()
+    def get_zoom(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the current horizontal zoom level and wait for the response.
+
+        Sends "getzoom" to Max and returns the answer in the form:
+            zoom <percentage>
+        where the value is the horizontal zoom as a percentage.
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getzoom", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
+    def get_vzoom(timeout_seconds: float = 10.0) -> str:
+        """Query bach.roll for the current vertical zoom level and wait for the response.
+
+        Sends "getvzoom" to Max and returns the answer in the form:
+            vzoom <percentage>
+        where the value is the vertical zoom as a percentage (works even when
+        vzoom is set to "auto" in bach's attributes).
+
+        This is a read-only query; it does not modify the score.
+        """
+        return _request_max_and_wait("getvzoom", timeout_seconds=timeout_seconds)
+
+    @mcp.tool()
     def bgcolor(r: float = 1.0, g: float = 1.0, b: float = 1.0, a: float = 1.0) -> Dict[str, Any]:
-        # Internal helper. Use set_appearance("bgcolor", "r g b a") from tools.
+        """Set bach.roll background color in RGBA format.
+
+        All values are floats in the range 0.0 to 1.0 (not 0-255).
+        Default is white (1.0, 1.0, 1.0, 1.0). Alpha 0.0 is fully transparent.
+
+        Example: bgcolor(r=0.0, g=0.0, b=0.0, a=1.0) -> solid black background.
+        """
         return _send_max_message(f"bgcolor {float(r)} {float(g)} {float(b)} {float(a)}")
 
     @mcp.tool()
     def clefs(clefs_list: str = "G") -> Dict[str, Any]:
         """Set the clef for each voice in bach.roll.
-
-        ⚠️  LAYOUT TOOL — only call when the user explicitly asks to change
-        instrumentation, or when initialising a new score. See numvoices() policy.
 
         Clefs are provided as a space-separated list of symbols, one per voice.
         If fewer clefs than voices are provided, the last clef is repeated.
@@ -828,16 +975,23 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
             return {"ok": False, "message": "clefs_list cannot be empty"}
         return _send_max_message(f"clefs {clefs_list}")
 
+    @mcp.tool()
     def notecolor(r: float = 0.0, g: float = 0.0, b: float = 0.0, a: float = 1.0) -> Dict[str, Any]:
-        # Internal helper. Use set_appearance("notecolor", "r g b a") from tools.
+        """Set the default color for all notes drawn in bach.roll.
+
+        All values are floats in the range 0.0 to 1.0 (not 0-255).
+        Default is black (0.0, 0.0, 0.0, 1.0). Alpha 0.0 is fully transparent.
+
+        This sets the global note color. Individual notes may override this
+        if they have a color slot assigned.
+
+        Example: notecolor(r=1.0, g=0.0, b=0.0, a=1.0) -> all notes drawn in red.
+        """
         return _send_max_message(f"notecolor {float(r)} {float(g)} {float(b)} {float(a)}")
 
     @mcp.tool()
     def numparts(parts: str = "1") -> Dict[str, Any]:
         """Set the part grouping for voices in bach.roll via voice ensembles.
-
-        ⚠️  LAYOUT TOOL — only call when the user explicitly asks to change
-        instrumentation, or when initialising a new score. See numvoices() policy.
 
         ─────────────────────────────────────────────────────────────
         CONCEPT: VOICES, VOICE ENSEMBLES, AND PARTS
@@ -930,56 +1084,64 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
     def numvoices(count: int) -> Dict[str, Any]:
         """Set the number of voices in bach.roll.
 
-        ══════════════════════════════════════════════════════════════
-        ⚠️  LAYOUT STABILITY POLICY
-        ══════════════════════════════════════════════════════════════
-        numvoices, clefs, numparts, stafflines, and voicenames define
-        the score's INSTRUMENTATION LAYOUT. Only call these tools when:
+        ─────────────────────────────────────────────────────────────
+        VOICES ≠ STAVES — READ THIS CAREFULLY
+        ─────────────────────────────────────────────────────────────
+        In bach, "voice" and "staff" are NOT the same thing.
 
-          1. The user EXPLICITLY asks to change instrumentation
-             (e.g. "set up a string quartet", "add a bass voice",
-             "change to grand staff", "rename the voices").
-          2. Initialising a brand-new empty score (via new_default_score()).
+        A VOICE is a data concept: one independent stream of chords in the score
+        hierarchy (SCORE > VOICES > CHORDS > NOTES). numvoices controls how many
+        of these data streams exist.
 
-        DO NOT call these tools:
-          • when composing, editing, or adding notes to an existing score
-          • to "verify" the current layout before writing notes
-          • proactively or speculatively on any existing score
-          • just because you are unsure what the layout is
+        A STAFF is a visual concept: one set of lines drawn on screen. The number
+        of staves depends on both numvoices AND the clef assigned to each voice:
+        - A voice with a simple clef (G, F, alto, perc) renders as ONE staff.
+        - A voice with the FG grand-staff clef renders as TWO staves (treble + bass).
 
-        ➜ To READ the current voice count: use getnumvoices().
-        ➜ To READ clefs/voicenames: use dump(mode="header").
-        Calling numvoices() on an existing score DELETES voice content.
-        ══════════════════════════════════════════════════════════════
+        Therefore, the number of visible staves is NOT necessarily equal to the
+        number of voices. Examples:
+
+            1 voice  + clef G   → 1 staff    (monophonic treble)
+            1 voice  + clef FG  → 2 staves   (piano grand staff, single voice)
+            2 voices + clefs G F → 2 staves  (two independent voices, two staves)
+            2 voices + clef FG G → 3 staves  (piano on 2 staves + melody on 1)
+
+        ⚠️  When you need to know how many voices are currently in the score,
+        do NOT guess from the visual staff count. Use get_num_voices() which
+        queries bach directly: "getnumvoices" → returns the true voice count.
 
         ─────────────────────────────────────────────────────────────
-        VOICES ≠ STAVES
+        USAGE
         ─────────────────────────────────────────────────────────────
-        A VOICE is a data stream (SCORE > VOICES > CHORDS > NOTES).
-        A STAFF is a visual unit. They differ when using the FG clef:
-        - simple clef (G, F, alto, perc) → 1 voice = 1 staff
-        - FG grand-staff clef            → 1 voice = 2 staves
+        count must be greater than 0.
+        Removing voices permanently deletes their content — use with caution.
 
-            1 voice  + clef G    → 1 staff
-            1 voice  + clef FG   → 2 staves (grand staff)
-            2 voices + clefs G F → 2 staves (two independent voices)
-
-        count must be > 0. Reducing voice count deletes content permanently.
+        Examples (exact string sent to Max):
+        - numvoices(1) -> one voice (may render as 1 or 2 staves depending on clef)
+        - numvoices(2) -> two independent voices
+        - numvoices(4) -> four voices (e.g. SATB)
         """
         if count <= 0:
             return {"ok": False, "message": "count must be > 0"}
         return _send_max_message(f"numvoices {int(count)}")
 
+    @mcp.tool()
     def staffcolor(r: float = 0.0, g: float = 0.0, b: float = 0.0, a: float = 1.0) -> Dict[str, Any]:
-        # Internal helper. Use set_appearance("staffcolor", "r g b a") from tools.
+        """Set the color of the staff lines in bach.roll.
+
+        All values are floats in the range 0.0 to 1.0 (not 0-255).
+        Default is black (0.0, 0.0, 0.0, 1.0). Alpha 0.0 is fully transparent.
+
+        This affects the color of the staff lines themselves, not the notes.
+        Use notecolor() to change note color, bgcolor() to change the background.
+
+        Example: staffcolor(r=0.5, g=0.5, b=0.5, a=1.0) -> grey staff lines.
+        """
         return _send_max_message(f"staffcolor {float(r)} {float(g)} {float(b)} {float(a)}")
 
     @mcp.tool()
     def stafflines(value: str) -> Dict[str, Any]:
         """Set the staff lines for each voice in bach.roll.
-
-        ⚠️  LAYOUT TOOL — only call when the user explicitly asks to change
-        instrumentation, or when initialising a new score. See numvoices() policy.
 
         Expects one element per voice as a space-separated list. If fewer elements
         than voices are provided, the last value is repeated for remaining voices.
@@ -1014,9 +1176,6 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
     @mcp.tool()
     def voicenames(value: str) -> Dict[str, Any]:
         """Set the display name for each voice in bach.roll, shown as a label to the left of each staff.
-
-        ⚠️  LAYOUT TOOL — only call when the user explicitly asks to change
-        instrumentation, or when initialising a new score. See numvoices() policy.
 
         Expects one element per voice as a space-separated list. If fewer elements
         than voices are provided, the last value is repeated for remaining voices.
@@ -1087,21 +1246,16 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
 
     @mcp.tool()
     def deletemarker(marker_names: str) -> Dict[str, Any]:
-        """Delete the first marker in bach.roll that matches the given name(s).
+        """Delete the first marker in bach.roll that matches the given name.
 
-        Only the first matching marker (in temporal order) is deleted. If multiple
-        markers share the same name, call this repeatedly to delete them one by one.
+        Only the first matching marker is deleted. If multiple markers share
+        the same name, call this repeatedly to delete them one by one.
 
-        To match by multiple names, provide them space-separated — only markers
-        having ALL the given names will match.
-
-        Parameters:
-        - marker_names: one or more marker names, space-separated.
+        marker_names: the name of the marker to delete, as a symbol or llll.
 
         Examples (exact string sent to Max):
-        - deletemarker("intro")         -> deletes first marker named "intro"
-        - deletemarker("A")             -> deletes first marker named "A"
-        - deletemarker("Ringo Starr")   -> deletes first marker named both "Ringo" and "Starr"
+        - deletemarker("intro")   -> deletes first marker named "intro"
+        - deletemarker("A")       -> deletes first marker named "A"
         """
         marker_names = marker_names.strip()
         if not marker_names:
@@ -1242,18 +1396,14 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
 
     @mcp.tool()
     def getnumvoices(query_label: str = "", timeout_seconds: float = 15.0) -> str:
-        """Return the current number of voices in bach.roll.
+        """Return the current number of voices (staves) in bach.roll.
 
         Sends "getnumvoices" to Max and waits for a response.
         Returns a single integer value.
 
-        ⚠️  ALWAYS use this tool when you need to know how many voices exist.
-        Do NOT infer voice count from the number of visible staves — they differ
-        when the FG grand-staff clef is used (1 voice renders as 2 staves).
-        Do NOT rely on what was set earlier in the session; the score may have
-        changed. Query bach directly.
+        Useful for querying the score structure before performing operations
+        that depend on voice count, such as setting clefs or voicenames.
 
-        - query_label: optional label to tag the query (rarely needed).
         - timeout_seconds: how long to wait for Max to respond before giving up.
         """
         query_label = query_label.strip()
@@ -1431,12 +1581,53 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         - sel(arguments="markers @role none")          markers with no role
         - sel(arguments="markers @role barline")       barline markers
 
+        Use select() for involutive (toggle) selection with the same syntax.
+        Use unselect() to deselect a time range.
         Use clearselection() to deselect everything.
         """
         arguments = arguments.strip()
         if not arguments:
             return {"ok": False, "message": "arguments cannot be empty"}
         return _send_max_message(f"sel {arguments}")
+
+    @mcp.tool()
+    def select(arguments: str) -> Dict[str, Any]:
+        """Involutive selection in bach.roll — same syntax as sel() but toggles selection state.
+
+        Items that are already selected become deselected, and unselected items become
+        selected. This mirrors shift-clicking a selection rectangle in the UI.
+
+        The syntax is identical to sel() in every way, with one exception:
+        "select all" always selects everything (non-involutive).
+
+        Refer to sel() for the full syntax documentation and examples.
+
+        Examples (exact string sent to Max):
+        - select(arguments="all")                   -> "select all" (always selects all)
+        - select(arguments="note if voice == 2")    -> toggle notes in voice 2
+        - select(arguments="1000 3000 [] []")       -> toggle notes between 1-3s
+        - select(arguments="chord 3")               -> toggle 3rd chord of voice 1
+        """
+        arguments = arguments.strip()
+        if not arguments:
+            return {"ok": False, "message": "arguments cannot be empty"}
+        return _send_max_message(f"select {arguments}")
+
+    @mcp.tool()
+    def unselect(start_ms: float, end_ms: float) -> Dict[str, Any]:
+        """Deselect all notation items within a time range in bach.roll.
+
+        Always deselects items in the given range, regardless of their current
+        selection state. Items outside the range are unaffected.
+
+        Use sel() to select a range, select() to toggle selection in a range,
+        and clearselection() to deselect everything at once.
+
+        Examples (exact string sent to Max):
+        - unselect(0, 1000)    -> "unsel 0.0 1000.0"
+        - unselect(500, 2000)  -> "unsel 500.0 2000.0"
+        """
+        return _send_max_message(f"unsel {float(start_ms)} {float(end_ms)}")
 
     @mcp.tool()
     def clearselection() -> Dict[str, Any]:
@@ -1447,6 +1638,8 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
 
         Clears the entire selection at once, with no arguments.
         Use this when you want to reset the selection state entirely.
+
+        Use unselect() to deselect items in a specific time range instead.
 
         Example (exact string sent to Max):
         - clearselection() -> "clearselection"
@@ -2084,14 +2277,6 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         All values are plain strings. RGBA colors are given as "r g b a"
         with floats from 0.0 to 1.0. Toggle values are integers (0=off, 1=on).
 
-        CORE COLORS:
-        - bgcolor             background color (default white: "1. 1. 1. 1.")
-                              sends: "bgcolor 0. 0. 0. 1."
-        - notecolor           global note/accidental color (default black: "0. 0. 0. 1.")
-                              sends: "notecolor 1. 0. 0. 1."
-        - staffcolor          staff lines color (default black: "0. 0. 0. 1.")
-                              sends: "staffcolor 0.5 0.5 0.5 1."
-
         RULER:
         - ruler               0=never, 1=above, 2=below, 3=both
                               sends: "ruler 1"
@@ -2220,15 +2405,13 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
 
         Unlike send_score_to_max() which replaces the entire score, addchord()
         inserts a new chord into the existing content. Use this for incremental
-        edits when the rest of the score should be preserved.
+        composition when the rest of the score should be preserved.
 
-        ─────────────────────────────────────────────────────────────
-        CHORD STRUCTURE (gathered syntax)
-        ─────────────────────────────────────────────────────────────
+        The chord is given in gathered syntax llll form:
         [ onset_ms NOTE1 NOTE2 ... chord_flag ]
 
-        Each NOTE:
-        [ pitch_cents duration_ms velocity [SPECIFICATIONS...] note_flag ]
+        Each NOTE is:
+        [ pitch_cents duration_ms velocity [specifications...] note_flag ]
 
         Specifications (optional, between velocity and note_flag, any order):
         - [breakpoints [0 0 0] [rel_x delta_cents slope] ... [1 delta_cents slope]]
@@ -2236,126 +2419,38 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         - [name NAME_OR_NAMES]
         - [graphic displayed_midicents displayed_accidental]
 
-        Pitch: midicents (middle C = C5 = 6000) or note name (C5, D#4, Bb3).
+        Pitch can be given as midicents (e.g. 6000) or note name (e.g. C5, D#4, Bb3).
+        Middle C = C5 = 6000 midicents.
         Accidentals: # sharp, b flat, x double sharp, q quartertone sharp,
                      d quartertone flat, ^ eighth-tone sharp, v eighth-tone flat.
-        chord_flag / note_flag (bitfield): 0=normal, 1=locked, 2=muted, 4=solo
+
+        chord_flag (optional bitfield): 0=normal, 1=locked, 2=muted, 4=solo
 
         Parameters:
         - chord_llll: the chord in gathered syntax llll form (see above)
         - voice: voice number to add the chord to (1-indexed, default: 1)
         - select: if True, also select the added chord (default: False)
 
-        ─────────────────────────────────────────────────────────────
-        SLOTS — OVERVIEW
-        ─────────────────────────────────────────────────────────────
-        Slots are per-note containers for additional data: dynamics, articulations,
-        noteheads, automation curves, text, colors, and more.
-        Embed slots inside a note: [slots [slot_number CONTENT] [slot_number CONTENT] ...]
-
-        Slot content syntax by type:
-        - function:      [x y slope] [x y slope] ...   (x, y coords; slope -1 to 1)
-        - int/float:     a single number
-        - text:          a single symbol (no spaces)
-        - articulations: space-separated symbols (see list below)
-        - notehead:      a single symbol (see list below)
-        - color:         r g b a  (floats 0.0 to 1.0)
-
-        ─────────────────────────────────────────────────────────────
-        SLOTS — DYNAMICS (slot 20)
-        ─────────────────────────────────────────────────────────────
-        Slot type "text". Content is a dynamics marking string.
-
-        DYNAMIC SYMBOLS: pppp ppp pp p mp mf f ff fff ffff  sfz sf sffz
-          sfp sfmp sfmf  o (dal/al niente)
-          Any unrecognized text → roman italic expression (e.g. "subito", "cresc")
-
-        HAIRPIN SYMBOLS: = (steady)  < (cresc)  > (dim)  << (exp cresc)  >> (exp dim)
-          _ (dashed line)   | (end hairpin at tail, not continuing to next note)
-
-        PLAIN SYNTAX — space-separated markings and hairpins:
-        - "mp"           single marking
-        - "p<"           crescendo continuing to next note
-        - "p<|"          crescendo ending at this note's tail
-        - "f> mp"        diminuendo to mp
-        - "p< ff> mp"    crescendo to ff then diminuendo to mp
-        - "o<< f>> o"    dal niente exp. cresc to f, exp. dim al niente
-
-        ATTACHING TO BREAKPOINTS (plain syntax): use @N for breakpoint N
-        - "f> @1 p< @2 ff"
-
-        MULTI-NOTE PATTERNS:
-        - p< cresc: note1 [slots [20 p<]] / note2 [slots [20 f]]
-        - f> dim:   note1 [slots [20 f>]] / note2 [slots [20 p]]
-        - dal→f→al: note1 [slots [20 o<<]] / note2 [slots [20 f>>]] / note3 [slots [20 o]]
-
-        ─────────────────────────────────────────────────────────────
-        SLOTS — ARTICULATIONS (slot 22)
-        ─────────────────────────────────────────────────────────────
-        Slot type "articulations". Multiple articulations can be combined.
-
-        SYMBOLS (full / short):
-        staccato/stacc  staccatissimo/staccmo  fermata/ferm  portato/port
-        accent/acc  accentstaccato/accstacc  martellato/mart
-        lefthandpizzicato/lhpizz  trill/tr  trill#/tr#  trillb/trb
-        gruppetto/grupp  upmordent/umord  downmordent/dmord  doublemordent/mmord
-        upbowing/ubow  downbowing/dbow
-        tremolo1/trem1  tremolo2/trem2  tremolo3/trem3
-
-        Examples:
-        - [slots [22 staccato]]            single staccato
-        - [slots [22 accent staccato]]     accent + staccato
-        - [slots [22 trill]]               trill
-        - [slots [22 ubow trem2]]          upbowing + 2-slash tremolo
-
-        ─────────────────────────────────────────────────────────────
-        SLOTS — NOTEHEADS (slot 23)
-        ─────────────────────────────────────────────────────────────
-        Slot type "notehead". Only one notehead per note.
-
-        SYMBOLS: default  doublewhole  whole  white  black  diamond  cross
-          plus  none  accent  blacksquare  whitesquare  blacktriangle
-          whitetriangle  blackrhombus  whiterhombus
-        (square/triangle/rhombus always filled in bach.roll)
-
-        ─────────────────────────────────────────────────────────────
-        BREAKPOINTS
-        ─────────────────────────────────────────────────────────────
-        Pitch glissandi along the note duration. Two breakpoints always implicit:
-        (0 0 0) at notehead, [1 delta slope] at tail.
-
-        [breakpoints [0 0 0] [rel_x delta_cents slope] ... [1 delta_cents slope]]
-        - rel_x: 0.0=notehead, 1.0=tail
-        - delta_cents: pitch offset from base pitch in midicents
-        - slope: curvature -1 to 1 (0=linear)
-
-        Examples:
-        - [breakpoints [0 0 0] [1 200 0]]              gliss up 200 cents
-        - [breakpoints [0 0 0] [0.5 200 0] [1 0 0.5]]  up then back down
-
-        ─────────────────────────────────────────────────────────────
-        EXAMPLES
-        ─────────────────────────────────────────────────────────────
+        Examples (exact string sent to Max):
         - addchord("[1000 [6000 500 50]]")
-          middle C at 1s, 500ms, vel 50, voice 1
+          -> "addchord [1000 [6000 500 50]]"
+          (middle C at 1s, 500ms, velocity 50, voice 1)
 
         - addchord("[1000 [6000 500 50]]", voice=2)
-          same, in voice 2
+          -> "addchord 2 [1000 [6000 500 50]]"
+
+        - addchord("[1000 [6000 500 50]]", voice=2, select=True)
+          -> "addchord 2 [1000 [6000 500 50]] @sel 1"
 
         - addchord("[1000 [6000 500 50] [7200 500 50]]")
-          two-note chord: middle C + G above
+          -> "addchord [1000 [6000 500 50] [7200 500 50]]"
+          (chord with two notes: middle C and G above)
 
         - addchord("[2000 [6000 1000 100 [slots [22 staccato] [20 ff]]]]")
-          staccato + ff dynamic
-
-        - addchord("[500 [7000 500 100 [slots [23 diamond] [22 trill] [20 mp]]]]")
-          harmonics notehead, trill, mp
-
-        - addchord("[0 [6000 2000 90 [breakpoints [0 0 0] [1 200 0]]]]")
-          glissando up 200 cents
+          -> chord with staccato articulation and ff dynamic
 
         - addchord("[500 [7000 500 127] [7200 1200 100] [name paul] 0]")
-          named chord with two notes
+          -> named chord with two notes
         """
         chord_llll = chord_llll.strip()
         if not chord_llll:
@@ -2439,6 +2534,60 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         return _send_max_message(" ".join(parts))
 
     @mcp.tool()
+    def copy(mode: str = "") -> Dict[str, Any]:
+        """Copy selected content or slot data to the global clipboard in bach.roll.
+
+        If no mode is given, copies the current selection.
+
+        Parameters:
+        - mode: what to copy. Options:
+            - ""                  copy current selection (default)
+            - "durationline"      copy the duration line
+            - "slot active"       copy content of the currently open slot window
+            - "slot N"            copy content of slot N (e.g. "slot 1")
+            - "slot all"          copy content of all slots
+            - "slotinfo N"        copy the slotinfo (structure) of slot N
+            - "slotinfo active"   copy the slotinfo of the active slot
+
+        Examples (exact string sent to Max):
+        - copy()                    -> "copy"
+        - copy("durationline")      -> "copy durationline"
+        - copy("slot 1")            -> "copy slot 1"
+        - copy("slot active")       -> "copy slot active"
+        - copy("slot all")          -> "copy slot all"
+        - copy("slotinfo 3")        -> "copy slotinfo 3"
+        """
+        mode = mode.strip()
+        command = f"copy {mode}" if mode else "copy"
+        return _send_max_message(command)
+
+    @mcp.tool()
+    def cut(mode: str = "") -> Dict[str, Any]:
+        """Cut selected content or slot data to the global clipboard in bach.roll.
+
+        Identical to copy() but also deletes the copied content afterwards.
+        If no mode is given, cuts the current selection.
+
+        Parameters:
+        - mode: what to cut. Options:
+            - ""                  cut current selection (default)
+            - "durationline"      cut the duration line
+            - "slot active"       cut content of the currently open slot window
+            - "slot N"            cut content of slot N (e.g. "slot 1")
+            - "slot all"          cut content of all slots
+
+        Examples (exact string sent to Max):
+        - cut()                 -> "cut"
+        - cut("durationline")   -> "cut durationline"
+        - cut("slot 1")         -> "cut slot 1"
+        - cut("slot active")    -> "cut slot active"
+        - cut("slot all")       -> "cut slot all"
+        """
+        mode = mode.strip()
+        command = f"cut {mode}" if mode else "cut"
+        return _send_max_message(command)
+
+    @mcp.tool()
     def copyslot(slot_from: str, slot_to: str) -> Dict[str, Any]:
         """Copy the content of one slot to another for all selected notes in bach.roll.
 
@@ -2504,6 +2653,26 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
             if empty:
                 parts.append("@empty 1")
         return _send_max_message(" ".join(parts))
+
+    @mcp.tool()
+    def deletemarker(names: str) -> Dict[str, Any]:
+        """Delete the first marker matching the given name(s) in bach.roll.
+
+        If multiple markers match, only the first one (in temporal order) is deleted.
+        To delete by multiple names, provide them space-separated — only markers
+        having ALL the given names will match.
+
+        Parameters:
+        - names: one or more marker names, space-separated.
+
+        Examples (exact string sent to Max):
+        - deletemarker("Ringo")         -> "deletemarker Ringo"
+        - deletemarker("Ringo Starr")   -> "deletemarker Ringo Starr"
+        """
+        names = names.strip()
+        if not names:
+            return {"ok": False, "message": "names cannot be empty"}
+        return _send_max_message(f"deletemarker {names}")
 
     @mcp.tool()
     def deleteslotitem(
@@ -2608,14 +2777,10 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
 
     @mcp.tool()
     def new_default_score() -> Dict[str, Any]:
-        """Reset bach.roll to a clean default state for a brand-new score.
+        """Reset bach.roll to a clean default state.
 
-        ⚠️  DESTRUCTIVE — call this ONLY when starting a completely new score
-        from scratch (e.g. "create a new piece", "start fresh"). Do NOT call
-        this if there is already content you want to keep, or just to check
-        the current state. It wipes everything and resets all layout settings.
-
-        Performs in sequence:
+        This is the recommended starting point whenever you want a fresh score.
+        It performs the following operations in sequence:
 
         1.  clear()            — removes all notes, chords, markers, and voices
         2.  numvoices(1)       — sets exactly one voice
