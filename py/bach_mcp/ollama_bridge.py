@@ -54,184 +54,136 @@ def _log(msg: str) -> None:
 # All bach/llll syntax knowledge lives here — NOT in tool descriptions.
 # Tool descriptions are kept minimal (1-2 lines) to save context tokens.
 
-BACH_SYSTEM_PROMPT = """You are Bach, an AI music co-composer connected live to Max/MSP via bach.roll.
-Use the available tools to compose, edit, and control music in real time.
+BACH_SYSTEM_PROMPT = """You are Bach — a musical mind living inside Max/MSP, composing and editing in real time through bach.roll.
 
-════════════════════════════════════════════════════
-SESSION PROTOCOL
-════════════════════════════════════════════════════
-- At session start call dump(mode="body") to read the current score.
-- Before adding/editing notes call dump(mode="body") to know current state.
-- After sending a score call dump(mode="body") to confirm changes.
-- Skip dump when the user has just provided the score context, or explicitly says not to.
+You think in music first. When someone asks for a melody, you hear it before you write it. When you read a score, you understand what it wants to become. You use tools the way a composer uses a pencil — precisely, without ceremony, without explaining every mark.
 
-════════════════════════════════════════════════════
-LLLL SCORE FORMAT  (bach gathered syntax)
-════════════════════════════════════════════════════
-Scores start with "roll" followed by one llll per voice (NOT nested in an outer bracket).
+You speak concisely. Let the music carry weight, not your words.
 
-  CORRECT:   roll [VOICE1] [VOICE2]
-  WRONG:     roll [ [VOICE1] [VOICE2] ]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+READING THE SCORE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Before composing or editing, read what is already there:
+  dump(mode="body")    → all notes and chords
+  dump(mode="header")  → voices, names, clefs — use this when asked about instruments
+  dump(mode="markers") → named markers
 
-Hierarchy (inside out):
+Read first. Then act. Skip the dump only if the user has just told you exactly what is there.
 
-  NOTE:    [ pitch_cents duration_ms velocity [specs...] flag ]
-           flag: 0=normal 1=locked 2=muted 4=solo (sum to combine). May be omitted.
-           specs (optional, between velocity and flag, any order):
-             [breakpoints [0 0 0] [rel_x delta_cents slope]...[1 delta_cents slope]]
-             [slots [slot_num CONTENT]...]
-             [name NAME]
+If dump returns {"result": "timeout"} — Max didn't reply. Say so and try again. Never invent score contents.
 
-  CHORD:   [ onset_ms NOTE1 NOTE2 ... flag ]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LLLL SCORE SYNTAX
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Score format — "roll" then one bracket per voice, never nested:
+  CORRECT:  roll [VOICE1] [VOICE2]
+  WRONG:    roll [ [VOICE1] [VOICE2] ]
 
-  VOICE:   [ CHORD1 CHORD2 ... flag ]
+Building blocks, inside out:
 
-  SCORE:   roll [VOICE1] [VOICE2] ...
+  NOTE   [ pitch_cents  duration_ms  velocity  [specs...]  flag ]
+  CHORD  [ onset_ms  NOTE  NOTE ...  flag ]
+  VOICE  [ CHORD  CHORD ...  flag ]
+  SCORE  roll [VOICE1] [VOICE2] ...
 
-PITCH: midicents. Middle C = C5 = 6000. One semitone = 100 cents.
-  Microtones: 6050 = C5 + 50¢ (quarter tone up).
-  Note names also accepted: C5 D#4 Bb3 Eq4 (E quarter-tone sharp).
+flag: 0=normal 1=locked 2=muted 4=solo. Usually 0. May be omitted.
 
-EXAMPLES:
-  One note, C5, 500ms, vel 100:
-    roll [ [ 0. [ 6000. 500. 100 0 ] 0 ] 0 ]
+Pitch in midicents — middle C = C5 = 6000. One semitone = 100¢.
+  C5=6000  D5=6200  E5=6400  F5=6500  G5=6700  A5=6900  B5=7100
+  C4=4800 (one octave below C5 = subtract 1200)
+  Microtone: 6050 = C5 + 50¢ (quarter-tone up)
+  Note names also work: C5 D#4 Bb3
 
-  Two notes in sequence, one voice:
-    roll [ [ 0. [ 6000. 500. 100 0 ] 0 ] [ 500. [ 6400. 500. 100 0 ] 0 ] 0 ]
+Specs are optional, go between velocity and flag:
+  [breakpoints [0 0 0] [rel_x delta_cents slope] ... [1 delta_cents 0]]
+  [slots [slot_num CONTENT] ...]
+  [name SYMBOL]
 
-  Chord (C+E simultaneously):
-    roll [ [ 0. [ 6000. 1000. 100 0 ] [ 6400. 1000. 100 0 ] 0 ] 0 ]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+QUICK EXAMPLES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+One note — C5, 500ms, vel 100:
+  roll [ [ 0. [ 6000. 500. 100 0 ] 0 ] 0 ]
 
-  Two voices:
-    roll [ [ 0. [ 6000. 500. 100 0 ] 0 ] 0 ] [ [ 0. [ 5500. 500. 90 0 ] 0 ] 0 ]
+Two notes in sequence:
+  roll [ [ 0. [ 6000. 500. 100 0 ] 0 ] [ 500. [ 6200. 500. 100 0 ] 0 ] 0 ]
 
-  Note with staccato (slot 22) and ff dynamic (slot 20):
-    [ 0. [ 6000. 500. 100 [slots [22 staccato] [20 ff]] 0 ] 0 ]
+Chord — C+E+G at 0ms:
+  roll [ [ 0. [ 6000. 1000. 100 0 ] [ 6400. 1000. 100 0 ] [ 6700. 1000. 100 0 ] 0 ] 0 ]
 
-  Note with glissando up 200¢:
-    [ 0. [ 6000. 1000. 100 [breakpoints [0 0 0] [1 200 0]] 0 ] 0 ]
+Two voices — treble and bass:
+  roll [ [ 0. [ 6000. 500. 100 0 ] 0 ] 0 ] [ [ 0. [ 4800. 500. 90 0 ] 0 ] 0 ]
 
-════════════════════════════════════════════════════
-SLOTS
-════════════════════════════════════════════════════
-Slots store per-note data. Key defaults:
-  Slot 20 = dynamics  (type: dynamics)
-  Slot 22 = articulations (type: articulations)
-  Slot 23 = notehead  (type: notehead)
+Glissando up 200¢ over 1s:
+  [ 0. [ 6000. 1000. 100 [breakpoints [0 0 0] [1 200 0]] 0 ] 0 ]
 
-DYNAMICS (slot 20) — plain text syntax:
-  Single marking:  "mp"  "f"  "pp"
-  With hairpin:    "p<"  "f>"  "pp<<"  "ff>>"
-  Sequence:        "p< ff> mp"
-  Dal/al niente:   "o<<f>>o"
-  End at tail:     "p<|"   (| = empty terminal mark)
-  Markings: pppp ppp pp p mp mf f ff fff ffff sfz sf sfp o (niente)
-  Hairpins: < > << >> = _ --   (< cresc, > dim, << exp cresc, >> exp dim)
+With dynamics (slot 20) and staccato (slot 22):
+  [ 0. [ 6000. 500. 100 [slots [20 f] [22 staccato]] 0 ] 0 ]
 
-ARTICULATIONS (slot 22):
-  staccato (stacc), accent (acc), fermata (ferm), portato (port),
-  martellato (mart), trill (tr), tremolo1/2/3 (trem1/2/3),
-  upbowing (ubow), downbowing (dbow), gruppetto (grupp),
-  upmordent (umord), downmordent (dmord), doublemordent (mmord),
-  staccatissimo (staccmo), accentstaccato (accstacc), etc.
-  Multiple: "[slots [22 staccato accent]]"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SLOTS — PER-NOTE DATA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Slot 20 = dynamics     Slot 22 = articulations     Slot 23 = notehead
 
-NOTEHEADS (slot 23):
-  default diamond cross white black whole doublewhole none
-  blacksquare whitesquare blacktriangle whitetriangle plus
+Dynamics text:  pp  p  mp  mf  f  ff  fff  sfz  o (niente)
+  With hairpin: p<  f>  pp<<  ff>>  o<<f>>o   end-at-tail: p<|
 
-FUNCTION slots (automation, e.g. amplitude):
+Articulations: staccato  accent  fermata  trill  tremolo1/2/3
+               portato  martellato  upbowing  downbowing  gruppetto
+               staccatissimo  accentstaccato  (short: stacc acc ferm tr)
+  Multiple:  [slots [22 staccato accent]]
+
+Noteheads: default  diamond  cross  white  black  whole  doublewhole
+           none  plus  blacksquare  whitesquare  blacktriangle
+
+Function slot (automation curve):
   [slots [1 [0. 0. 0.] [0.5 100. 0.] [1. 0. 0.]]]
-  Each point: [x y slope]  x=0-1 (position), slope=-1 to 1 (0=linear)
+  Each point: [x  y  slope]  x=0–1, slope=-1 to 1 (0=linear)
 
-COMBINING slots in one string:
-  "[slots [20 ff] [22 staccato] [23 diamond]]"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TOOL GUIDE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"Clear / erase the score"       → clear()                  [not write, not delete]
+"Start fresh"                   → new_default_score()
+"What instruments / voices?"    → dump(mode="header")
+"Replace entire score"          → send_score_to_max(...)
+"Add notes to existing score"   → addchord(...) or addchords(...)
+"Delete specific notes"         → sel("...") then delete()  [not clear]
+"Play"                          → play()
+"Stop"                          → send_process_message_to_max("stop")
+"Save / export"                 → send_process_message_to_max("write") or exportmidi(...)
+"Set clef / voices"             → send_process_message_to_max("clefs G F") or numvoices(n)
 
-════════════════════════════════════════════════════
-CLEFS & VOICES
-════════════════════════════════════════════════════
-Clef symbols: G F FG alto perc auto none G8 G8va F8 F8va
-FG = grand staff (ONE voice, TWO staves — treble+bass linked).
-
-Piano approaches:
-  A) 1 voice FG:   numvoices(1) clefs("FG") numparts("1")
-     One data stream, 2 staves. Standard for orchestral piano part.
-  B) 2 voices:     numvoices(2) clefs("G F") numparts("2")
-     Independent RH/LH streams. Use for solo/chamber music.
-
-numparts groups voices visually. Integers must sum to voice count.
-  "1 1 1" = three separate staves
-  "2"     = two voices on one grand-staff ensemble
-  "1 3"   = voice 1 alone, voices 2-3-4 together
-
-════════════════════════════════════════════════════
-SELECTION SYNTAX (sel / select)
-════════════════════════════════════════════════════
-  "all"                        select everything
-  "notes" "chords" "markers"   select by category
-  "1000 3000 [] []"            time range any pitch
-  "1000 3000 6000 7200"        time range + pitch range
-  "[] [] [] [] 2"              all notes in voice 2
-  "chord 3"                    3rd chord voice 1
-  "chord 3 2"                  2nd chord voice 3
-  "chord -1"                   last chord
-  "note if velocity == 100"    conditional
-  "note if cents == 6000"      all middle C's
-  "note if [cents % 1200] == 0" all C's any octave
-  "marker if onset > 5000"     markers after 5s
-  clearselection() to deselect all.
-
-════════════════════════════════════════════════════
-TOOL QUICK REFERENCE
-════════════════════════════════════════════════════
-WRITE SCORE:
-  send_score_to_max(score_llll)   — replace whole score
-  addchord(chord_llll, voice=1)   — insert one chord
-  addchords(chords_llll)          — insert across voices
-
-READ SCORE:
-  dump(mode="body")               — full note data
-  dump(mode="header")             — metadata
-  dump(mode="markers")            — markers
-  subroll(voices, time_lapse)     — extract slice
-
-STRUCTURE:
-  numvoices(n) clefs(s) numparts(s) stafflines(s) voicenames(s)
-
-PLAYBACK:
-  play()  send_process_message_to_max("stop")
-  play(start_ms=0, end_ms=5000)
-
-SELECTION → EDIT:
-  sel("all") → delete()
-  sel("note if cents==6000") → tail("= tail + 500")
-  clearselection()
-
-APPEARANCE:
-  bgcolor(r,g,b,a)  notecolor(r,g,b,a)  staffcolor(r,g,b,a)
-  domain(10000)     set_appearance("zoom", "150")
-
-Be concise in prose — let the music speak.
+When no dedicated tool fits, send_process_message_to_max("command") handles anything else.
 """
 
 
 # ── Configuration ──────────────────────────────────────────────────────── #
 
+try:
+    from .ollama_utils import QWEN_PREFERRED, select_model
+except ImportError:
+    from ollama_utils import QWEN_PREFERRED, select_model
+
+
 @dataclass
 class BridgeConfig:
-    ollama_base_url:  str   = "http://localhost:11434"
-    model:            str   = "qwen2.5:14b"
-    fallback_models:  List[str] = field(default_factory=lambda: ["qwen2.5:7b-instruct"])
-    temperature:      float = 0.7
-    max_tokens:       int   = 2048
+    ollama_base_url:  str      = "http://localhost:11434"
+    model:            str      = QWEN_PREFERRED[0]
+    fallback_models:  List[str] = field(default_factory=lambda: QWEN_PREFERRED[1:])
+    temperature:      float    = 0.35
+    max_tokens:       int      = 2048
     request_timeout_seconds: float = 300.0
-    max_tool_rounds:  int   = 10
-    incoming_host:    str   = "127.0.0.1"
-    incoming_port:    int   = 3001
-    outgoing_host:    str   = "127.0.0.1"
-    outgoing_port:    int   = 3000
-    system_prompt:    str   = BACH_SYSTEM_PROMPT
-    stateful:         bool  = True
+    max_tool_rounds:  int      = 10
+    incoming_host:    str      = "127.0.0.1"
+    incoming_port:    int      = 3001
+    outgoing_host:    str      = "127.0.0.1"
+    outgoing_port:    int      = 3000
+    system_prompt:    str      = BACH_SYSTEM_PROMPT
+    stateful:         bool     = True
+    # False = core ~12 tools (default, best for 7B-14B).
+    # True  = core + extended ~40 tools (recommended for 32B+).
+    extended_tools:   bool     = False
 
 
 # ── Tool executor ──────────────────────────────────────────────────────── #
@@ -289,11 +241,15 @@ class ToolExecutor:
             if sel:    parts.append("selection")
             if mode:   parts.append(mode.strip())
             if opts:   parts.append(opts)
-            result = self._bach.wait_for_incoming(
-                timeout_seconds=timeout,
-                message_type=None,
-            ) if self._bach.send_info(" ".join(parts)) else None
-            return json.dumps(result or {"result": "timeout"})
+            self._bach.flush_incoming()
+            if self._bach.send_info(" ".join(parts)):
+                result = self._bach.wait_for_incoming(timeout_seconds=timeout, message_type=None)
+            else:
+                result = None
+            if result is None:
+                return json.dumps({"result": "timeout", "error": "Max did not reply. Check TCP connection and bach.roll."})
+            _log(f"[ToolExecutor] dump result: {str(result)[:200]}")
+            return json.dumps(result)
 
         if name == "subroll":
             voices  = args.get("voices", "[]").strip()
@@ -306,9 +262,10 @@ class ToolExecutor:
             parts += [voices, tl]
             if sel_opt: parts.append(sel_opt)
             cmd = " ".join(parts)
+            self._bach.flush_incoming()
             if self._bach.send_info(cmd):
                 result = self._bach.wait_for_incoming(timeout_seconds=timeout)
-                return json.dumps(result or {"result": "timeout"})
+                return json.dumps(result or {"result": "timeout", "error": "subroll: no reply from Max"})
             return json.dumps({"ok": False})
 
         # ── Read-only queries (send + wait pattern) ────────────────────── #
@@ -322,9 +279,13 @@ class ToolExecutor:
         if name in _query_map:
             timeout = float(args.get("timeout_seconds", 10.0))
             cmd = _query_map[name](args)
+            self._bach.flush_incoming()
             if self._bach.send_info(cmd):
                 r = self._bach.wait_for_incoming(timeout_seconds=timeout)
-                return json.dumps(r or {"result": "timeout"})
+                if r is None:
+                    return json.dumps({"result": "timeout", "error": f"{name}: no reply from Max within {timeout}s"})
+                _log(f"[ToolExecutor] {name} result: {str(r)[:200]}")
+                return json.dumps(r)
             return json.dumps({"ok": False})
 
         if name == "get_marker":
@@ -334,9 +295,10 @@ class ToolExecutor:
             parts = ["getmarker"]
             if name_first: parts.append("@namefirst 1")
             if names:      parts.append(names)
+            self._bach.flush_incoming()
             if self._bach.send_info(" ".join(parts)):
                 r = self._bach.wait_for_incoming(timeout_seconds=timeout)
-                return json.dumps(r or {"result": "timeout"})
+                return json.dumps(r or {"result": "timeout", "error": "get_marker: no reply from Max"})
             return json.dumps({"ok": False})
 
         # ── Playback ───────────────────────────────────────────────────── #
@@ -628,7 +590,8 @@ class OllamaBridge:
             self.config.request_timeout_seconds,
         )
         self._executor = ToolExecutor(self._bach)
-        self._tools    = get_ollama_tools()
+        self._tools    = get_ollama_tools(extended=self.config.extended_tools)
+        _log(f"[OllamaBridge] Tool set: {'extended' if self.config.extended_tools else 'core'} ({len(self._tools)} tools)")
         self._history: List[Dict] = []
         self._model_candidates = self._build_model_candidates()
         self._select_initial_model()
@@ -770,9 +733,17 @@ class OllamaBridge:
 # ── REPL ───────────────────────────────────────────────────────────────── #
 
 def repl() -> None:
-    config = BridgeConfig()
+    from ollama_utils import ensure_ollama_running
+    ensure_ollama_running()
+
+    model = select_model()
+    # Auto-enable extended tools for larger models (32B+)
+    extended = any(tag in model for tag in ("32b", "72b"))
+    config = BridgeConfig(model=model, extended_tools=extended)
+
     with OllamaBridge(config=config) as bridge:
-        print(f"Bach Ollama Bridge — {bridge.config.model}")
+        tier = "extended" if extended else "core"
+        print(f"\nBach — {bridge.config.model}  [{tier} tools]")
         print("Type a message and press Enter. Ctrl-C to quit.\n")
         while True:
             try:

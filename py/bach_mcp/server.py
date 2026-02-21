@@ -176,6 +176,19 @@ class BachMCPServer:
         with self._incoming_lock:
             return len(self._incoming_messages)
 
+    def flush_incoming(self) -> int:
+        """Discard all queued incoming messages and return how many were dropped.
+
+        Call this immediately before sending a query command (dump, subroll,
+        getnumvoices, etc.) so that stale responses from earlier tool calls
+        cannot be mistaken for the reply we are about to request.
+        """
+        with self._incoming_lock:
+            count = len(self._incoming_messages)
+            self._incoming_messages.clear()
+            self._incoming_event.clear()
+            return count
+
     def _install_signal_handlers(self) -> None:
         def _handle_signal(signum, frame):  # noqa: ARG001
             self.running = False
