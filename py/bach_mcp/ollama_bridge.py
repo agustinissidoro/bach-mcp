@@ -18,15 +18,27 @@ Or import programmatically:
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-import requests  # pip install requests
+import requests
 
-from server import BachMCPServer, MCPConfig
-from tool_registry import get_ollama_tools
+# Allow running this file directly from repo root:
+#   python py/bach_mcp/ollama_bridge.py
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_PY_ROOT = os.path.dirname(_THIS_DIR)
+if _PY_ROOT not in sys.path:
+    sys.path.insert(0, _PY_ROOT)
+
+try:
+    from .server import BachMCPServer, MCPConfig
+    from .tool_registry import get_ollama_tools
+except ImportError:
+    from server import BachMCPServer, MCPConfig
+    from tool_registry import get_ollama_tools
 
 
 # ── Logging ────────────────────────────────────────────────────────────── #

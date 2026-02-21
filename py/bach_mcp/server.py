@@ -11,7 +11,10 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Deque, Dict, Optional
 
-from tcp import TCPSend, TCPServer
+try:
+    from .tcp import TCPSend, TCPServer
+except ImportError:
+    from tcp import TCPSend, TCPServer
 
 
 def _log(message: str) -> None:

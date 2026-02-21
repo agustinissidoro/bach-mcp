@@ -1,0 +1,8 @@
+# Direct runtime dependencies (scanned from imports under `py/`)
+# Python version target from environment.yml: 3.11
+
+# FastMCP API used by py/bach_mcp/mcp_app.py
+mcp~=1.26.0
+
+# Ollama HTTP client used by py/bach_mcp/ollama_bridge.py
+requests~=2.32.0
