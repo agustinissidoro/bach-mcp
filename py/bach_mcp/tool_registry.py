@@ -134,9 +134,11 @@ CORE_TOOLS: List[Dict[str, Any]] = [
 
     _tool("clefs",
         "Set clef for each voice. Space-separate for multiple voices. "
-        "Symbols: G F FG alto perc auto none G8 G8va F8 F8va. "
-        "FG = grand staff (1 voice, 2 staves).",
-        {"clefs_list": _s("e.g. 'G'  or  'G F'  or  'FG'")},
+        "Valid symbols (case-sensitive): G  G8va (up)  G8 (down)  F  F8va (up)  F8 (down) "
+        "Alto Tenor Soprano Mezzo Barytone Percussion None "
+        "FG FFG FGG FFGG (multi-staff: ONE voice, multiple staves). "
+        "WRONG: perc alto G8vb — use exact symbols as listed.",
+        {"clefs_list": _s("e.g. 'G'  or  'G F'  or  'FG'  or  'Percussion'  or  'FFGG'")},
         ["clefs_list"]),
 
     # ── Selection → edit ───────────────────────────────────────────────── #

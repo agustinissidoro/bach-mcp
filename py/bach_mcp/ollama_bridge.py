@@ -155,6 +155,55 @@ TOOL GUIDE
 "Set clef / voices"             → send_process_message_to_max("clefs G F") or numvoices(n)
 
 When no dedicated tool fits, send_process_message_to_max("command") handles anything else.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ORCHESTRAL LAYOUT REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VOICES vs STAVES vs PARTS — the essential distinction
+------------------------------------------------------
+VOICE  = one independent musical stream. One entry in clefs, voicenames,
+         numvoices. The unit of musical content.
+
+STAFF  = one horizontal line system on the page. A voice can produce MORE
+         than one staff if its clef is a multi-staff type (FG, FGG, FFG,
+         FFGG). numvoices and the length of clefs/voicenames always count
+         VOICES, never staves. Do not add extra voices to compensate for
+         extra staves — the multi-staff clef handles it automatically.
+
+PART   = a bracket group on the left margin. numparts lists how many
+         consecutive voices share each bracket. numparts counts VOICES,
+         not staves. The sum of all numparts values must equal numvoices.
+
+Concrete examples:
+  Piano:  clef FG, one voice, two staves, one bracket → numparts contribution: 1
+  Choir:  clef FFGG, one voice, four staves, one bracket → numparts contribution: 1
+  Flutes: two separate G voices → numparts contribution: 2
+
+CLEFS — valid symbols (case-sensitive):
+  Single-staff:  G  F  Alto  Tenor  Soprano  Mezzo  Barytone  None
+  Octave clefs:  G8va (up)  G8 (down)  G15ma (2 oct up)  G15mb (2 oct down)
+                 F8va (up)  F8 (down)  F15ma (2 oct up)  F15mb (2 oct down)
+  Percussion:    Percussion   <- capital P, full word — NOT "Perc" or "perc"
+  Multi-staff:   FG   = bass + treble (piano grand staff)
+                 FGG  = bass + treble + treble
+                 FFG  = bass + bass + treble
+                 FFGG = bass + bass + treble + treble (choir reduction, 4 staves)
+                 Each of these is ONE clef entry = ONE voice.
+
+ORCHESTRAL EXAMPLE (30 voices, correct clefs/voicenames/numparts):
+
+clefs G G G G G G F F G G G G G G F F F F F Percussion Percussion FG FG G G Alto F F
+voicenames "Flute 1" "Flute 2" "Oboe 1" "Oboe 2" "Clarinet 1" "Clarinet 2" "Bassoon 1" "Bassoon 2" "Horn 1" "Horn 2" "Horn 3" "Horn 4" "Trumpet 1" "Trumpet 2" "Trombone 1" "Trombone 2" "Trombone 3" Tuba Timpani "Percussion 1" "Percussion 2" Harp [ ] Piano [ ] "Violin I" "Violin II" Viola Cello "Double Bass"
+numparts 2 2 2 2 4 2 3 1 1 1 1 2 2 1 1 1 1 1
+
+Notes on the example:
+- Harp (FG) and Piano (FG): each is one voice, two staves. The [ ] in
+  voicenames is a placeholder for the second-staff name — required syntax.
+- Percussion uses full word "Percussion", capital P.
+- Bassoons → F, Trombones → F, Tuba → F, Viola → Alto, Cello/Bass → F.
+- Horns → G (written pitch, not transposed).
+- numparts sums to 30, matching the 30 voices exactly.
 """
 
 
@@ -188,6 +237,52 @@ class BridgeConfig:
 
 # ── Tool executor ──────────────────────────────────────────────────────── #
 
+# ── llll serialization helpers ──────────────────────────────────────────── #
+
+_DYNAMICS_SLOT    = 20
+_ARTICULATION_SLOT = 22
+_NOTEHEAD_SLOT    = 23
+
+
+def _build_note_llll(pitch: int, duration: float, velocity: int,
+                     dynamics: str = "", articulation: str = "", notehead: str = "") -> str:
+    """Serialize one note to llll gathered syntax.
+
+    Returns e.g. '[6000 500 100 [slots [20 f] [22 staccato]] 0]'
+    or simply '[6000 500 100 0]' when no slots are needed.
+    """
+    slots = []
+    if dynamics and dynamics.strip():
+        slots.append(f"[{_DYNAMICS_SLOT} {dynamics.strip()}]")
+    if articulation and articulation.strip():
+        slots.append(f"[{_ARTICULATION_SLOT} {articulation.strip()}]")
+    if notehead and notehead.strip() and notehead.strip() != "default":
+        slots.append(f"[{_NOTEHEAD_SLOT} {notehead.strip()}]")
+
+    slots_str = f" [slots {' '.join(slots)}]" if slots else ""
+    return f"[{int(pitch)} {float(duration)} {int(velocity)}{slots_str} 0]"
+
+
+def _build_chord_llll(onset_ms: float, notes: list) -> str:
+    """Serialize a list of note dicts to a full chord llll string.
+
+    Returns e.g. '[0. [6000 500 100 0] [6400 500 100 0] 0]'
+    """
+    note_strings = [
+        _build_note_llll(
+            pitch       = int(n["pitch"]),
+            duration    = float(n["duration"]),
+            velocity    = int(n["velocity"]),
+            dynamics    = str(n.get("dynamics",    "") or ""),
+            articulation= str(n.get("articulation","") or ""),
+            notehead    = str(n.get("notehead",    "") or ""),
+        )
+        for n in notes
+    ]
+    return f"[{float(onset_ms):.1f} {' '.join(note_strings)} 0]"
+
+
+
 class ToolExecutor:
     """Maps Ollama tool-call names → BachMCPServer methods."""
 
@@ -203,28 +298,35 @@ class ToolExecutor:
             return json.dumps({"ok": ok})
 
         if name == "addchord":
-            voice = args.get("voice", 1)
+            voice  = int(args.get("voice", 1))
             select = args.get("select", False)
-            chord = args["chord_llll"].strip()
+            onset  = float(args["onset_ms"])
+            notes  = args["notes"]
+            chord_llll = _build_chord_llll(onset, notes)
             parts = ["addchord"]
             if voice != 1:
-                parts.append(str(int(voice)))
-            parts.append(chord)
+                parts.append(str(voice))
+            parts.append(chord_llll)
             if select:
                 parts.append("@sel 1")
             ok = self._bach.send_info(" ".join(parts))
-            return json.dumps({"ok": ok})
+            return json.dumps({"ok": ok, "sent": " ".join(parts)})
 
-        if name == "addchords":
-            import math
-            chords = args["chords_llll"].strip()
-            offset = args.get("offset_ms")
-            parts = ["addchords"]
-            if offset is not None and not math.isnan(float(offset)):
-                parts.append(str(float(offset)))
-            parts.append(chords)
-            ok = self._bach.send_info(" ".join(parts))
-            return json.dumps({"ok": ok})
+        if name == "add_notes":
+            voice = int(args.get("voice", 1))
+            notes = args["notes"]
+            results = []
+            for note in notes:
+                onset = float(note["onset_ms"])
+                chord_llll = _build_chord_llll(onset, [note])
+                parts = ["addchord"]
+                if voice != 1:
+                    parts.append(str(voice))
+                parts.append(chord_llll)
+                ok = self._bach.send_info(" ".join(parts))
+                results.append(ok)
+                time.sleep(0.03)
+            return json.dumps({"ok": all(results), "notes_sent": len(results)})
 
         # ── Generic message ────────────────────────────────────────────── #
         if name == "send_process_message_to_max":
@@ -362,14 +464,7 @@ class ToolExecutor:
                 "notecolor 0.0 0.0 0.0 1.0", "staffcolor 0.0 0.0 0.0 1.0",
                 "voicenames", "domain 10000.0",
             ]
-            # Send each command individually with a small pause so Bach
-            # processes each message before the next one arrives.
-            # The dict comprehension that was here fired all sends in a tight
-            # loop, causing TCP to coalesce them into one packet.
-            results = {}
-            for c in cmds:
-                results[c.split()[0]] = self._bach.send_info(c)
-                time.sleep(0.03)
+            results = {c.split()[0]: self._bach.send_info(c) for c in cmds}
             return json.dumps({"ok": all(results.values()), "steps": results})
 
         if name == "glissando":

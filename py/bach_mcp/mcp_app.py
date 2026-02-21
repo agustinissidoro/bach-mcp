@@ -32,6 +32,54 @@ The only other times a pre-action dump may be skipped are:
 
 Treat dump(mode="body") as the equivalent of "looking at the score before touching it" —
 a sensible default, not a bureaucratic requirement.
+
+ORCHESTRAL LAYOUT REFERENCE
+============================
+
+VOICES vs STAVES vs PARTS — the essential distinction
+------------------------------------------------------
+VOICE  = one independent musical stream. One entry in clefs, voicenames,
+         numvoices. The unit of musical content.
+
+STAFF  = one horizontal line system on the page. A voice can produce MORE
+         than one staff if its clef is a multi-staff type (FG, FGG, FFG,
+         FFGG). numvoices and the length of clefs/voicenames always count
+         VOICES, never staves. Do not add extra voices to compensate for
+         extra staves — the multi-staff clef handles it automatically.
+
+PART   = a bracket group on the left margin. numparts lists how many
+         consecutive voices share each bracket. numparts counts VOICES,
+         not staves. The sum of all numparts values must equal numvoices.
+
+Concrete examples:
+  Piano:  clef FG, one voice, two staves, one bracket → numparts contribution: 1
+  Choir:  clef FFGG, one voice, four staves, one bracket → numparts contribution: 1
+  Flutes: two separate G voices → numparts contribution: 2
+
+CLEFS — valid symbols (case-sensitive):
+  Single-staff:  G  F  Alto  Tenor  Soprano  Mezzo  Barytone  None
+  Octave clefs:  G8va (up)  G8 (down)  G15ma (2 oct up)  G15mb (2 oct down)
+                 F8va (up)  F8 (down)  F15ma (2 oct up)  F15mb (2 oct down)
+  Percussion:    Percussion   <- capital P, full word — NOT "Perc" or "perc"
+  Multi-staff:   FG   = bass + treble (piano grand staff)
+                 FGG  = bass + treble + treble
+                 FFG  = bass + bass + treble
+                 FFGG = bass + bass + treble + treble (choir reduction, 4 staves)
+                 Each of these is ONE clef entry = ONE voice.
+
+ORCHESTRAL EXAMPLE (30 voices, correct clefs/voicenames/numparts):
+
+clefs G G G G G G F F G G G G G G F F F F F Percussion Percussion FG FG G G Alto F F
+voicenames "Flute 1" "Flute 2" "Oboe 1" "Oboe 2" "Clarinet 1" "Clarinet 2" "Bassoon 1" "Bassoon 2" "Horn 1" "Horn 2" "Horn 3" "Horn 4" "Trumpet 1" "Trumpet 2" "Trombone 1" "Trombone 2" "Trombone 3" Tuba Timpani "Percussion 1" "Percussion 2" Harp [ ] Piano [ ] "Violin I" "Violin II" Viola Cello "Double Bass"
+numparts 2 2 2 2 4 2 3 1 1 1 1 2 2 1 1 1 1 1
+
+Notes on the example:
+- Harp (FG) and Piano (FG): each is one voice, two staves. The [ ] in
+  voicenames is a placeholder for the second-staff name — required syntax.
+- Percussion uses full word "Percussion", capital P.
+- Bassoons → F, Trombones → F, Tuba → F, Viola → Alto, Cello/Bass → F.
+- Horns → G (written pitch, not transposed).
+- numparts sums to 30, matching the 30 voices exactly.
 """
 
 from typing import Any, Dict, Optional
@@ -755,18 +803,29 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         Clefs are provided as a space-separated list of symbols, one per voice.
         If fewer clefs than voices are provided, the last clef is repeated.
 
-        Available clef symbols:
-        - "G"     — treble clef
-        - "G8va"  — treble clef 8va alta (one octave up)
-        - "G8"    — treble clef 8va bassa (one octave down)
-        - "F"     — bass clef
-        - "F8va"  — bass clef 8va alta (one octave up)
-        - "F8"    — bass clef 8va bassa (one octave down)
-        - "FG"    — grand staff clef: treble + bass on two linked staves (ONE voice, TWO staves)
-        - "alto"  — alto C clef
-        - "perc"  — percussion clef
-        - "auto"  — bach chooses automatically based on pitch content
-        - "none"  — no clef displayed
+        Available clef symbols (case-sensitive — use exactly as written):
+        - "G"           — treble clef
+        - "G8va"        — treble clef 8va alta (one octave up)
+        - "G8"          — treble clef 8va bassa (one octave down)
+        - "G15ma"       — treble clef 15ma alta (two octaves up)
+        - "G15mb"       — treble clef 15ma bassa (two octaves down)
+        - "F"           — bass clef
+        - "F8va"        — bass clef 8va alta (one octave up)
+        - "F8"          — bass clef 8va bassa (one octave down)
+        - "F15ma"       — bass clef 15ma alta (two octaves up)
+        - "F15mb"       — bass clef 15ma bassa (two octaves down)
+        - "Alto"        — alto C clef  (capital A)
+        - "Tenor"       — tenor C clef
+        - "Soprano"     — soprano C clef
+        - "Mezzo"       — mezzo-soprano C clef
+        - "Barytone"    — baritone C clef
+        - "Percussion"  — percussion clef  (capital P, full word)
+        - "None"        — no clef displayed  (capital N)
+        - "FG"          — grand staff: bass + treble (ONE voice, TWO staves)
+        - "FGG"         — bass + treble + treble (ONE voice, THREE staves)
+        - "FFG"         — bass + bass + treble (ONE voice, THREE staves)
+        - "FFGG"        — bass + bass + treble + treble (ONE voice, FOUR staves — choir reduction)
+        WRONG forms: perc  Perc  alto  none  auto  G8vb  F8vb  (these do not exist)
 
         ─────────────────────────────────────────────────────────────
         VOICES VS STAVES — A CRITICAL DISTINCTION
@@ -2635,50 +2694,37 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         subsequent steps are still attempted so you get a full picture of what
         succeeded and what did not.
         """
-        import time as _time
-
-        # Small pause between commands so Bach processes each one individually.
-        # Even with TCP_NODELAY on the socket, bach needs a moment to handle
-        # each message before the next arrives — 30 ms is imperceptible to the
-        # user but gives bach's message queue time to drain between commands.
-        _STEP_DELAY = 0.03
-
-        def _send_step(cmd: str) -> Dict[str, Any]:
-            result = _send_max_message(cmd)
-            _time.sleep(_STEP_DELAY)
-            return result
-
         results: Dict[str, Any] = {}
 
         # 1. Clear all content
-        results["clear"] = _send_step("clear")
+        results["clear"] = _send_max_message("clear")
 
         # 2. Single voice
-        results["numvoices"] = _send_step("numvoices 1")
+        results["numvoices"] = _send_max_message("numvoices 1")
 
         # 3. Treble clef
-        results["clefs"] = _send_step("clefs G")
+        results["clefs"] = _send_max_message("clefs G")
 
         # 4. Standard 5-line staff
-        results["stafflines"] = _send_step("stafflines 5")
+        results["stafflines"] = _send_max_message("stafflines 5")
 
         # 5. One part (voice 1 alone on its staff)
-        results["numparts"] = _send_step("numparts 1")
+        results["numparts"] = _send_max_message("numparts 1")
 
         # 6. White background
-        results["bgcolor"] = _send_step("bgcolor 1.0 1.0 1.0 1.0")
+        results["bgcolor"] = _send_max_message("bgcolor 1.0 1.0 1.0 1.0")
 
         # 7. Black notes
-        results["notecolor"] = _send_step("notecolor 0.0 0.0 0.0 1.0")
+        results["notecolor"] = _send_max_message("notecolor 0.0 0.0 0.0 1.0")
 
         # 8. Black staff lines
-        results["staffcolor"] = _send_step("staffcolor 0.0 0.0 0.0 1.0")
+        results["staffcolor"] = _send_max_message("staffcolor 0.0 0.0 0.0 1.0")
 
         # 9. No voice name label
-        results["voicenames"] = _send_step("voicenames")
+        results["voicenames"] = _send_max_message("voicenames")
 
         # 10. Default 10-second visible domain
-        results["domain"] = _send_step("domain 10000.0")
+        results["domain"] = _send_max_message("domain 10000.0")
 
         all_ok = all(
             (v.get("ok", False) if isinstance(v, dict) else bool(v))
