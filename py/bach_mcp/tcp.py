@@ -25,6 +25,10 @@ class TCPSend:
         """Connect to TCP server"""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # Disable Nagle's algorithm so every send() flushes immediately
+            # as its own TCP packet rather than being coalesced with the next
+            # message — essential when firing many short commands in sequence.
+            self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.socket.connect((self.host, self.port))
             self.connected = True
             _log(f"Python client connected to {self.host}:{self.port}")

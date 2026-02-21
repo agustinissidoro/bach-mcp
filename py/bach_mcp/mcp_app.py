@@ -2635,37 +2635,50 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         subsequent steps are still attempted so you get a full picture of what
         succeeded and what did not.
         """
+        import time as _time
+
+        # Small pause between commands so Bach processes each one individually.
+        # Even with TCP_NODELAY on the socket, bach needs a moment to handle
+        # each message before the next arrives — 30 ms is imperceptible to the
+        # user but gives bach's message queue time to drain between commands.
+        _STEP_DELAY = 0.03
+
+        def _send_step(cmd: str) -> Dict[str, Any]:
+            result = _send_max_message(cmd)
+            _time.sleep(_STEP_DELAY)
+            return result
+
         results: Dict[str, Any] = {}
 
         # 1. Clear all content
-        results["clear"] = _send_max_message("clear")
+        results["clear"] = _send_step("clear")
 
         # 2. Single voice
-        results["numvoices"] = _send_max_message("numvoices 1")
+        results["numvoices"] = _send_step("numvoices 1")
 
         # 3. Treble clef
-        results["clefs"] = _send_max_message("clefs G")
+        results["clefs"] = _send_step("clefs G")
 
         # 4. Standard 5-line staff
-        results["stafflines"] = _send_max_message("stafflines 5")
+        results["stafflines"] = _send_step("stafflines 5")
 
         # 5. One part (voice 1 alone on its staff)
-        results["numparts"] = _send_max_message("numparts 1")
+        results["numparts"] = _send_step("numparts 1")
 
         # 6. White background
-        results["bgcolor"] = _send_max_message("bgcolor 1.0 1.0 1.0 1.0")
+        results["bgcolor"] = _send_step("bgcolor 1.0 1.0 1.0 1.0")
 
         # 7. Black notes
-        results["notecolor"] = _send_max_message("notecolor 0.0 0.0 0.0 1.0")
+        results["notecolor"] = _send_step("notecolor 0.0 0.0 0.0 1.0")
 
         # 8. Black staff lines
-        results["staffcolor"] = _send_max_message("staffcolor 0.0 0.0 0.0 1.0")
+        results["staffcolor"] = _send_step("staffcolor 0.0 0.0 0.0 1.0")
 
         # 9. No voice name label
-        results["voicenames"] = _send_max_message("voicenames")
+        results["voicenames"] = _send_step("voicenames")
 
         # 10. Default 10-second visible domain
-        results["domain"] = _send_max_message("domain 10000.0")
+        results["domain"] = _send_step("domain 10000.0")
 
         all_ok = all(
             (v.get("ok", False) if isinstance(v, dict) else bool(v))

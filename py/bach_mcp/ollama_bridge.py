@@ -362,7 +362,14 @@ class ToolExecutor:
                 "notecolor 0.0 0.0 0.0 1.0", "staffcolor 0.0 0.0 0.0 1.0",
                 "voicenames", "domain 10000.0",
             ]
-            results = {c.split()[0]: self._bach.send_info(c) for c in cmds}
+            # Send each command individually with a small pause so Bach
+            # processes each message before the next one arrives.
+            # The dict comprehension that was here fired all sends in a tight
+            # loop, causing TCP to coalesce them into one packet.
+            results = {}
+            for c in cmds:
+                results[c.split()[0]] = self._bach.send_info(c)
+                time.sleep(0.03)
             return json.dumps({"ok": all(results.values()), "steps": results})
 
         if name == "glissando":
