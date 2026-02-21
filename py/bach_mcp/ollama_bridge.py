@@ -221,8 +221,10 @@ Be concise in prose — let the music speak.
 class BridgeConfig:
     ollama_base_url:  str   = "http://localhost:11434"
     model:            str   = "qwen2.5:14b"
+    fallback_models:  List[str] = field(default_factory=lambda: ["qwen2.5:7b-instruct"])
     temperature:      float = 0.7
     max_tokens:       int   = 2048
+    request_timeout_seconds: float = 300.0
     max_tool_rounds:  int   = 10
     incoming_host:    str   = "127.0.0.1"
     incoming_port:    int   = 3001
@@ -529,10 +531,34 @@ class ToolExecutor:
 
 # ── Ollama HTTP client ─────────────────────────────────────────────────── #
 
+class OllamaModelNotFoundError(RuntimeError):
+    """Raised when the configured Ollama model is not installed."""
+
+
 class OllamaClient:
-    def __init__(self, base_url: str, model: str) -> None:
+    def __init__(self, base_url: str, model: str, request_timeout_seconds: float = 300.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.model    = model
+        self.request_timeout_seconds = request_timeout_seconds
+
+    def list_models(self) -> List[str]:
+        try:
+            r = requests.get(f"{self.base_url}/api/tags", timeout=30)
+            r.raise_for_status()
+            payload = r.json()
+        except requests.exceptions.ConnectionError:
+            raise RuntimeError(f"Cannot reach Ollama at {self.base_url}. Run `ollama serve`.")
+        except requests.exceptions.HTTPError as exc:
+            raise RuntimeError(f"Ollama HTTP error while listing models: {exc}") from exc
+
+        models: List[str] = []
+        for entry in payload.get("models", []):
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("name", "")).strip()
+            if name:
+                models.append(name)
+        return models
 
     def chat(self, messages: List[Dict], tools: List[Dict],
              temperature: float = 0.7, max_tokens: int = 2048) -> Dict:
@@ -544,13 +570,37 @@ class OllamaClient:
             "options":  {"temperature": temperature, "num_predict": max_tokens},
         }
         try:
-            r = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=120)
+            r = requests.post(
+                f"{self.base_url}/api/chat",
+                json=payload,
+                timeout=self.request_timeout_seconds,
+            )
             r.raise_for_status()
             return r.json()
         except requests.exceptions.ConnectionError:
             raise RuntimeError(f"Cannot reach Ollama at {self.base_url}. Run `ollama serve`.")
+        except requests.exceptions.Timeout:
+            raise RuntimeError(
+                "Ollama request timed out while waiting for model output. "
+                f"Model={self.model} timeout={self.request_timeout_seconds}s. "
+                "Try again, use a smaller model, or increase BridgeConfig.request_timeout_seconds."
+            )
         except requests.exceptions.HTTPError as exc:
-            raise RuntimeError(f"Ollama HTTP error: {exc}") from exc
+            status = exc.response.status_code if exc.response is not None else "?"
+            detail = ""
+            if exc.response is not None:
+                try:
+                    detail = str(exc.response.json().get("error", "")).strip()
+                except Exception:
+                    detail = (exc.response.text or "").strip()
+
+            msg = f"Ollama HTTP error {status}"
+            if detail:
+                msg = f"{msg}: {detail}"
+
+            if status == 404 and "model" in detail.lower() and "not found" in detail.lower():
+                raise OllamaModelNotFoundError(detail or f"model '{self.model}' not found") from exc
+            raise RuntimeError(msg) from exc
 
 
 # ── Bridge ─────────────────────────────────────────────────────────────── #
@@ -572,10 +622,63 @@ class OllamaBridge:
             self._bach = BachMCPServer(config=mcp_cfg)
             self._owns_bach = True
 
-        self._ollama   = OllamaClient(self.config.ollama_base_url, self.config.model)
+        self._ollama   = OllamaClient(
+            self.config.ollama_base_url,
+            self.config.model,
+            self.config.request_timeout_seconds,
+        )
         self._executor = ToolExecutor(self._bach)
         self._tools    = get_ollama_tools()
         self._history: List[Dict] = []
+        self._model_candidates = self._build_model_candidates()
+        self._select_initial_model()
+
+    def _build_model_candidates(self) -> List[str]:
+        candidates: List[str] = []
+        for model in [self.config.model, *self.config.fallback_models]:
+            name = str(model).strip()
+            if name and name not in candidates:
+                candidates.append(name)
+        return candidates
+
+    def _switch_model(self, model: str) -> None:
+        self._ollama.model = model
+        self.config.model = model
+
+    def _select_initial_model(self) -> None:
+        try:
+            installed = self._ollama.list_models()
+        except RuntimeError as exc:
+            _log(f"[OllamaBridge] Model probe skipped: {exc}")
+            return
+
+        for candidate in self._model_candidates:
+            if candidate in installed:
+                if candidate != self._ollama.model:
+                    _log(f"[OllamaBridge] Auto-selected installed model: {candidate}")
+                self._switch_model(candidate)
+                return
+
+        _log(
+            "[OllamaBridge] WARNING: none of the preferred models are installed: "
+            + ", ".join(self._model_candidates)
+        )
+
+    def _switch_to_fallback_model(self, missing_model: str) -> bool:
+        try:
+            installed = self._ollama.list_models()
+        except RuntimeError as exc:
+            _log(f"[OllamaBridge] Fallback probe failed: {exc}")
+            return False
+
+        for candidate in self._model_candidates:
+            if candidate == missing_model:
+                continue
+            if candidate in installed:
+                self._switch_model(candidate)
+                _log(f"[OllamaBridge] Switched to fallback model: {candidate}")
+                return True
+        return False
 
     def start(self) -> None:
         if self._owns_bach:
@@ -611,8 +714,20 @@ class OllamaBridge:
         last_content = ""
         for round_num in range(self.config.max_tool_rounds):
             _log(f"[OllamaBridge] Ollama call #{round_num + 1}")
-            response   = self._ollama.chat(messages, self._tools,
-                                           self.config.temperature, self.config.max_tokens)
+            try:
+                response = self._ollama.chat(
+                    messages, self._tools, self.config.temperature, self.config.max_tokens
+                )
+            except OllamaModelNotFoundError:
+                missing = self._ollama.model
+                if not self._switch_to_fallback_model(missing):
+                    raise RuntimeError(
+                        "Configured Ollama model is not installed and no fallback model is available. "
+                        f"Tried: {', '.join(self._model_candidates)}"
+                    )
+                response = self._ollama.chat(
+                    messages, self._tools, self.config.temperature, self.config.max_tokens
+                )
             assistant  = response.get("message", {})
             tool_calls = assistant.get("tool_calls", [])
             last_content = assistant.get("content", "")
@@ -656,9 +771,9 @@ class OllamaBridge:
 
 def repl() -> None:
     config = BridgeConfig()
-    print(f"Bach Ollama Bridge — {config.model}")
-    print("Type a message and press Enter. Ctrl-C to quit.\n")
     with OllamaBridge(config=config) as bridge:
+        print(f"Bach Ollama Bridge — {bridge.config.model}")
+        print("Type a message and press Enter. Ctrl-C to quit.\n")
         while True:
             try:
                 user_input = input("You: ").strip()
