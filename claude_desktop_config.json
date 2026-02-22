@@ -2,7 +2,7 @@
   "mcpServers": {
     "bach-mcp": {
       "command": "/Users/agustinissidoro/miniconda3/envs/bach-mcp/bin/python",
-      "args": ["/Users/agustinissidoro/bach-mcp/main.py"],
+      "args": ["/Users/agustinissidoro/bach-mcp/py/main.py"],
       "cwd": "/Users/agustinissidoro/bach-mcp"
     }
   }
