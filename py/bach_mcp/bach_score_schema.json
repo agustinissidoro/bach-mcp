@@ -1,6 +1,57 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Bach Score",
+
+  "description": "JSON score format for bach.roll. CRITICAL STRUCTURE RULE: 'layout.parts' and 'score.voices' are always separate top-level siblings inside 'score'. Voices are NEVER nested inside parts. Parts reference voices by index only. Omit any field at its default value: flag=0, notehead=default, empty articulations, no gliss. Only set 'dynamic' on the first note of a passage or when it changes — never repeat it if unchanged.",
+
+  "x_pitch_reference": {
+    "description": "Pitch is in midicents. C4 (middle C) = 6000. Each semitone = 100. Each octave = 1200. Do NOT convert from MIDI note numbers or Hz — just count semitones up or down from C4=6000.",
+    "table": {
+      "C3": 4800, "C#3": 4900, "D3": 5000, "D#3": 5100, "E3": 5200, "F3": 5300,
+      "F#3": 5400, "G3": 5500, "G#3": 5600, "A3": 5700, "A#3": 5800, "B3": 5900,
+      "C4": 6000, "C#4": 6100, "D4": 6200, "D#4": 6300, "E4": 6400, "F4": 6500,
+      "F#4": 6600, "G4": 6700, "G#4": 6800, "A4": 6900, "A#4": 7000, "B4": 7100,
+      "C5": 7200, "C#5": 7300, "D5": 7400, "D#5": 7500, "E5": 7600, "F5": 7700,
+      "F#5": 7800, "G5": 7900, "G#5": 8000, "A5": 8100, "A#5": 8200, "B5": 8300
+    }
+  },
+
+  "examples": [
+    {
+      "score": {
+        "meta": { "title": "Example", "composer": "Composer", "tempo": 120 },
+        "layout": {
+          "parts": [
+            { "name": "Piano",  "clef": "FG", "voice_names": ["RH", "LH"], "voices": [0, 1] },
+            { "name": "Violin", "clef": "G",  "voice_names": ["Violin"],   "voices": [2] }
+          ]
+        },
+        "voices": [
+          {
+            "voice_index": 0,
+            "chords": [
+              { "onset": 0,   "notes": [{ "pitch": 6000, "duration": 500, "velocity": 90, "dynamic": "mp" }] },
+              { "onset": 500, "notes": [{ "pitch": 6400, "duration": 500, "velocity": 90 }] }
+            ]
+          },
+          {
+            "voice_index": 1,
+            "chords": [
+              { "onset": 0, "notes": [{ "pitch": 4800, "duration": 1000, "velocity": 80, "dynamic": "mp" }] }
+            ]
+          },
+          {
+            "voice_index": 2,
+            "chords": [
+              { "onset": 0,   "notes": [{ "pitch": 7100, "duration": 500, "velocity": 95, "dynamic": "f", "articulations": ["trill"] }] },
+              { "onset": 500, "notes": [{ "pitch": 7400, "duration": 500, "velocity": 90, "notehead": "diamond", "gliss": [{ "x": 0.0, "delta": 0, "slope": 0 }, { "x": 1.0, "delta": 200, "slope": 0 }] }] }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+
   "type": "object",
   "properties": {
     "score": {
@@ -28,7 +79,7 @@
                   "name":        { "type": "string", "description": "Bracket label for this part" },
                   "clef":        { "type": "string", "enum": ["G", "F", "Alto", "Tenor", "Percussion", "FG", "FFGG"], "description": "G=treble, F=bass, FG=grand staff, FFGG=choir" },
                   "voice_names": { "type": "array", "items": { "type": "string" }, "description": "Per-staff labels within this part, e.g. ['RH','LH']" },
-                  "voices":      { "type": "array", "items": { "type": "integer" }, "description": "Indices into score.voices[]" }
+                  "voices":      { "type": "array", "items": { "type": "integer" }, "description": "Indices into score.voices[]. These are references only — voice data lives in score.voices, not here." }
                 }
               }
             }
@@ -37,6 +88,7 @@
 
         "voices": {
           "type": "array",
+          "description": "Top-level sibling of layout. Each voice is independent. Never nest voices inside layout.parts.",
           "items": {
             "type": "object",
             "required": ["voice_index", "chords"],
@@ -57,11 +109,11 @@
                         "type": "object",
                         "required": ["pitch", "duration", "velocity"],
                         "properties": {
-                          "pitch":    { "type": "number", "description": "Pitch in cents. Middle C (C4) = 6000. One semitone = 100." },
+                          "pitch":    { "type": "number", "description": "Pitch in midicents. C4=6000, one semitone=100, one octave=1200. See x_pitch_reference.table for common values. Do not derive from MIDI note numbers." },
                           "duration": { "type": "number", "description": "Duration in milliseconds" },
                           "velocity": { "type": "integer", "minimum": 0, "maximum": 127 },
                           "flag":     { "type": "integer", "enum": [1, 2, 4], "description": "1=locked, 2=muted, 4=solo. Omit if normal." },
-                          "dynamic":  { "type": "string", "description": "Base: pp p mp mf f ff fff sfz o. Append < cresc, > dim, << exp cresc, >> exp dim, = steady, | end at tail. e.g. 'p<' or 'p<|'" },
+                          "dynamic":  { "type": "string", "description": "Set only on first note of a passage or on change. Do not repeat if unchanged. Base values: pp p mp mf f ff fff sfz o. Append hairpin: < cresc, > dim, << exp cresc, >> exp dim, = steady, | end at tail. e.g. 'p<' or 'p<|'" },
                           "articulations": {
                             "type": "array",
                             "items": {

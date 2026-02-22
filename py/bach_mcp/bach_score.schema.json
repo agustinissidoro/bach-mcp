@@ -1,0 +1,208 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Bach Score",
+
+  "description": "JSON score format for bach.roll. CRITICAL STRUCTURE RULE: 'layout.parts' and 'score.voices' are always separate top-level siblings inside 'score'. Voices are NEVER nested inside parts. Parts reference voices by index only. Omit any field at its default value: flag=0, notehead=default, empty articulations, no gliss. Only set 'dynamic' on the first note of a passage or when it changes — never repeat it if unchanged.",
+
+  "x_pitch_reference": {
+    "description": "Pitch is in midicents. C4 (middle C) = 6000. Each semitone = 100. Each octave = 1200. Do NOT convert from MIDI note numbers or Hz — just count semitones up or down from C4=6000.",
+    "table": {
+      "C3": 4800, "C#3": 4900, "D3": 5000, "D#3": 5100, "E3": 5200, "F3": 5300,
+      "F#3": 5400, "G3": 5500, "G#3": 5600, "A3": 5700, "A#3": 5800, "B3": 5900,
+      "C4": 6000, "C#4": 6100, "D4": 6200, "D#4": 6300, "E4": 6400, "F4": 6500,
+      "F#4": 6600, "G4": 6700, "G#4": 6800, "A4": 6900, "A#4": 7000, "B4": 7100,
+      "C5": 7200, "C#5": 7300, "D5": 7400, "D#5": 7500, "E5": 7600, "F5": 7700,
+      "F#5": 7800, "G5": 7900, "G#5": 8000, "A5": 8100, "A#5": 8200, "B5": 8300
+    }
+  },
+
+  "examples": [
+    {
+      "score": {
+        "meta": { "title": "Example", "composer": "Composer", "tempo": 120 },
+        "layout": {
+          "parts": [
+            { "name": "Piano",  "clef": "FG", "voice_names": ["RH", "LH"], "voices": [0, 1] },
+            { "name": "Violin", "clef": "G",  "voice_names": ["Violin"],   "voices": [2] }
+          ]
+        },
+        "voices": [
+          {
+            "voice_index": 0,
+            "chords": [
+              { "onset": 0,   "notes": [{ "pitch": 6000, "duration": 500, "velocity": 90, "dynamic": "mp" }] },
+              { "onset": 500, "notes": [{ "pitch": 6400, "duration": 500, "velocity": 90 }] }
+            ]
+          },
+          {
+            "voice_index": 1,
+            "chords": [
+              { "onset": 0, "notes": [{ "pitch": 4800, "duration": 1000, "velocity": 80, "dynamic": "mp" }] }
+            ]
+          },
+          {
+            "voice_index": 2,
+            "chords": [
+              { "onset": 0,   "notes": [{ "pitch": 7100, "duration": 500, "velocity": 95, "dynamic": "f", "articulations": ["trill"] }] },
+              { "onset": 500, "notes": [{ "pitch": 7400, "duration": 500, "velocity": 90, "notehead": "diamond", "gliss": [{ "x": 0.0, "delta": 0, "slope": 0 }, { "x": 1.0, "delta": 200, "slope": 0 }] }] }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+
+  "type": "object",
+  "properties": {
+    "score": {
+      "type": "object",
+      "properties": {
+
+        "meta": {
+          "type": "object",
+          "description": "Score-level metadata. Does not affect playback or layout.",
+          "properties": {
+            "title":    { "type": "string", "description": "Title of the piece." },
+            "composer": { "type": "string", "description": "Name of the composer." },
+            "tempo":    { "type": "number", "description": "Tempo in BPM. Used as a reference — onset and duration values are always in milliseconds regardless of tempo." }
+          }
+        },
+
+        "layout": {
+          "type": "object",
+          "description": "Defines how voices are grouped and displayed visually. Contains only display metadata — no note data lives here. All note data is in score.voices.",
+          "properties": {
+            "parts": {
+              "type": "array",
+              "description": "Ordered list of parts (bracket groups). Each part groups one or more voices under a shared bracket and instrument name. The sum of all voices arrays across all parts must equal the total number of entries in score.voices.",
+              "items": {
+                "type": "object",
+                "required": ["name", "clef", "voices"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Display name for the part bracket, e.g. 'Piano', 'Violin I'. Shown to the left of the staff."
+                  },
+                  "clef": {
+                    "type": "string",
+                    "enum": ["G", "F", "Alto", "Tenor", "Percussion", "FG", "FFGG"],
+                    "description": "Clef for this part. G=treble, F=bass, Alto=alto C-clef, Tenor=tenor C-clef, Percussion=unpitched. FG=grand staff (one voice, two staves: treble+bass). FFGG=choir reduction (one voice, four staves)."
+                  },
+                  "voice_names": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Optional per-staff label within the part. Useful for multi-staff clefs like FG where you want to name each staff, e.g. ['RH', 'LH']. Length should match the number of staves implied by the clef."
+                  },
+                  "voices": {
+                    "type": "array",
+                    "items": { "type": "integer" },
+                    "description": "List of voice_index values from score.voices that belong to this part. This is a reference only — no note data goes here. For a single-staff instrument this is typically one index, e.g. [2]. For a grand staff piano it would be [0, 1]."
+                  }
+                }
+              }
+            }
+          }
+        },
+
+        "voices": {
+          "type": "array",
+          "description": "Ordered list of all voices in the score. Always a top-level sibling of 'layout' — never nested inside layout.parts. Each voice is a fully independent musical stream with its own timeline. Voices belonging to the same part are simply those whose voice_index values appear together in layout.parts[n].voices.",
+          "items": {
+            "type": "object",
+            "required": ["voice_index", "chords"],
+            "properties": {
+              "voice_index": {
+                "type": "integer",
+                "description": "Unique integer identifier for this voice, starting at 0. Must match the index referenced in layout.parts[n].voices."
+              },
+              "flag": {
+                "type": "integer",
+                "enum": [1, 2, 4],
+                "description": "State flag for the entire voice. 1=locked (not editable), 2=muted (silent), 4=solo (only this voice plays). Omit entirely if the voice is in normal state."
+              },
+              "chords": {
+                "type": "array",
+                "description": "Chronological list of chords (events) in this voice. Each chord is a moment in time containing one or more simultaneous notes. Chords do not need to be contiguous — gaps between onset+duration of one chord and the onset of the next are rests. Order them by onset ascending.",
+                "items": {
+                  "type": "object",
+                  "required": ["onset", "notes"],
+                  "properties": {
+                    "onset": {
+                      "type": "number",
+                      "description": "Absolute start time of this chord in milliseconds, measured from the beginning of the score (t=0). Not relative to the previous chord. Two voices can share the same onset to play simultaneously. E.g. onset=1000 means this chord starts exactly 1 second into the piece."
+                    },
+                    "flag": {
+                      "type": "integer",
+                      "enum": [1, 2, 4],
+                      "description": "State flag for this chord only. 1=locked, 2=muted, 4=solo. Omit if normal."
+                    },
+                    "notes": {
+                      "type": "array",
+                      "description": "One or more notes sounding simultaneously at this chord's onset. A single-note chord has one entry. A true chord (multiple pitches at once) has multiple entries. All notes in a chord share the same onset but may have different durations, velocities, and articulations.",
+                      "items": {
+                        "type": "object",
+                        "required": ["pitch", "duration", "velocity"],
+                        "properties": {
+                          "pitch": {
+                            "type": "number",
+                            "description": "Pitch in midicents. C4 (middle C) = 6000. Each semitone = 100. Each octave = 1200. Use x_pitch_reference.table for common note values. Do not convert from MIDI note numbers or Hz — just look up or count from C4=6000. Microtones are supported: e.g. a quarter-tone sharp above C4 = 6050."
+                          },
+                          "duration": {
+                            "type": "number",
+                            "description": "Sounding duration of this note in milliseconds. This is the note's own length, not the gap to the next chord. Notes in the same chord can have different durations. A note ending before the next chord's onset creates a rest. A note longer than the gap to the next chord overlaps with it (legato or tie effect)."
+                          },
+                          "velocity": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 127,
+                            "description": "MIDI velocity (loudness) of this individual note, 0–127. Notes within the same chord can have different velocities. This is independent of 'dynamic', which is a written notation marking."
+                          },
+                          "flag": {
+                            "type": "integer",
+                            "enum": [1, 2, 4],
+                            "description": "State flag for this note only. 1=locked, 2=muted, 4=solo. Omit if normal."
+                          },
+                          "dynamic": {
+                            "type": "string",
+                            "description": "Written dynamic marking for this note. Set only on the first note of a dynamic passage or when the dynamic changes — do not repeat on every note if it stays the same. Base symbols: pp p mp mf f ff fff sfz o (o=niente). Append a hairpin to indicate a gradual change starting from this note: < cresc, > dim, << exp cresc, >> exp dim, = steady. Append | to end the hairpin at this note's tail rather than continuing to the next. Examples: 'f' = forte; 'p<' = start a crescendo from p; 'p<|' = crescendo that ends at this note's tail; 'o<<f>>o' = dal niente to f then back to niente."
+                          },
+                          "articulations": {
+                            "type": "array",
+                            "description": "List of articulation symbols to attach to this note. Multiple articulations are allowed. Omit the field entirely if none.",
+                            "items": {
+                              "type": "string",
+                              "enum": ["staccato", "accent", "fermata", "trill", "portato", "martellato", "upbowing", "downbowing", "tremolo1", "tremolo2", "tremolo3"]
+                            }
+                          },
+                          "notehead": {
+                            "type": "string",
+                            "description": "Notehead shape. Omit if standard filled notehead (default). Use 'diamond' for harmonics, 'cross' for spoken/noise, 'none' to hide the notehead entirely.",
+                            "enum": ["default", "diamond", "cross", "white", "black", "whole", "doublewhole", "none", "plus", "blacksquare", "whitesquare", "blacktriangle", "whitetriangle"]
+                          },
+                          "gliss": {
+                            "type": "array",
+                            "description": "Breakpoint envelope for pitch glissando over the note's duration. Omit if the pitch is static. Must have at least two points: first x must be 0.0 (note start), last x must be 1.0 (note end). Intermediate points are optional. 'delta' is the pitch offset in cents from the note's base pitch at that moment — so delta=0 at x=0 means the gliss starts on the written pitch. 'slope' controls curve shape between this point and the next: 0=linear, positive=convex (fast then slow), negative=concave (slow then fast).",
+                            "items": {
+                              "type": "object",
+                              "required": ["x", "delta", "slope"],
+                              "properties": {
+                                "x":     { "type": "number", "minimum": 0.0, "maximum": 1.0, "description": "Relative time position within the note. 0.0=start, 1.0=end." },
+                                "delta": { "type": "number", "description": "Pitch offset in cents from the note's base pitch at this point. 0=unison, 100=one semitone up, -200=two semitones down." },
+                                "slope": { "type": "number", "minimum": -1.0, "maximum": 1.0, "description": "Curve shape from this point to the next. 0=linear, positive=convex, negative=concave." }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+      }
+    }
+  }
+}
