@@ -426,6 +426,38 @@ EXTENDED_TOOLS: List[Dict[str, Any]] = [
             "maxdecimals": _i("Float precision (-1 = default 10)"),
         },
         []),
+
+    # ── Memory ─────────────────────────────────────────────────────────── #
+
+    _tool("project_memory_read",
+        "Read persistent memory for a project across sessions. "
+        "Call at session start when working on a known project. "
+        "Leave project empty to list all known projects.",
+        {"project": _s("Project name, or empty string to list all")},
+        []),
+
+    _tool("project_memory_write",
+        "Save intent, workflow, or notes for a project to persistent memory. "
+        "Merges with existing memory — only supplied fields are updated. "
+        "Call when the user states goals, changes approach, or you want to "
+        "record something that should survive session restarts.",
+        {
+            "project":  _s("Project name (required)"),
+            "intent":   _s("What this piece is trying to be — mood, form, concept"),
+            "workflow": _s("Current compositional approach or technique"),
+            "notes":    _s("Observations, decisions, voice roles, open questions"),
+        },
+        ["project"]),
+
+    # ── Score snapshot ─────────────────────────────────────────────────── #
+
+    _tool("score_snapshot",
+        "Export the current score as a PNG image for visual verification. "
+        "Use when running in circles, after many edits, or when something seems wrong. "
+        "Do NOT call after every edit — only when genuinely uncertain.",
+        {},
+        []),
+
 ]
 
 

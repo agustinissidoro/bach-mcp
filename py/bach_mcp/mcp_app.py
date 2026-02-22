@@ -1,85 +1,8 @@
 """FastMCP app factory and tool/resource registration.
 
-SESSION PROTOCOL — READ BEFORE ANY ACTION
-==========================================
-At the very start of every new chat session, before taking any other action,
-ALWAYS call dump(mode="body") to read the current score state. This establishes
-a baseline understanding of what is already in the score.
-
-Throughout the session, precede almost every action with a dump() call to verify
-the current state before making changes. The purpose of each dump is to acquire
-enough context to act correctly — not to be a ritual. Use the narrowest dump that
-gives you what you need:
-
-- Before adding, editing, or deleting notes/voices → dump(mode="body")
-- Before changing score appearance (colors, clefs, stafflines) → dump(mode="body")
-- Before any destructive operation (clear, deletevoice, delete) → dump(mode="body")
-- After sending a score or making changes → dump(mode="body") to confirm the result
-- When the user asks about the current score → dump(mode="body") first
-
-USER OVERRIDE — the dump-first rule exists to give Claude enough context, not to
-impose a rigid workflow. If the user has already provided sufficient context (e.g.
-they are working on a known subsection of the score, they have just pasted the
-relevant llll, or they explicitly say "don't dump, just do X"), you should respect
-that and act directly without a redundant dump. Use your judgment: dump when the
-current state is genuinely unknown or uncertain; skip it when the user has already
-told you what you need to know.
-
-The only other times a pre-action dump may be skipped are:
-- Immediately after a dump that already reflects current state
-- Pure read-only queries (e.g. the very first dump itself)
-- Rapid sequential edits where state is predictable and confirmed
-
-Treat dump(mode="body") as the equivalent of "looking at the score before touching it" —
-a sensible default, not a bureaucratic requirement.
-
-ORCHESTRAL LAYOUT REFERENCE
-============================
-
-VOICES vs STAVES vs PARTS — the essential distinction
-------------------------------------------------------
-VOICE  = one independent musical stream. One entry in clefs, voicenames,
-         numvoices. The unit of musical content.
-
-STAFF  = one horizontal line system on the page. A voice can produce MORE
-         than one staff if its clef is a multi-staff type (FG, FGG, FFG,
-         FFGG). numvoices and the length of clefs/voicenames always count
-         VOICES, never staves. Do not add extra voices to compensate for
-         extra staves — the multi-staff clef handles it automatically.
-
-PART   = a bracket group on the left margin. numparts lists how many
-         consecutive voices share each bracket. numparts counts VOICES,
-         not staves. The sum of all numparts values must equal numvoices.
-
-Concrete examples:
-  Piano:  clef FG, one voice, two staves, one bracket → numparts contribution: 1
-  Choir:  clef FFGG, one voice, four staves, one bracket → numparts contribution: 1
-  Flutes: two separate G voices → numparts contribution: 2
-
-CLEFS — valid symbols (case-sensitive):
-  Single-staff:  G  F  Alto  Tenor  Soprano  Mezzo  Barytone  None
-  Octave clefs:  G8va (up)  G8 (down)  G15ma (2 oct up)  G15mb (2 oct down)
-                 F8va (up)  F8 (down)  F15ma (2 oct up)  F15mb (2 oct down)
-  Percussion:    Percussion   <- capital P, full word — NOT "Perc" or "perc"
-  Multi-staff:   FG   = bass + treble (piano grand staff)
-                 FGG  = bass + treble + treble
-                 FFG  = bass + bass + treble
-                 FFGG = bass + bass + treble + treble (choir reduction, 4 staves)
-                 Each of these is ONE clef entry = ONE voice.
-
-ORCHESTRAL EXAMPLE (30 voices, correct clefs/voicenames/numparts):
-
-clefs G G G G G G F F G G G G G G F F F F F Percussion Percussion FG FG G G Alto F F
-voicenames "Flute 1" "Flute 2" "Oboe 1" "Oboe 2" "Clarinet 1" "Clarinet 2" "Bassoon 1" "Bassoon 2" "Horn 1" "Horn 2" "Horn 3" "Horn 4" "Trumpet 1" "Trumpet 2" "Trombone 1" "Trombone 2" "Trombone 3" Tuba Timpani "Percussion 1" "Percussion 2" Harp [ ] Piano [ ] "Violin I" "Violin II" Viola Cello "Double Bass"
-numparts 2 2 2 2 4 2 3 1 1 1 1 2 2 1 1 1 1 1
-
-Notes on the example:
-- Harp (FG) and Piano (FG): each is one voice, two staves. The [ ] in
-  voicenames is a placeholder for the second-staff name — required syntax.
-- Percussion uses full word "Percussion", capital P.
-- Bassoons → F, Trombones → F, Tuba → F, Viola → Alto, Cello/Bass → F.
-- Horns → G (written pitch, not transposed).
-- numparts sums to 30, matching the 30 voices exactly.
+Session protocol, llll syntax, slot types, articulations, noteheads, dynamics,
+breakpoints, and orchestral layout reference are all documented in BACH_SKILL.md.
+Read that skill at the start of every session before taking any action.
 """
 
 from typing import Any, Dict, Optional
@@ -168,322 +91,27 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         name: str = "",
         note_flag: int = 0,
     ) -> Dict[str, Any]:
-        """Send a single note to bach.roll via llll gathered syntax.
+        """Send a single note to bach.roll. Convenience wrapper for quick single-note testing.
+        For multi-note, multi-voice, or chord content use send_score_to_max() instead.
 
-        GATHERED SYNTAX OVERVIEW:
-        In bach.roll, the full note definition is:
-        [ pitch_cents duration_ms velocity [SPECIFICATIONS...] note_flag ]
+        Slot/breakpoint/dynamics/notehead syntax: see BACH_SKILL.md.
 
-        Specifications are optional llll blocks inserted between velocity and note_flag,
-        in any order. Each has the form [ specification_name CONTENT ].
-
-        This tool builds that syntax from its arguments. For multi-note chords or
-        complex multi-voice scores, use send_score_to_max() with a raw llll string.
-
-        ─────────────────────────────────────────────────────────────
-        SLOTS
-        ─────────────────────────────────────────────────────────────
-        Slots are per-note containers for additional data: automation curves,
-        articulations, noteheads, dynamics, text, colors, and more.
-        Each note can have multiple slots, each identified by a slot number.
-
-        Pass slots as a raw llll string in the form:
-        [slots [slot_number CONTENT] [slot_number CONTENT] ...]
-
-        Slot content syntax by type:
-        - function:     [x y slope] [x y slope] ...
-                        x and y are coordinates, slope is -1 to 1 (0 = linear)
-        - int/float:    a single number
-        - intlist/floatlist: number1 number2 ...
-        - text:         a single symbol (no spaces unless quoted)
-        - llll:         [ WRAPPED_LLLL ]
-        - articulations: symbols from the standard list, e.g. "staccato accent trill"
-                        shortcuts: stacc, acc, ferm, port, mart, tr, ubow, dbow,
-                        trem1, trem2, trem3, grupp, umord, dmord, mmord, lhpiz
-        - notehead:     a single symbol, e.g. "default", "diamond", "cross", "white",
-                        "black", "whole", "doublewhole", "none", "plus", "blacksquare",
-                        "whitesquare", "blacktriangle", "whitetriangle", "blackrhombus",
-                        "whiterhombus"
-        - color:        red green blue alpha (floats 0.0 to 1.0)
-        - spat:         [t radius angle interp_type] [t radius angle interp_type] ...
-        - filter:       filtertype cutoff_Hz gain_dB Q  (e.g. "lowpass 440 0 1")
-                        or biquad coefficients: a0 a1 a2 b1 b2
-
-        Example slots strings:
-        - "[slots [1 [0. 0. 0.] [0.5 200. 0.] [1. 0. 0.]]]"  (function in slot 1)
-        - "[slots [2 staccato accent]]"                        (articulations in slot 2)
-        - "[slots [3 diamond]]"                                (notehead in slot 3)
-        - "[slots [1 [0. 0. 0.] [1. 100. 0.]] [2 staccato]]"  (two slots)
-
-        ─────────────────────────────────────────────────────────────
-        SLOTS — ARTICULATIONS (slot 22 by default)
-        ─────────────────────────────────────────────────────────────
-        Articulations are stored in slot 22 by default in all bach notation objects.
-        The slot type is "articulations". Unlike noteheads, multiple articulations
-        can be assigned to a single note simultaneously.
-
-        STANDARD ARTICULATION SYMBOLS (full name / short name):
-        - "staccato"           / "stacc"      staccato
-        - "staccatissimo"      / "staccmo"    staccatissimo
-        - "fermata"            / "ferm"       fermata
-        - "portato"            / "port"       portato
-        - "accent"             / "acc"        accent
-        - "accentstaccato"     / "accstacc"   accent + staccato
-        - "accentportato"      / "accport"    accent + portato
-        - "portatostaccato"    / "portstacc"  portato + staccato
-        - "martellato"         / "mart"       martellato
-        - "martellatostaccato" / "martstacc"  martellato + staccato
-        - "lefthandpizzicato"  / "lhpizz"     left hand pizzicato
-        - "trill"              / "tr"         trill
-        - "trill#"             / "tr#"        trill sharp
-        - "trillb"             / "trb"        trill flat
-        - "trillx"             / "trx"        trill double sharp
-        - "trillbb"            / "trbb"       trill double flat
-        - "gruppetto"          / "grupp"      gruppetto
-        - "upmordent"          / "umord"      upward mordent
-        - "downmordent"        / "dmord"      downward mordent
-        - "doublemordent"      / "mmord"      double mordent
-        - "upbowing"           / "ubow"       upward bowing
-        - "downbowing"         / "dbow"       downward bowing
-        - "tremolo3"           / "trem3"      3-slash tremolo
-        - "tremolo2"           / "trem2"      2-slash tremolo
-        - "tremolo1"           / "trem1"      1-slash tremolo
-
-        Multiple articulations can be combined in a single slot by listing them
-        space-separated. Order does not matter.
+        Parameters:
+        - onset_ms:     note start time in milliseconds
+        - pitch_cents:  pitch in midicents (middle C = 6000, semitone = 100)
+        - duration_ms:  note duration in milliseconds (must be > 0)
+        - velocity:     MIDI velocity 0–127
+        - voice:        target voice number (1-indexed)
+        - slots:        raw llll string e.g. "[slots [22 staccato] [20 p<]]"
+        - breakpoints:  raw llll string e.g. "[breakpoints [0 0 0] [1 200 0]]"
+        - name:         note name(s) e.g. "pippo" or "[high 1] [low 2]"
+        - note_flag:    0=normal, 1=locked, 2=muted, 4=solo (sum to combine)
 
         Examples:
-        - slots="[slots [22 staccato]]"              single staccato
-        - slots="[slots [22 accent staccato]]"       accent + staccato
-        - slots="[slots [22 fermata]]"               fermata
-        - slots="[slots [22 trill]]"                 trill
-        - slots="[slots [22 trem3]]"                 3-slash tremolo
-        - slots="[slots [22 ubow trem2]]"            upbowing + 2-slash tremolo
-        - slots="[slots [22 port ferm]]"             portato + fermata
-
-        Combining articulations and dynamics in one slots string:
-        - slots="[slots [22 staccato] [20 p<]]"      staccato with crescendo from p
-        - slots="[slots [22 accent] [20 ff]]"        accent with ff dynamic
-
-        ─────────────────────────────────────────────────────────────
-        SLOTS — NOTEHEADS (slot 23 by default)
-        ─────────────────────────────────────────────────────────────
-        Noteheads are stored in slot 23 by default in all bach notation objects.
-        The slot type is "notehead". Only one notehead can be assigned per note.
-
-        STANDARD NOTEHEAD SYMBOLS:
-        - "default"       standard notehead (quarter note)
-        - "doublewhole"   double whole note (breve)
-        - "whole"         whole note
-        - "white"         half note (open)
-        - "black"         filled/quarter notehead
-        - "diamond"       harmonics notehead
-        - "cross"         x-shaped notehead
-        - "plus"          plus-shaped notehead
-        - "none"          invisible notehead
-        - "accent"        slap or pizzicato notehead
-        - "blacksquare"   filled square
-        - "whitesquare"   open square
-        - "square"        black or white depending on note duration (bach.score only)
-        - "blacktriangle" filled triangle
-        - "whitetriangle" open triangle
-        - "triangle"      black or white depending on note duration (bach.score only)
-        - "blackrhombus"  filled rhombus
-        - "whiterhombus"  open rhombus
-        - "rhombus"       black or white depending on note duration (bach.score only)
-
-        Note: in bach.roll, "square", "triangle" and "rhombus" always use
-        their black (filled) flavour regardless of duration.
-
-        Examples:
-        - slots="[slots [23 diamond]]"       harmonics notehead
-        - slots="[slots [23 cross]]"         x notehead (col legno, etc.)
-        - slots="[slots [23 none]]"          invisible notehead
-        - slots="[slots [23 blacksquare]]"   square notehead
-
-        Combining notehead, articulations and dynamics in one slots string:
-        - slots="[slots [23 diamond] [22 trill] [20 mp]]"
-          harmonics notehead, trill articulation, mp dynamic
-
-        ─────────────────────────────────────────────────────────────
-        SLOTS — DYNAMICS (slot 20 by default)
-        ─────────────────────────────────────────────────────────────
-        Dynamics are stored in slot 20 by default in all bach.roll objects.
-        The slot type is "text" and the content is a dynamics marking string.
-
-        DYNAMIC SYMBOLS:
-        pppp, ppp, pp, p, mp, mf, f, ff, fff, ffff  (and more p's/f's)
-        sfz, sf, sffz
-        sfp, sfmp, sfmf  (and variants: sfppp, sfpp, sfppppp, etc.)
-        sfzp, sfzmp, sfzmf (and variants: sfzppp, sfzpp, sfzppppp, etc.)
-        o  — zero dynamic (dal niente / al niente)
-        Any unrecognized text is displayed as a textual expression in roman italics:
-        e.g. "subito", "cresc", "sempre p" — useful for performance instructions.
-
-        HAIRPIN SYMBOLS:
-        =    no hairpin (steady, explicit)
-        <    crescendo
-        >    diminuendo
-        v    crescendo (alternative symbol)
-        ^    diminuendo (alternative symbol)
-        <<   exponential crescendo
-        >>   exponential diminuendo
-        _    dashed line (instead of hairpin)
-        --   dashed line (alternative)
-
-        PLAIN SYNTAX:
-        A space-separated sequence of markings and hairpins.
-        A number (0.0-1.0) before a marking sets its relative position.
-        Elements can also be given as llll with spaces between them.
-        Dynamics are evenly spaced inside the chord duration by default.
-
-        Basic examples:
-        - "mp"                  single marking
-        - "f< ff> mp"           crescendo to ff then diminuendo to mp
-        - "pp subito"           pp with textual expression "subito" in italics
-        - "p cresc"             p with textual "cresc" in italics
-        - "pp<"                 crescendo from pp continuing to next note's marking
-        - "pp<|"                crescendo ending at note tail (| = empty terminal mark)
-        - "pp<<"                exponential crescendo
-        - "o<<f>>o"             dal niente, exp. crescendo to f, exp. diminuendo al niente
-        - "p<ff=ff>p"           crescendo to ff, steady ff, diminuendo to p
-        - "p<ff>>mp<"           combine all: crescendo, exp. diminuendo, crescendo
-
-        UNDERSCORE FOR DASHED LINES:
-        Use "_" after a marking to connect to the next with a dashed line instead
-        of a hairpin. Useful for "al niente", "sempre", etc.:
-        - "f_ al_ niente"       f, dashed to "al", dashed to "niente"
-
-        HAIRPIN ENDING RULES:
-        - A trailing hairpin (e.g. "p<") continues to the next note with a marking
-        - Use "|" to end the hairpin at the note tail:
-          "p<|" — crescendo ends at this note's tail, does not continue
-        - Use "=" to concatenate dynamics without any hairpin:
-          "p<ff=ff>p" — crescendo to ff, then ff again without hairpin, then diminuendo
-
-        ATTACHING DYNAMICS TO BREAKPOINTS (plain syntax):
-        Use @N instead of a relative position to attach a marking to the Nth
-        breakpoint after the notehead. Negative numbers count backwards.
-        Example: "f> @1 p< @2 ff_ @3 al_ niente"
-        - f>          at auto position, with diminuendo
-        - @1 p<       attached to breakpoint 1, with crescendo
-        - @2 ff_      attached to breakpoint 2, with dashed line
-        - @3 al_      attached to breakpoint 3, with dashed line
-        - niente      final marking at auto position
-
-        STRUCTURED LLLL SYNTAX:
-        [ relpos marking(s) hairpin ] [ relpos marking(s) hairpin ] ...
-        - relpos:     0.0 to 1.0, or "auto" for equal spacing,
-                      or [breakpoint N] to attach to the Nth breakpoint
-        - marking(s): single symbol or llll of symbols e.g. [fff tenuto]
-        - hairpin:    any hairpin symbol from the list above
-
-        Examples:
-        "[auto p <] [auto [fff tenuto] =] [0.8 [] >] [auto mp =]"
-        — p crescendo, fff tenuto steady, empty mark starting diminuendo at 0.8, mp
-
-        "[auto f >] [[breakpoint 1] p <] [[breakpoint 2] ff _] [[breakpoint 3] al _] [auto niente =]"
-        — dynamics attached to breakpoints
-
-        Note: [] is an empty marking — useful to start a hairpin at a precise
-        position without placing a dynamic symbol there.
-
-        FULL SYNTAX (output form from bach):
-        When bach outputs dynamics it uses the full structured form including
-        both the breakpoint index and its current relative position:
-        [breakpoint N relativeposition]
-        Example: "[[auto 0 0.] f >] [[breakpoint 1 0.306] p <] [[breakpoint 2 0.631] ff _]"
-        You can use this form for input; relativeposition is ignored at input
-        and substituted with the actual breakpoint position.
-
-        MULTI-NOTE DYNAMICS PATTERNS:
-        Simple crescendo p to f across two notes:
-        - Note 1: slots="[slots [20 p<]]"
-        - Note 2: slots="[slots [20 f]]"
-
-        Diminuendo f to p:
-        - Note 1: slots="[slots [20 f>]]"
-        - Note 2: slots="[slots [20 p]]"
-
-        Crescendo then diminuendo (p < fff > mp) across three notes:
-        - Note 1: slots="[slots [20 p<]]"
-        - Note 2: slots="[slots [20 fff>]]"
-        - Note 3: slots="[slots [20 mp]]"
-
-        Dal niente to f and back al niente:
-        - Note 1: slots="[slots [20 o<<]]"
-        - Note 2: slots="[slots [20 f>>]]"
-        - Note 3: slots="[slots [20 o]]"
-
-        Crescendo ending at note tail (not continuing to next note):
-        - Note 1: slots="[slots [20 p<|]]"
-
-        ─────────────────────────────────────────────────────────────
-        BREAKPOINTS
-        ─────────────────────────────────────────────────────────────
-        Breakpoints define pitch glissandi along the note duration line.
-        Two breakpoints are always implicit: (0 0 0) at the notehead and
-        [1 delta_midicents slope] at the tail. You only need to provide them
-        explicitly if the note has a glissando.
-
-        Pass breakpoints as a raw llll string in the form:
-        [breakpoints [0 0 0] [rel_x delta_cents slope] ... [1 delta_cents slope]]
-
-        - rel_x: position along the note, 0.0 = notehead, 1.0 = tail
-        - delta_cents: pitch difference in midicents from the base note pitch
-        - slope: curvature of the preceding segment, -1 to 1 (0 = linear)
-
-        The first breakpoint must always be [0 0 0].
-        The last breakpoint must always start with 1.
-
-        Example breakpoint strings:
-        - "[breakpoints [0 0 0] [1 200 0]]"             glissando up 200 cents, linear
-        - "[breakpoints [0 0 0] [1 -100 0]]"            glissando down 100 cents
-        - "[breakpoints [0 0 0] [0.5 200 0] [1 0 0.5]]" up then back down, curved descent
-
-        ─────────────────────────────────────────────────────────────
-        NAME
-        ─────────────────────────────────────────────────────────────
-        Assign one or more names to the note as an llll:
-        - Single name:    "pippo"              -> [name pippo]
-        - Multiple names: "[high 1] [low 2]"   -> [name [high 1] [low 2]]
-
-        ─────────────────────────────────────────────────────────────
-        NOTE FLAG
-        ─────────────────────────────────────────────────────────────
-        Optional bitfield:
-        - 0 = normal (default)
-        - 1 = locked
-        - 2 = muted
-        - 4 = solo
-        Combine by summing: 3 = locked + muted, 6 = muted + solo, etc.
-
-        ─────────────────────────────────────────────────────────────
-        PITCH
-        ─────────────────────────────────────────────────────────────
-        Pitch in midicents: middle C = 6000, one semitone = 100 cents.
-        Microtones are expressed as fractions: 6050 = C + 50 cents (quarter tone up).
-
-        ─────────────────────────────────────────────────────────────
-        EXAMPLES
-        ─────────────────────────────────────────────────────────────
-        Simple note, middle C:
         add_single_note(onset_ms=0, pitch_cents=6000, duration_ms=1000, velocity=100)
-
-        Note with glissando up 200 cents:
         add_single_note(onset_ms=0, pitch_cents=6000, duration_ms=1000, velocity=100,
+                        slots="[slots [22 staccato] [20 ff]]",
                         breakpoints="[breakpoints [0 0 0] [1 200 0]]")
-
-        Note with articulation in slot 2:
-        add_single_note(onset_ms=0, pitch_cents=6000, duration_ms=1000, velocity=100,
-                        slots="[slots [2 staccato]]")
-
-        Note with function in slot 1 and a name:
-        add_single_note(onset_ms=0, pitch_cents=6000, duration_ms=1000, velocity=100,
-                        slots="[slots [1 [0. 0. 0.] [1. 100. 0.]]]",
-                        name="pippo")
-
-        Note in voice 2, muted:
         add_single_note(onset_ms=0, pitch_cents=6000, duration_ms=1000, velocity=100,
                         voice=2, note_flag=2)
         """
@@ -532,104 +160,26 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
 
     @mcp.tool()
     def send_score_to_max(score_llll: str) -> str:
-        """Send a raw llll score string directly to bach.roll to set its notation content.
+        """Send a raw llll score string directly to bach.roll.
 
-        IMPORTANT: This is the PRIMARY and PREFERRED way to write any score to bach.roll.
-        Always use this tool when writing notes, chords, or multi-voice content.
-        Do NOT use add_single_note() for score writing — use this tool instead.
-        add_single_note() exists only as a convenience for quick single-note testing.
+        PRIMARY tool for writing notes, chords, or multi-voice content.
+        Always prefer this over add_single_note() for any real score writing.
 
-        SCORE FORMAT — GATHERED SYNTAX:
-        Bach.roll scores use the llll (lisp-like linked list) gathered syntax.
-        The full score string starts with the router symbol "roll" (optional on input,
-        always present on output), followed by optional header lllls, then one llll
-        per voice. Voices are SEPARATE top-level lllls — they are NOT wrapped in an
-        additional outer bracket.
+        Full llll score syntax and hierarchy: see BACH_SKILL.md.
 
-        Top-level structure:
-        roll [HEADER1] [HEADER2] ... [VOICE1] [VOICE2] [VOICE3] ...
+        Key rules:
+        - String must start with "roll" followed by one llll per voice.
+        - Voices are SEPARATE top-level lllls — not wrapped in an extra bracket.
+          RIGHT: roll [VOICE1] [VOICE2]
+          WRONG: roll [ [VOICE1] [VOICE2] ]
+        - Each level (note, chord, voice) ends with an optional numeric flag
+          INSIDE its bracket before the closing ].
+        - This tool only sets notation content. It does not affect slotinfo or header.
 
-        When omitting headers (most common when writing a score):
-        roll [VOICE1] [VOICE2] [VOICE3] ...
-
-        ─────────────────────────────────────────────────────────────
-        HIERARCHY  (from the official bach gathered syntax docs)
-        ─────────────────────────────────────────────────────────────
-
-        NOTE (innermost):
-        [ pitch_cents duration_ms velocity flag ]
-          - pitch_cents : midicents, middle C = 6000, one semitone = 100
-          - duration_ms : duration in milliseconds
-          - velocity    : 1–127
-          - flag        : 0 = normal, 1 = locked, 2 = muted, 4 = solo (sum to combine)
-          - flag may be omitted (defaults to 0)
-          Optional specs (between velocity and flag, in any order):
-            [breakpoints ...] [slots ...] [name ...] [graphic ...]
-
-        CHORD:
-        [ onset_ms NOTE1 NOTE2 ... flag ]
-          - onset_ms : chord start time in milliseconds
-          - NOTE*    : one llll per note in note gathered syntax (see above)
-          - flag     : chord-level flag (same values as note flag, default 0)
-          - flag may be omitted
-
-        VOICE:
-        [ CHORD1 CHORD2 ... flag ]
-          - CHORD*  : one llll per chord in chord gathered syntax (see above)
-          - flag    : voice-level flag (default 0), may be omitted
-
-        ⚠️  CRITICAL: each level (note, chord, voice) ends with an optional numeric
-            flag INSIDE its bracket, before the closing ]. This flag is 0 for normal
-            items. It is NOT an extra structural separator — it IS the flag value.
-
-        ⚠️  CRITICAL: voices are SEPARATE lllls at the top level after "roll".
-            Do NOT wrap all voices in an extra outer bracket.
-            WRONG:  roll [ [VOICE1] [VOICE2] ]
-            CORRECT: roll [VOICE1] [VOICE2]
-
-        ─────────────────────────────────────────────────────────────
-        EXAMPLES
-        ─────────────────────────────────────────────────────────────
-
-        Single note (middle C), one voice:
-        "roll [ [ 0. [ 6000. 673. 100 0 ] 0 ] 0 ]"
-        Decomposed:
-          roll                              <- router symbol
-          [                                 <- voice 1 llll
-            [                               <- chord at onset 0ms
-              0.                            <- onset_ms
-              [ 6000. 673. 100 0 ]          <- note: C5, 673ms, vel 100, flag 0
-              0                             <- chord flag (0 = normal)
-            ]
-            0                               <- voice flag (0 = normal)
-          ]                                 <- end voice 1
-
-        Single note, minimal (flags omitted):
-        "roll [ [ 0. [ 6000. 673. 100 ] ] ]"
-
-        Many notes, one voice:
-        "roll [ [ 214. [ 6100. 673. 100 0 ] 0 ] [ 488. [ 5400. 673. 100 0 ] 0 ] [ 1124. [ 6100. 673. 100 0 ] 0 ] 0 ]"
-
-        Chord with two simultaneous notes:
-        "roll [ [ 0. [ 6000. 1000. 100 0 ] [ 6400. 1000. 100 0 ] 0 ] 0 ]"
-
-        Two voices:
-        "roll [ [ 0. [ 6000. 500. 100 0 ] 0 ] 0 ] [ [ 0. [ 5500. 500. 90 0 ] 0 ] 0 ]"
-        Decomposed:
-          roll
-          [ [ 0. [ 6000. 500. 100 0 ] 0 ] 0 ]   <- voice 1 (one chord)
-          [ [ 0. [ 5500. 500. 90  0 ] 0 ] 0 ]   <- voice 2 (one chord, separate llll)
-
-        NOTE: The score string must start with "roll" followed by one llll per voice.
-        This is what bach.roll expects — it is NOT the same as the raw llll body
-        returned by dump(mode="body"), which omits the "roll" prefix and the header.
-
-        A full dump() includes slotinfo, clefs, voicenames, markers, and other header
-        data in addition to the score body. send_score_to_max() only sets the notation
-        content (notes, chords, voices) — it does not affect slotinfo or other header fields.
-
-        Use dump(mode="body") to retrieve the current score body from bach.roll.
-        Use send_process_message_to_max() for commands like play, dump, clefs, etc.
+        Examples:
+        Single note:   "roll [ [ 0. [ 6000. 673. 100 0 ] 0 ] 0 ]"
+        Two voices:    "roll [ [ 0. [ 6000. 500. 100 0 ] 0 ] 0 ] [ [ 0. [ 5500. 500. 90 0 ] 0 ] 0 ]"
+        Chord:         "roll [ [ 0. [ 6000. 1000. 100 0 ] [ 6400. 1000. 100 0 ] 0 ] 0 ]"
         """
         score_llll = score_llll.strip()
         if not score_llll:
@@ -2281,140 +1831,30 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         inserts a new chord into the existing content. Use this for incremental
         edits when the rest of the score should be preserved.
 
-        ─────────────────────────────────────────────────────────────
-        CHORD STRUCTURE (gathered syntax)
-        ─────────────────────────────────────────────────────────────
+        Chord structure (gathered syntax):
         [ onset_ms NOTE1 NOTE2 ... chord_flag ]
 
         Each NOTE:
         [ pitch_cents duration_ms velocity [SPECIFICATIONS...] note_flag ]
 
-        Specifications (optional, between velocity and note_flag, any order):
-        - [breakpoints [0 0 0] [rel_x delta_cents slope] ... [1 delta_cents slope]]
-        - [slots [slot_number CONTENT] ...]
-        - [name NAME_OR_NAMES]
-        - [graphic displayed_midicents displayed_accidental]
-
+        Specifications (optional, any order): [breakpoints...] [slots...] [name...] [graphic...]
         Pitch: midicents (middle C = C5 = 6000) or note name (C5, D#4, Bb3).
-        Accidentals: # sharp, b flat, x double sharp, q quartertone sharp,
-                     d quartertone flat, ^ eighth-tone sharp, v eighth-tone flat.
-        chord_flag / note_flag (bitfield): 0=normal, 1=locked, 2=muted, 4=solo
+        Flags: 0=normal, 1=locked, 2=muted, 4=solo (sum to combine).
+
+        Slot/breakpoints/dynamics/notehead/articulation syntax: see BACH_SKILL.md.
 
         Parameters:
-        - chord_llll: the chord in gathered syntax llll form (see above)
+        - chord_llll: the chord in gathered syntax llll form
         - voice: voice number to add the chord to (1-indexed, default: 1)
         - select: if True, also select the added chord (default: False)
 
-        ─────────────────────────────────────────────────────────────
-        SLOTS — OVERVIEW
-        ─────────────────────────────────────────────────────────────
-        Slots are per-note containers for additional data: dynamics, articulations,
-        noteheads, automation curves, text, colors, and more.
-        Embed slots inside a note: [slots [slot_number CONTENT] [slot_number CONTENT] ...]
-
-        Slot content syntax by type:
-        - function:      [x y slope] [x y slope] ...   (x, y coords; slope -1 to 1)
-        - int/float:     a single number
-        - text:          a single symbol (no spaces)
-        - articulations: space-separated symbols (see list below)
-        - notehead:      a single symbol (see list below)
-        - color:         r g b a  (floats 0.0 to 1.0)
-
-        ─────────────────────────────────────────────────────────────
-        SLOTS — DYNAMICS (slot 20)
-        ─────────────────────────────────────────────────────────────
-        Slot type "text". Content is a dynamics marking string.
-
-        DYNAMIC SYMBOLS: pppp ppp pp p mp mf f ff fff ffff  sfz sf sffz
-          sfp sfmp sfmf  o (dal/al niente)
-          Any unrecognized text → roman italic expression (e.g. "subito", "cresc")
-
-        HAIRPIN SYMBOLS: = (steady)  < (cresc)  > (dim)  << (exp cresc)  >> (exp dim)
-          _ (dashed line)   | (end hairpin at tail, not continuing to next note)
-
-        PLAIN SYNTAX — space-separated markings and hairpins:
-        - "mp"           single marking
-        - "p<"           crescendo continuing to next note
-        - "p<|"          crescendo ending at this note's tail
-        - "f> mp"        diminuendo to mp
-        - "p< ff> mp"    crescendo to ff then diminuendo to mp
-        - "o<< f>> o"    dal niente exp. cresc to f, exp. dim al niente
-
-        ATTACHING TO BREAKPOINTS (plain syntax): use @N for breakpoint N
-        - "f> @1 p< @2 ff"
-
-        MULTI-NOTE PATTERNS:
-        - p< cresc: note1 [slots [20 p<]] / note2 [slots [20 f]]
-        - f> dim:   note1 [slots [20 f>]] / note2 [slots [20 p]]
-        - dal→f→al: note1 [slots [20 o<<]] / note2 [slots [20 f>>]] / note3 [slots [20 o]]
-
-        ─────────────────────────────────────────────────────────────
-        SLOTS — ARTICULATIONS (slot 22)
-        ─────────────────────────────────────────────────────────────
-        Slot type "articulations". Multiple articulations can be combined.
-
-        SYMBOLS (full / short):
-        staccato/stacc  staccatissimo/staccmo  fermata/ferm  portato/port
-        accent/acc  accentstaccato/accstacc  martellato/mart
-        lefthandpizzicato/lhpizz  trill/tr  trill#/tr#  trillb/trb
-        gruppetto/grupp  upmordent/umord  downmordent/dmord  doublemordent/mmord
-        upbowing/ubow  downbowing/dbow
-        tremolo1/trem1  tremolo2/trem2  tremolo3/trem3
-
         Examples:
-        - [slots [22 staccato]]            single staccato
-        - [slots [22 accent staccato]]     accent + staccato
-        - [slots [22 trill]]               trill
-        - [slots [22 ubow trem2]]          upbowing + 2-slash tremolo
-
-        ─────────────────────────────────────────────────────────────
-        SLOTS — NOTEHEADS (slot 23)
-        ─────────────────────────────────────────────────────────────
-        Slot type "notehead". Only one notehead per note.
-
-        SYMBOLS: default  doublewhole  whole  white  black  diamond  cross
-          plus  none  accent  blacksquare  whitesquare  blacktriangle
-          whitetriangle  blackrhombus  whiterhombus
-        (square/triangle/rhombus always filled in bach.roll)
-
-        ─────────────────────────────────────────────────────────────
-        BREAKPOINTS
-        ─────────────────────────────────────────────────────────────
-        Pitch glissandi along the note duration. Two breakpoints always implicit:
-        (0 0 0) at notehead, [1 delta slope] at tail.
-
-        [breakpoints [0 0 0] [rel_x delta_cents slope] ... [1 delta_cents slope]]
-        - rel_x: 0.0=notehead, 1.0=tail
-        - delta_cents: pitch offset from base pitch in midicents
-        - slope: curvature -1 to 1 (0=linear)
-
-        Examples:
-        - [breakpoints [0 0 0] [1 200 0]]              gliss up 200 cents
-        - [breakpoints [0 0 0] [0.5 200 0] [1 0 0.5]]  up then back down
-
-        ─────────────────────────────────────────────────────────────
-        EXAMPLES
-        ─────────────────────────────────────────────────────────────
-        - addchord("[1000 [6000 500 50]]")
-          middle C at 1s, 500ms, vel 50, voice 1
-
-        - addchord("[1000 [6000 500 50]]", voice=2)
-          same, in voice 2
-
-        - addchord("[1000 [6000 500 50] [7200 500 50]]")
-          two-note chord: middle C + G above
-
-        - addchord("[2000 [6000 1000 100 [slots [22 staccato] [20 ff]]]]")
-          staccato + ff dynamic
-
+        - addchord("[1000 [6000 500 50]]")                         middle C, 500ms, vel 50, voice 1
+        - addchord("[1000 [6000 500 50]]", voice=2)                same, voice 2
+        - addchord("[1000 [6000 500 50] [7200 500 50]]")           two-note chord
+        - addchord("[2000 [6000 1000 100 [slots [22 staccato] [20 ff]]]]")  staccato + ff
         - addchord("[500 [7000 500 100 [slots [23 diamond] [22 trill] [20 mp]]]]")
-          harmonics notehead, trill, mp
-
-        - addchord("[0 [6000 2000 90 [breakpoints [0 0 0] [1 200 0]]]]")
-          glissando up 200 cents
-
-        - addchord("[500 [7000 500 127] [7200 1200 100] [name paul] 0]")
-          named chord with two notes
+        - addchord("[0 [6000 2000 90 [breakpoints [0 0 0] [1 200 0]]]]")   glissando
         """
         chord_llll = chord_llll.strip()
         if not chord_llll:
@@ -2738,5 +2178,111 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
             ),
             "steps": results,
         }
+
+
+    # ── Memory & screenshot tools ─────────────────────────────────────────── #
+    # File I/O helpers defined inline — no separate module needed.
+
+    import base64
+    import json as _json
+    import time as _time
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    _assets_dir = Path(__file__).parent / "assets"
+    _screenshots_dir = _assets_dir / "screenshots"
+    _memory_path = _assets_dir / "memory.json"
+
+    def _load_memory() -> Dict[str, Any]:
+        _assets_dir.mkdir(exist_ok=True)
+        if not _memory_path.exists():
+            return {}
+        try:
+            return _json.loads(_memory_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def _save_memory(data: Dict[str, Any]) -> None:
+        _assets_dir.mkdir(exist_ok=True)
+        _memory_path.write_text(
+            _json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+    @mcp.tool()
+    def project_memory_read(project: str = "") -> Dict[str, Any]:
+        """Read persistent memory for a project (or all projects).
+
+        Memory stores intent, workflow, notes, and voice roles across sessions.
+        Always read at the start of a session when working on a known project.
+
+        - project: project name to read. Leave empty to list all known projects.
+        """
+        mem = _load_memory()
+        if not project.strip():
+            projects = {k: v.get("updated_at", "unknown") for k, v in mem.items()}
+            return {"ok": True, "projects": projects}
+        key = project.strip()
+        if key not in mem:
+            return {"ok": True, "project": key, "memory": None,
+                    "note": "No memory found. Use project_memory_write to create it."}
+        return {"ok": True, "project": key, "memory": mem[key]}
+
+    @mcp.tool()
+    def project_memory_write(
+        project:  str,
+        intent:   str = "",
+        workflow: str = "",
+        notes:    str = "",
+    ) -> Dict[str, Any]:
+        """Write or update persistent memory for a project.
+
+        Merges with existing memory — only fields you supply are updated.
+        Call when the user states intentions, changes approach, or when
+        you want to record something that should survive session restarts.
+
+        - project:  project name (required)
+        - intent:   what this piece is trying to be — mood, form, concept
+        - workflow: current compositional approach or technique being used
+        - notes:    observations, decisions, open questions, voice roles
+        """
+        key = project.strip()
+        if not key:
+            return {"ok": False, "error": "project name cannot be empty"}
+        mem = _load_memory()
+        entry = mem.get(key, {})
+        if intent.strip():   entry["intent"]   = intent.strip()
+        if workflow.strip(): entry["workflow"]  = workflow.strip()
+        if notes.strip():    entry["notes"]     = notes.strip()
+        entry["updated_at"] = datetime.now(timezone.utc).isoformat()
+        mem[key] = entry
+        _save_memory(mem)
+        return {"ok": True, "project": key, "memory": entry}
+
+    @mcp.tool()
+    def score_snapshot() -> Dict[str, Any]:
+        """Export the current score as a PNG and return it as a base64 image.
+
+        Use when you are unsure whether the score looks correct — after several
+        edits, when something feels wrong, or when the user asks to see the score.
+        Do NOT call after every single edit — only when visual confirmation is needed.
+        The image is saved to bach_mcp/assets/screenshots/.
+
+        Returns: ok, path, base64 (PNG for vision), timestamp.
+        """
+        _assets_dir.mkdir(exist_ok=True)
+        _screenshots_dir.mkdir(exist_ok=True)
+        ts  = datetime.now(timezone.utc)
+        png = _screenshots_dir / f"score_{ts.strftime('%Y%m%d_%H%M%S')}.png"
+        if not bach.send_info(f"exportimage {png} @view line"):
+            return {"ok": False, "error": "Failed to send exportimage command to Max"}
+        deadline = _time.time() + 10.0
+        while _time.time() < deadline:
+            if png.exists() and png.stat().st_size > 0:
+                break
+            _time.sleep(0.25)
+        else:
+            return {"ok": False, "error": "Score image not written within 10s — is bach.roll connected?"}
+        b64 = base64.b64encode(png.read_bytes()).decode("ascii")
+        return {"ok": True, "path": str(png), "base64": b64, "timestamp": ts.isoformat()}
 
     return mcp

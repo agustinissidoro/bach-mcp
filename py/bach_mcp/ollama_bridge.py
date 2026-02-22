@@ -283,6 +283,35 @@ def _build_chord_llll(onset_ms: float, notes: list) -> str:
 
 
 
+# ── Memory & screenshot helpers ──────────────────────────────────────────── #
+# Defined at module level — used by ToolExecutor, no separate module needed.
+
+import base64 as _base64
+from datetime import datetime as _datetime, timezone as _timezone
+from pathlib import Path as _Path
+
+_ASSETS_DIR      = _Path(__file__).parent / "assets"
+_SCREENSHOTS_DIR = _ASSETS_DIR / "screenshots"
+_MEMORY_PATH     = _ASSETS_DIR / "memory.json"
+
+
+def _load_memory() -> dict:
+    _ASSETS_DIR.mkdir(exist_ok=True)
+    if not _MEMORY_PATH.exists():
+        return {}
+    try:
+        return json.loads(_MEMORY_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_memory(data: dict) -> None:
+    _ASSETS_DIR.mkdir(exist_ok=True)
+    _MEMORY_PATH.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
 class ToolExecutor:
     """Maps Ollama tool-call names → BachMCPServer methods."""
 
@@ -589,6 +618,55 @@ class ToolExecutor:
             if md is not None and int(md) >= 0: parts.append(f"@maxdecimals {int(md)}")
             ok = self._bach.send_info(" ".join(parts))
             return json.dumps({"ok": ok})
+
+
+        # ── Memory ────────────────────────────────────────────────────────── #
+        if name == "project_memory_read":
+            mem = _load_memory()
+            project = args.get("project", "").strip()
+            if not project:
+                return json.dumps({"ok": True, "projects": {
+                    k: v.get("updated_at", "unknown") for k, v in mem.items()
+                }})
+            if project not in mem:
+                return json.dumps({"ok": True, "project": project, "memory": None,
+                                   "note": "No memory found. Use project_memory_write to create it."})
+            return json.dumps({"ok": True, "project": project, "memory": mem[project]})
+
+        if name == "project_memory_write":
+            project = args.get("project", "").strip()
+            if not project:
+                return json.dumps({"ok": False, "error": "project name cannot be empty"})
+            mem   = _load_memory()
+            entry = mem.get(project, {})
+            for field in ("intent", "workflow", "notes"):
+                val = (args.get(field) or "").strip()
+                if val:
+                    entry[field] = val
+            entry["updated_at"] = _datetime.now(_timezone.utc).isoformat()
+            mem[project] = entry
+            _save_memory(mem)
+            return json.dumps({"ok": True, "project": project, "memory": entry})
+
+        # ── Score snapshot ─────────────────────────────────────────────────── #
+        if name == "score_snapshot":
+            _ASSETS_DIR.mkdir(exist_ok=True)
+            _SCREENSHOTS_DIR.mkdir(exist_ok=True)
+            ts  = _datetime.now(_timezone.utc)
+            png = _SCREENSHOTS_DIR / f"score_{ts.strftime('%Y%m%d_%H%M%S')}.png"
+            if not self._bach.send_info(f"exportimage {png} @view line"):
+                return json.dumps({"ok": False, "error": "Failed to send exportimage to Max"})
+            deadline = time.time() + 10.0
+            while time.time() < deadline:
+                if png.exists() and png.stat().st_size > 0:
+                    break
+                time.sleep(0.25)
+            else:
+                return json.dumps({"ok": False, "error": "Image not written within 10s"})
+            b64 = _base64.b64encode(png.read_bytes()).decode("ascii")
+            result = {"ok": True, "path": str(png), "base64": b64, "timestamp": ts.isoformat()}
+            _log(f"[ToolExecutor] score_snapshot ok=True path={png}")
+            return json.dumps(result)
 
         return json.dumps({"error": f"unknown tool: {name}"})
 
