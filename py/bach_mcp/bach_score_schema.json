@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Bach Score",
+  "type": "object",
+  "properties": {
+    "score": {
+      "type": "object",
+      "properties": {
+
+        "meta": {
+          "type": "object",
+          "properties": {
+            "title":    { "type": "string" },
+            "composer": { "type": "string" },
+            "tempo":    { "type": "number", "description": "BPM" }
+          }
+        },
+
+        "layout": {
+          "type": "object",
+          "properties": {
+            "parts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "clef", "voices"],
+                "properties": {
+                  "name":        { "type": "string", "description": "Bracket label for this part" },
+                  "clef":        { "type": "string", "enum": ["G", "F", "Alto", "Tenor", "Percussion", "FG", "FFGG"], "description": "G=treble, F=bass, FG=grand staff, FFGG=choir" },
+                  "voice_names": { "type": "array", "items": { "type": "string" }, "description": "Per-staff labels within this part, e.g. ['RH','LH']" },
+                  "voices":      { "type": "array", "items": { "type": "integer" }, "description": "Indices into score.voices[]" }
+                }
+              }
+            }
+          }
+        },
+
+        "voices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["voice_index", "chords"],
+            "properties": {
+              "voice_index": { "type": "integer" },
+              "flag":        { "type": "integer", "enum": [1, 2, 4], "description": "1=locked, 2=muted, 4=solo. Omit if normal." },
+              "chords": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["onset", "notes"],
+                  "properties": {
+                    "onset": { "type": "number", "description": "Onset time in milliseconds" },
+                    "flag":  { "type": "integer", "enum": [1, 2, 4], "description": "1=locked, 2=muted, 4=solo. Omit if normal." },
+                    "notes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["pitch", "duration", "velocity"],
+                        "properties": {
+                          "pitch":    { "type": "number", "description": "Pitch in cents. Middle C (C4) = 6000. One semitone = 100." },
+                          "duration": { "type": "number", "description": "Duration in milliseconds" },
+                          "velocity": { "type": "integer", "minimum": 0, "maximum": 127 },
+                          "flag":     { "type": "integer", "enum": [1, 2, 4], "description": "1=locked, 2=muted, 4=solo. Omit if normal." },
+                          "dynamic":  { "type": "string", "description": "Base: pp p mp mf f ff fff sfz o. Append < cresc, > dim, << exp cresc, >> exp dim, = steady, | end at tail. e.g. 'p<' or 'p<|'" },
+                          "articulations": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": ["staccato", "accent", "fermata", "trill", "portato", "martellato", "upbowing", "downbowing", "tremolo1", "tremolo2", "tremolo3"]
+                            }
+                          },
+                          "notehead": {
+                            "type": "string",
+                            "enum": ["default", "diamond", "cross", "white", "black", "whole", "doublewhole", "none", "plus", "blacksquare", "whitesquare", "blacktriangle", "whitetriangle"]
+                          },
+                          "gliss": {
+                            "type": "array",
+                            "description": "Breakpoint curve for glissando. First x must be 0.0, last x must be 1.0.",
+                            "items": {
+                              "type": "object",
+                              "required": ["x", "delta", "slope"],
+                              "properties": {
+                                "x":     { "type": "number", "minimum": 0.0, "maximum": 1.0, "description": "Relative position along note duration" },
+                                "delta": { "type": "number", "description": "Pitch offset in cents from base pitch" },
+                                "slope": { "type": "number", "minimum": -1.0, "maximum": 1.0, "description": "Curve shape. 0=linear, positive=convex, negative=concave" }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+      }
+    }
+  }
+}
