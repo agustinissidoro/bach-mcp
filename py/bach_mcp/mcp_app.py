@@ -193,6 +193,46 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         return "Sent llll score to Max" if success else "Failed to send llll score"
 
     @mcp.tool()
+    def send_bell_to_eval(bell_code: str) -> Dict[str, Any]:
+        """Send a bell-language program to bach.eval in the Max patch.
+
+        ⚠️  USE ONLY when the user explicitly asks for bell code, or when you
+        are suggesting the generative approach and the user agrees.
+        For all other score writing, use send_score_to_max() instead.
+
+        The message is prefixed with "bell" so the patch can route it correctly
+        to the bach.eval object, distinguishing it from regular roll llll messages.
+
+        bell is a Turing-complete language that runs inside Max and computes
+        an llll at runtime — useful for loops, randomness, serial operations,
+        and any algorithmically generated material.
+
+        The bell code should produce a valid roll score as its final expression,
+        e.g.:  "roll" [$voice 0]
+
+        For bell syntax, patterns, and pitch constants: see BACH_SKILL.md.
+
+        Example — C-major scale as a roll voice:
+            $t := 0.;
+            $voice := null;
+            for $p in [6000 6200 6400 6500 6700 6900 7100 7200] do
+                $voice = $voice , [$t [$p 500. 100 0] 0];
+                $t = $t + 500.;
+            end;
+            "roll" [$voice 0]
+
+        Returns: ok, sent_code.
+        """
+        bell_code = bell_code.strip()
+        if not bell_code:
+            return {"ok": False, "message": "Rejected empty bell code"}
+        message = f"bell {bell_code}"
+        success = bach.send_info(message)
+        if not success:
+            return {"ok": False, "message": "Failed to send bell code to Max"}
+        return {"ok": True, "sent_code": bell_code}
+
+    @mcp.tool()
     def send_process_message_to_max(message: str) -> str:
         """ESCAPE HATCH — send a raw command to Max/MSP that has no dedicated tool.
 

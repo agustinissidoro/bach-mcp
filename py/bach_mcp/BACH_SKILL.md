@@ -125,6 +125,83 @@ Two independent hands: `clefs("G F") numvoices(2) numparts("2")`
 
 ---
 
+## BELL CODE (bach.eval)
+
+Use `send_bell_to_eval()` **only when**:
+- The user explicitly asks for bell code, or
+- You judge that algorithmic generation is clearly the right fit and you **suggest it first** — e.g. "I could write this as bell code that loops — want that instead?"
+
+For everything else, use `send_score_to_max()`.
+
+The tool prepends `"bell "` to the code so the patch can route it to `bach.eval`
+separately from regular `roll` llll messages.
+
+### Bell basics
+
+Variables use `$` prefix. Statements end with `;`. Assignment: `:=` (declare), `=` (update).
+The last expression in the program is the output — it should be a valid roll score.
+
+```bell
+$t := 0.;
+$voice := null;
+for $p in [6000 6200 6400 6500 6700 6900 7100 7200] do
+    $voice = $voice , [$t [$p 500. 100 0] 0];
+    $t = $t + 500.;
+end;
+"roll" [$voice 0]
+```
+
+### Pitch arithmetic
+Middle C = 6000. Semitone = 100. Octave = 1200.
+`$p + 700` = fifth up. `$p - 1200` = octave down.
+`round(random(6000, 7200) / 100) * 100` = random chromatic pitch in range.
+
+### Useful patterns
+
+**Random chromatic pitches:**
+```bell
+$voice := null; $t := 0.;
+for $i from 1 to 16 do
+    $p := round(random(6000, 7200) / 100) * 100;
+    $voice = $voice , [$t [$p 250. 90 0] 0];
+    $t = $t + 250.;
+end;
+"roll" [$voice 0]
+```
+
+**Serial row:**
+```bell
+$row := [0 2 4 5 7 9 11 1 3 6 8 10];
+$t := 0.; $voice := null;
+for $pc in $row do
+    $voice = $voice , [$t [($pc * 100 + 6000) 400. 100 0] 0];
+    $t = $t + 400.;
+end;
+"roll" [$voice 0]
+```
+
+**Multi-voice:**
+```bell
+$v1 := null; $v2 := null; $t := 0.;
+for $p in [6700 6900 7100 6700] do
+    $v1 = $v1 , [$t [$p 500. 100 0] 0];
+    $t = $t + 500.;
+end;
+$v2 := [[0. [4800. 2000. 80 0] 0] 0];
+"roll" [$v1 0] $v2
+```
+
+### Slots in bell
+Same syntax as raw llll — embed directly in the note list:
+```bell
+$note := [$p 500. 100 [slots [22 staccato] [20 f]] 0];
+```
+
+⚠️ Bell runs inside Max — syntax errors are silent from the MCP side.
+After sending, always `dump(mode="body")` to confirm the score was generated correctly.
+
+---
+
 ## SCORE WRITING
 
 - `send_score_to_max()` — **primary tool**. Replaces entire score content.
