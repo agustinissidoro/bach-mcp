@@ -203,23 +203,29 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         The message is prefixed with "bell" so the patch can route it correctly
         to the bach.eval object, distinguishing it from regular roll llll messages.
 
+        FLAT STRING REQUIREMENT: bell code must be a single flat string — no newlines,
+        no indentation. Statements separated by ";". Multi-statement loop bodies
+        wrapped in "( )". This is a Max messaging constraint.
+
         bell is a Turing-complete language that runs inside Max and computes
         an llll at runtime — useful for loops, randomness, serial operations,
         and any algorithmically generated material.
 
-        The bell code should produce a valid roll score as its final expression,
-        e.g.:  "roll" [$voice 0]
+        The last expression in the program is its output. For score generation
+        it must evaluate to a valid roll llll, with 'roll' as a single-quoted symbol.
 
-        For bell syntax, patterns, and pitch constants: see BACH_SKILL.md.
+        Key syntax rules (see BACH_SKILL.md for full reference):
+        - Variables: $name, assigned with = only
+        - Symbols: single quotes only — 'roll', 'null', 'foo'
+        - Loop: for $x in <llll> do (...) or for $i in 1...N do (...)
+        - Append-assign: $v _= item
+        - Sequence: statement1; statement2
 
-        Example — C-major scale as a roll voice:
-            $t := 0.;
-            $voice := null;
-            for $p in [6000 6200 6400 6500 6700 6900 7100 7200] do
-                $voice = $voice , [$t [$p 500. 100 0] 0];
-                $t = $t + 500.;
-            end;
-            "roll" [$voice 0]
+        Example — C-major scale:
+            $v = 'null'; $t = 0.; for $p in [6000 6200 6400 6500 6700 6900 7100 7200] do ($v _= [$t [$p 500. 100 0] 0]; $t += 500.); 'roll' [$v 0]
+
+        Example — 16 random chromatic pitches:
+            $v = 'null'; $t = 0.; for $i in 1...16 do ($p = round(random(6000, 7200) / 100) * 100; $v _= [$t [$p 250. 90 0] 0]; $t += 250.); 'roll' [$v 0]
 
         Returns: ok, sent_code.
         """

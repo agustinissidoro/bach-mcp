@@ -9,8 +9,46 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 87.0, 1252.0, 1062.0 ],
+        "rect": [ 34.0, 87.0, 1328.0, 1062.0 ],
         "boxes": [
+            {
+                "box": {
+                    "id": "obj-37",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 918.0, 1270.0, 60.0, 22.0 ],
+                    "saved_object_attributes": {
+                        "embed": 1,
+                        "versionnumber": 80300
+                    },
+                    "text": "bach.eval"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-36",
+                    "linecount": 5,
+                    "maxclass": "message",
+                    "numinlets": 2,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 24.0, 1285.0, 386.0, 76.0 ],
+                    "text": "$a = [1 2 3 4];\r$b = [10 20 30 40];\r$result = 'null';\rfor $i in 1...length($a) do ($result _= nth($a, $i) + nth($b, $i));\r$result"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-33",
+                    "maxclass": "newobj",
+                    "numinlets": 2,
+                    "numoutlets": 2,
+                    "outlettype": [ "", "" ],
+                    "patching_rect": [ 275.0, 1144.0, 58.0, 22.0 ],
+                    "text": "route bell"
+                }
+            },
             {
                 "box": {
                     "id": "obj-47",
@@ -83,7 +121,7 @@
                     "keys": [ "CM", "CM", "CM", "CM", "CM", "CM", "CM", "CM", "CM", "CM", "CM", "CM", "CM", "CM", "CM", "CM", "CM" ],
                     "loop": [ 0.0, 1000.0 ],
                     "maxclass": "bach.roll",
-                    "midichannels": [ 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 6, 6, 7, 8, 8, 9 ],
+                    "midichannels": [ 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5, 6, 7, 7, 8, 8 ],
                     "numinlets": 6,
                     "numoutlets": 8,
                     "numparts": [ 4, 4, 2, 1, 1, 2, 1, 1, 1 ],
@@ -300,8 +338,6 @@
                     "saved_object_attributes": {
                         "autostart": 0,
                         "defer": 0,
-                        "node_bin_path": "",
-                        "npm_bin_path": "",
                         "watch": 1
                     },
                     "text": "node.script bachTCP.js @watch 1",
@@ -375,7 +411,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 275.0, 1081.0, 71.0, 22.0 ],
+                    "patching_rect": [ 275.0, 1094.0, 71.0, 22.0 ],
                     "text": "fromsymbol"
                 }
             },
@@ -457,9 +493,7 @@
             },
             {
                 "patchline": {
-                    "color": [ 0.0, 0.9768045545, 0.0, 1.0 ],
-                    "destination": [ "obj-34", 0 ],
-                    "midpoints": [ 284.5, 1214.2706298828125, 168.16380310058594, 1214.2706298828125, 168.16380310058594, 330.6461181640625, 284.5, 330.6461181640625 ],
+                    "destination": [ "obj-33", 0 ],
                     "source": [ "obj-2", 0 ]
                 }
             },
@@ -509,6 +543,20 @@
                 "patchline": {
                     "destination": [ "obj-34", 0 ],
                     "source": [ "obj-32", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "color": [ 0.0, 0.9768045545, 0.0, 1.0 ],
+                    "destination": [ "obj-34", 0 ],
+                    "midpoints": [ 323.5, 1214.2706298828125, 168.16380310058594, 1214.2706298828125, 168.16380310058594, 330.6461181640625, 284.5, 330.6461181640625 ],
+                    "source": [ "obj-33", 1 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-36", 1 ],
+                    "source": [ "obj-33", 0 ]
                 }
             },
             {

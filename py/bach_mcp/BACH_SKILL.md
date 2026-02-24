@@ -129,73 +129,202 @@ Two independent hands: `clefs("G F") numvoices(2) numparts("2")`
 
 Use `send_bell_to_eval()` **only when**:
 - The user explicitly asks for bell code, or
-- You judge that algorithmic generation is clearly the right fit and you **suggest it first** — e.g. "I could write this as bell code that loops — want that instead?"
+- You judge that algorithmic generation is clearly the right fit and you **suggest it first**.
 
 For everything else, use `send_score_to_max()`.
 
 The tool prepends `"bell "` to the code so the patch can route it to `bach.eval`
 separately from regular `roll` llll messages.
 
-### Bell basics
+---
 
-Variables use `$` prefix. Statements end with `;`. Assignment: `:=` (declare), `=` (update).
-The last expression in the program is the output — it should be a valid roll score.
+### ⚠️ FLAT STRING — PARENTHESES ARE THE ONLY SCOPE MECHANISM
 
-```bell
-$t := 0.;
-$voice := null;
-for $p in [6000 6200 6400 6500 6700 6900 7100 7200] do
-    $voice = $voice , [$t [$p 500. 100 0] 0];
-    $t = $t + 500.;
-end;
-"roll" [$voice 0]
+Bell has **no indentation, no blocks, no `end` keyword**. Hierarchy and scope are expressed exclusively through `( )`.
+
+Bell code is sent as a **single flat string** through Max messaging — no newlines, no indentation.
+Statements are separated by `;`. Wherever you need to group multiple statements (loop bodies, nested expressions, precedence), use `( )`.
+
 ```
+RIGHT: for $p in [6000 6200 6400] do ($v _= [$t [$p 500. 100 0] 0]; $t += 500.)
+WRONG: for $p in [6000 6200 6400] do
+           $v _= [$t [$p 500. 100 0] 0];    ← no newlines, no indentation
+           $t += 500.
+       end                                    ← no end keyword
+```
+
+---
+
+### Symbols — SINGLE QUOTES ONLY
+
+Symbols must use **single quotes**: `'roll'`, `'null'`, `'foo'`.
+Double quotes are not correct bell syntax (Max artefact).
+
+```
+RIGHT: 'roll' [$v 0]
+WRONG: "roll" [$v 0]
+```
+
+---
+
+### Variables
+
+Local variables: `$name`. Only one assignment operator: `=`.
+The `;` sequences statements and returns the last value.
+
+```
+$side = 5; $area = $side * $side; $area
+```
+
+Reserved (cannot use as variable names): `$x1 $x2 ... $xN`, `$i1 $r1 $f1 $p1 $o1`, `$args`, `$argcount`.
+
+---
+
+### Operators
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `=` | assignment | `$x = 5` |
+| `+` `-` `*` `/` `%` | arithmetic | standard precedence |
+| `==` `!=` `<` `>` `<=` `>=` | comparison | returns 1 or 0 |
+| `&&` `\|\|` | boolean (short-circuit) | `$x > 0 && $x < 10` |
+| `&&&` `\|\|\|` | conditional boolean (returns values) | `$a \|\|\| 'default'` |
+| `,` | llll concatenation | `$v , [$t [$p 500. 100 0] 0]` |
+| `_=` | append-assign | `$v _= x` → same as `$v = $v , x` |
+| `+=` `-=` `*=` `/=` | compound assign | `$x += 1` |
+| `:` | element retrieval (1-indexed) | `$x:2` → 2nd element |
+| `::` | pick/unwrap sublist | `$x::2` → contents of 2nd sublist |
+| `.` | key access | `$list.john` → value after key `john` |
+| `...` | range (inclusive) | `1...5` → `1 2 3 4 5` |
+| `:*` | repeat | `'foo' :* 3` → `'foo' 'foo' 'foo'` |
+| `;` | sequence | evaluates both, returns second |
+
+**Unary minus:** no space between `-` and its operand.
+- `$x -10` → concatenation of `$x` and `-10`
+- `$x-10` → subtraction
+
+**Implicit list construction:** values side by side assemble into an llll.
+`'foo' $x 'bar'` → llll of three elements.
+
+**Precedence:** arithmetic > concatenation. Use parens liberally.
+
+---
+
+### Conditionals
+
+```
+if <cond> then <expr>
+if <cond> then <expr> else <expr>
+if <cond> then <expr> else if <cond> then <expr> else <expr>
+```
+
+Truthiness: `null` and `0` are false; everything else is true.
+⚠️ Use parens with nested ifs to avoid dangling-else ambiguity.
+
+---
+
+### Loops
+
+**`while ... do`** — repeat while condition true, return last body value:
+```
+$i = 0; while $i < 8 do $i += 1
+```
+
+**`while ... collect`** — collect all body values into an llll:
+```
+$i = 0; while $i < 8 collect ($i += 1)
+```
+
+**`for $x in <llll> do`** — iterate llll elements, return last body value:
+```
+for $p in [6000 6200 6400 6500] do $p
+```
+
+**`for $x in <llll> collect`** — iterate and collect all body values:
+```
+for $p in [6000 6200 6400 6500] collect $p + 100
+```
+
+**Range iteration** with `...`:
+```
+for $i in 1...16 collect $i * 100
+```
+
+**Multi-statement body** — wrap in `( )`:
+```
+$t = 0.; $v = 'null'; for $p in [6000 6200 6400] do ($v _= [$t [$p 500. 100 0] 0]; $t += 500.); $v
+```
+
+**Parallel iteration** (stops at shortest llll):
+```
+for $x in $x1, $y in $x2 collect $x + $y
+```
+
+**Address variable** (second name receives the index):
+```
+for $data $addr in $x1 collect $data + $addr
+```
+
+**`as` clause** — stop when condition becomes false:
+```
+for $x in $x1 as $x < 100 collect $x
+```
+
+---
+
+### Score output from bell
+
+The **last expression** is what `bach.eval` outputs.
+For score generation it must be a valid roll llll, starting with the symbol `'roll'`.
+
+```
+$v = 'null'; $t = 0.; for $p in [6000 6200 6400 6500 6700] do ($v _= [$t [$p 500. 100 0] 0]; $t += 500.); 'roll' [$v 0]
+```
+
+---
 
 ### Pitch arithmetic
+
 Middle C = 6000. Semitone = 100. Octave = 1200.
-`$p + 700` = fifth up. `$p - 1200` = octave down.
-`round(random(6000, 7200) / 100) * 100` = random chromatic pitch in range.
+Fifth up = `$p + 700`. Octave down = `$p - 1200`.
+Random chromatic pitch: `round(random(6000, 7200) / 100) * 100`
 
-### Useful patterns
+---
 
-**Random chromatic pitches:**
-```bell
-$voice := null; $t := 0.;
-for $i from 1 to 16 do
-    $p := round(random(6000, 7200) / 100) * 100;
-    $voice = $voice , [$t [$p 250. 90 0] 0];
-    $t = $t + 250.;
-end;
-"roll" [$voice 0]
+### Ready-to-send flat patterns
+
+**C-major scale, one voice:**
+```
+$v = 'null'; $t = 0.; for $p in [6000 6200 6400 6500 6700 6900 7100 7200] do ($v _= [$t [$p 500. 100 0] 0]; $t += 500.); 'roll' [$v 0]
 ```
 
-**Serial row:**
-```bell
-$row := [0 2 4 5 7 9 11 1 3 6 8 10];
-$t := 0.; $voice := null;
-for $pc in $row do
-    $voice = $voice , [$t [($pc * 100 + 6000) 400. 100 0] 0];
-    $t = $t + 400.;
-end;
-"roll" [$voice 0]
+**16 random chromatic pitches:**
+```
+$v = 'null'; $t = 0.; for $i in 1...16 do ($p = round(random(6000, 7200) / 100) * 100; $v _= [$t [$p 250. 90 0] 0]; $t += 250.); 'roll' [$v 0]
 ```
 
-**Multi-voice:**
-```bell
-$v1 := null; $v2 := null; $t := 0.;
-for $p in [6700 6900 7100 6700] do
-    $v1 = $v1 , [$t [$p 500. 100 0] 0];
-    $t = $t + 500.;
-end;
-$v2 := [[0. [4800. 2000. 80 0] 0] 0];
-"roll" [$v1 0] $v2
+**Serial row (12 pitches):**
+```
+$row = [0 2 4 5 7 9 11 1 3 6 8 10]; $v = 'null'; $t = 0.; for $pc in $row do ($v _= [$t [($pc * 100 + 6000) 400. 100 0] 0]; $t += 400.); 'roll' [$v 0]
+```
+
+**Two voices:**
+```
+$v1 = 'null'; $v2 = 'null'; $t = 0.; for $p in [6700 6900 7100 6700] do ($v1 _= [$t [$p 500. 100 0] 0]; $t += 500.); $v2 _= [0. [4800. 2000. 80 0] 0]; 'roll' [$v1 0] [$v2 0]
+```
+
+**Fibonacci sequence as rhythm (8 terms):**
+```
+$fibo = 1 1; while length($fibo) < 8 do $fibo _= ($fibo:-1 + $fibo:-2); $v = 'null'; $t = 0.; for $dur in $fibo do ($v _= [$t [6000. ($dur * 200.) 100 0] 0]; $t += $dur * 200.); 'roll' [$v 0]
 ```
 
 ### Slots in bell
-Same syntax as raw llll — embed directly in the note list:
-```bell
-$note := [$p 500. 100 [slots [22 staccato] [20 f]] 0];
+Embed slot llll directly inside the note — same syntax as raw llll:
 ```
+$v _= [$t [$p 500. 100 [slots [22 staccato] [20 f]] 0] 0]
+```
+
+---
 
 ⚠️ Bell runs inside Max — syntax errors are silent from the MCP side.
 After sending, always `dump(mode="body")` to confirm the score was generated correctly.
