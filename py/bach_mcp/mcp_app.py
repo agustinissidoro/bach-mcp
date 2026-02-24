@@ -196,7 +196,7 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
     def send_bell_to_eval(bell_code: str) -> Dict[str, Any]:
         """Send a bell-language program to bach.eval in the Max patch.
 
-        ⚠️  USE ONLY when the user explicitly asks for bell code, or when you
+        USE ONLY when the user explicitly asks for bell code, or when you
         are suggesting the generative approach and the user agrees.
         For all other score writing, use send_score_to_max() instead.
 
@@ -242,7 +242,7 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
     def send_process_message_to_max(message: str) -> str:
         """ESCAPE HATCH — send a raw command to Max/MSP that has no dedicated tool.
 
-        ⚠️  Only use this when NO dedicated tool exists for the command.
+        Only use this when NO dedicated tool exists for the command.
         Every common bach.roll command (play, stop, clefs, bgcolor, numvoices,
         sel, dump, addchord, etc.) has its own tool — use those instead.
         This tool exists solely for undocumented or rarely-used Max messages.
@@ -2180,37 +2180,45 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         subsequent steps are still attempted so you get a full picture of what
         succeeded and what did not.
         """
+        import time as _time_local
+
         results: Dict[str, Any] = {}
 
+        _STEP_DELAY = 0.05  # seconds between each message
+
+        def _send_sequential(key: str, command: str) -> None:
+            results[key] = _send_max_message(command)
+            _time_local.sleep(_STEP_DELAY)
+
         # 1. Clear all content
-        results["clear"] = _send_max_message("clear")
+        _send_sequential("clear", "clear")
 
         # 2. Single voice
-        results["numvoices"] = _send_max_message("numvoices 1")
+        _send_sequential("numvoices", "numvoices 1")
 
         # 3. Treble clef
-        results["clefs"] = _send_max_message("clefs G")
+        _send_sequential("clefs", "clefs G")
 
         # 4. Standard 5-line staff
-        results["stafflines"] = _send_max_message("stafflines 5")
+        _send_sequential("stafflines", "stafflines 5")
 
         # 5. One part (voice 1 alone on its staff)
-        results["numparts"] = _send_max_message("numparts 1")
+        _send_sequential("numparts", "numparts 1")
 
         # 6. White background
-        results["bgcolor"] = _send_max_message("bgcolor 1.0 1.0 1.0 1.0")
+        _send_sequential("bgcolor", "bgcolor 1.0 1.0 1.0 1.0")
 
         # 7. Black notes
-        results["notecolor"] = _send_max_message("notecolor 0.0 0.0 0.0 1.0")
+        _send_sequential("notecolor", "notecolor 0.0 0.0 0.0 1.0")
 
         # 8. Black staff lines
-        results["staffcolor"] = _send_max_message("staffcolor 0.0 0.0 0.0 1.0")
+        _send_sequential("staffcolor", "staffcolor 0.0 0.0 0.0 1.0")
 
         # 9. No voice name label
-        results["voicenames"] = _send_max_message("voicenames")
+        _send_sequential("voicenames", "voicenames")
 
         # 10. Default 10-second visible domain
-        results["domain"] = _send_max_message("domain 10000.0")
+        _send_sequential("domain", "domain 10000.0")
 
         all_ok = all(
             (v.get("ok", False) if isinstance(v, dict) else bool(v))
