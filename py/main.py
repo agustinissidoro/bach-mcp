@@ -21,7 +21,7 @@ def main() -> None:
     def bach_skill() -> str:
         """Bach MCP skill — session protocol, llll syntax, slots, orchestral layout."""
         try:
-            with open(_SKILL_PATH) as f:
+            with open(_SKILL_PATH, encoding="utf-8") as f:
                 return f.read()
         except FileNotFoundError:
             return f"[BACH_SKILL.md not found at {_SKILL_PATH}]"

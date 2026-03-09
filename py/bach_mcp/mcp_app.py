@@ -192,51 +192,52 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         success = bach.send_score(score_llll)
         return "Sent llll score to Max" if success else "Failed to send llll score"
 
-    @mcp.tool()
-    def send_bell_to_eval(bell_code: str) -> Dict[str, Any]:
-        """Send a bell-language program to bach.eval in the Max patch.
-
-        ⚠️  USE ONLY when the user explicitly asks for bell code, or when you
-        are suggesting the generative approach and the user agrees.
-        For all other score writing, use send_score_to_max() instead.
-
-        The message is prefixed with "bell" so the patch can route it correctly
-        to the bach.eval object, distinguishing it from regular roll llll messages.
-
-        FLAT STRING REQUIREMENT: bell code must be a single flat string — no newlines,
-        no indentation. Statements separated by ";". Multi-statement loop bodies
-        wrapped in "( )". This is a Max messaging constraint.
-
-        bell is a Turing-complete language that runs inside Max and computes
-        an llll at runtime — useful for loops, randomness, serial operations,
-        and any algorithmically generated material.
-
-        The last expression in the program is its output. For score generation
-        it must evaluate to a valid roll llll, with 'roll' as a single-quoted symbol.
-
-        Key syntax rules (see BACH_SKILL.md for full reference):
-        - Variables: $name, assigned with = only
-        - Symbols: single quotes only — 'roll', 'null', 'foo'
-        - Loop: for $x in <llll> do (...) or for $i in 1...N do (...)
-        - Append-assign: $v _= item
-        - Sequence: statement1; statement2
-
-        Example — C-major scale:
-            $v = 'null'; $t = 0.; for $p in [6000 6200 6400 6500 6700 6900 7100 7200] do ($v _= [$t [$p 500. 100 0] 0]; $t += 500.); 'roll' [$v 0]
-
-        Example — 16 random chromatic pitches:
-            $v = 'null'; $t = 0.; for $i in 1...16 do ($p = round(random(6000, 7200) / 100) * 100; $v _= [$t [$p 250. 90 0] 0]; $t += 250.); 'roll' [$v 0]
-
-        Returns: ok, sent_code.
-        """
-        bell_code = bell_code.strip()
-        if not bell_code:
-            return {"ok": False, "message": "Rejected empty bell code"}
-        message = f"bell {bell_code}"
-        success = bach.send_info(message)
-        if not success:
-            return {"ok": False, "message": "Failed to send bell code to Max"}
-        return {"ok": True, "sent_code": bell_code}
+    # TEMPORARILY DISABLED — bach.eval / bell language
+    # @mcp.tool()
+    # def send_bell_to_eval(bell_code: str) -> Dict[str, Any]:
+    #     """Send a bell-language program to bach.eval in the Max patch.
+    #
+    #     ⚠️  USE ONLY when the user explicitly asks for bell code, or when you
+    #     are suggesting the generative approach and the user agrees.
+    #     For all other score writing, use send_score_to_max() instead.
+    #
+    #     The message is prefixed with "bell" so the patch can route it correctly
+    #     to the bach.eval object, distinguishing it from regular roll llll messages.
+    #
+    #     FLAT STRING REQUIREMENT: bell code must be a single flat string — no newlines,
+    #     no indentation. Statements separated by ";". Multi-statement loop bodies
+    #     wrapped in "( )". This is a Max messaging constraint.
+    #
+    #     bell is a Turing-complete language that runs inside Max and computes
+    #     an llll at runtime — useful for loops, randomness, serial operations,
+    #     and any algorithmically generated material.
+    #
+    #     The last expression in the program is its output. For score generation
+    #     it must evaluate to a valid roll llll, with 'roll' as a single-quoted symbol.
+    #
+    #     Key syntax rules (see BACH_SKILL.md for full reference):
+    #     - Variables: $name, assigned with = only
+    #     - Symbols: single quotes only — 'roll', 'null', 'foo'
+    #     - Loop: for $x in <llll> do (...) or for $i in 1...N do (...)
+    #     - Append-assign: $v _= item
+    #     - Sequence: statement1; statement2
+    #
+    #     Example — C-major scale:
+    #         $v = 'null'; $t = 0.; for $p in [6000 6200 6400 6500 6700 6900 7100 7200] do ($v _= [$t [$p 500. 100 0] 0]; $t += 500.); 'roll' [$v 0]
+    #
+    #     Example — 16 random chromatic pitches:
+    #         $v = 'null'; $t = 0.; for $i in 1...16 do ($p = round(random(6000, 7200) / 100) * 100; $v _= [$t [$p 250. 90 0] 0]; $t += 250.); 'roll' [$v 0]
+    #
+    #     Returns: ok, sent_code.
+    #     """
+    #     bell_code = bell_code.strip()
+    #     if not bell_code:
+    #         return {"ok": False, "message": "Rejected empty bell code"}
+    #     message = f"bell {bell_code}"
+    #     success = bach.send_info(message)
+    #     if not success:
+    #         return {"ok": False, "message": "Failed to send bell code to Max"}
+    #     return {"ok": True, "sent_code": bell_code}
 
     @mcp.tool()
     def send_process_message_to_max(message: str) -> str:

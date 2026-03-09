@@ -13,7 +13,7 @@ from bach_mcp.ollama_utils import ensure_ollama_running, select_model
 _SKILL_PATH = os.path.join(os.path.dirname(__file__), "bach_mcp", "BACH_SKILL.md")
 
 try:
-    with open(_SKILL_PATH) as _f:
+    with open(_SKILL_PATH, encoding="utf-8") as _f:
         _SYSTEM_PROMPT = _f.read()
 except FileNotFoundError:
     raise RuntimeError(

@@ -15,7 +15,7 @@ Skip only when the user has just told you the exact state.
 
 - Notes/chords/voices → `dump(mode="body")`
 - Clefs/voicenames → `dump(mode="header")`
-- ⚠️ Never invent score contents. If dump times out, say so and retry.
+- Never invent score contents. If dump times out, say so and retry.
 
 ---
 
@@ -34,7 +34,7 @@ SCORE  roll [VOICE1] [VOICE2] ...
 - `flag`: 0=normal 1=locked 2=muted 4=solo. Usually 0, may be omitted.
 - `specs`: optional, between velocity and flag — `[breakpoints...]` `[slots...]` `[name...]`
 
-⚠️ Voices are SEPARATE top-level lllls — never nest them in an extra bracket.
+Voices are SEPARATE top-level lllls — never nest them in an extra bracket.
 ```
 RIGHT: roll [VOICE1] [VOICE2]
 WRONG: roll [ [VOICE1] [VOICE2] ]
@@ -119,12 +119,13 @@ Multi-staff: `FG` = grand staff (1 voice, 2 staves). `FFGG` = choir (1 voice, 4 
 Piano: `clefs("FG") numvoices(1) numparts("1")` — one voice, grand staff.
 Two independent hands: `clefs("G F") numvoices(2) numparts("2")`
 
-⚠️ Layout tools (`numvoices`, `clefs`, `numparts`, `stafflines`, `voicenames`) **delete content** if called on an existing score. Only call them when the user explicitly changes instrumentation or on a fresh score.
+Layout tools (`numvoices`, `clefs`, `numparts`, `stafflines`, `voicenames`) **delete content** if called on an existing score. Only call them when the user explicitly changes instrumentation or on a fresh score.
 - Read voice count → `getnumvoices()`
 - Read layout → `dump(mode="header")`
 
 ---
 
+<!-- TEMPORARILY DISABLED — bach.eval / bell language
 ## BELL CODE (bach.eval)
 
 Use `send_bell_to_eval()` **only when**:
@@ -138,7 +139,7 @@ separately from regular `roll` llll messages.
 
 ---
 
-### ⚠️ FLAT STRING — PARENTHESES ARE THE ONLY SCOPE MECHANISM
+### FLAT STRING — PARENTHESES ARE THE ONLY SCOPE MECHANISM
 
 Bell has **no indentation, no blocks, no `end` keyword**. Hierarchy and scope are expressed exclusively through `( )`.
 
@@ -219,7 +220,7 @@ if <cond> then <expr> else if <cond> then <expr> else <expr>
 ```
 
 Truthiness: `null` and `0` are false; everything else is true.
-⚠️ Use parens with nested ifs to avoid dangling-else ambiguity.
+  Use parens with nested ifs to avoid dangling-else ambiguity.
 
 ---
 
@@ -326,10 +327,11 @@ $v _= [$t [$p 500. 100 [slots [22 staccato] [20 f]] 0] 0]
 
 ---
 
-⚠️ Bell runs inside Max — syntax errors are silent from the MCP side.
+Bell runs inside Max — syntax errors are silent from the MCP side.
 After sending, always `dump(mode="body")` to confirm the score was generated correctly.
 
 ---
+END DISABLED SECTION -->
 
 ## SCORE WRITING
 
