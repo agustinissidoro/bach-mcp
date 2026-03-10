@@ -782,24 +782,6 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         return _send_max_message(f"deletevoice {int(voice_number)}")
 
     @mcp.tool()
-    def explodechords(selection: bool = False) -> Dict[str, Any]:
-        """Explode polyphonic chords into overlapping single-note chords in bach.roll.
-
-        A polyphonic chord (multiple notes at the same onset) is split into
-        multiple single-note chords at the same time position, each containing
-        one note. This is useful for separating voices within a chord.
-
-        - selection=False: explodes all chords in the score
-        - selection=True:  explodes only currently selected chords
-
-        Examples (exact string sent to Max):
-        - explodechords()               -> "explodechords" (all chords)
-        - explodechords(selection=True) -> "explodechords selection" (selected only)
-        """
-        command = "explodechords selection" if selection else "explodechords"
-        return _send_max_message(command)
-
-    @mcp.tool()
     def exportmidi(
         filename: str = "",
         exportmarkers: int = 1,
@@ -1478,74 +1460,6 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         return _send_max_message(" ".join(parts))
 
     @mcp.tool()
-    def merge(
-        threshold_ms: float = -1.0,
-        threshold_cents: float = -1.0,
-        selection: bool = False,
-        time_policy_set: bool = False,
-        time_policy: int = 0,
-        pitch_policy_set: bool = False,
-        pitch_policy: int = 0,
-    ) -> Dict[str, Any]:
-        """Merge chords too close in time and/or notes too close in pitch in bach.roll.
-
-        Two separate operations can be performed independently or together:
-        1. TIME merging: chords within threshold_ms are merged into one chord
-        2. PITCH merging: notes within threshold_cents are merged into one note
-
-        Set either threshold to -1 to skip that merging direction.
-
-        Parameters:
-        - threshold_ms: time threshold in milliseconds. Chords closer than this
-                        are merged. Set to -1 to skip time merging.
-
-        - threshold_cents: pitch threshold in cents. Notes closer in pitch than
-                           this are merged. Set to -1 to skip pitch merging.
-
-        - selection: if True, only merge currently selected elements.
-                     if False, apply to the whole score (default).
-
-        - time_policy_set: set to True to include time_policy in the command.
-        - time_policy: how to align the merged chord in time:
-            - -1 = align to the leftmost (earliest) chord
-            -  0 = align to the average onset (default)
-            -  1 = align to the rightmost (latest) chord
-
-        - pitch_policy_set: set to True to include pitch_policy in the command.
-        - pitch_policy: how to set pitch/velocity of merged note:
-            - -1 = use the bottommost pitch/velocity
-            -  0 = use the average pitch/velocity (default)
-            -  1 = use the topmost pitch/velocity
-
-        Note: merging also applies to markers. To avoid affecting markers,
-        select only chords first and use selection=True.
-
-        Examples (exact string sent to Max):
-        - merge(threshold_ms=200, threshold_cents=10)
-          -> "merge 200.0 10.0"
-        - merge(threshold_ms=200, threshold_cents=-1)
-          -> "merge 200.0 -1.0" (time merging only)
-        - merge(threshold_ms=-1, threshold_cents=10)
-          -> "merge -1.0 10.0" (pitch merging only)
-        - merge(selection=True, threshold_ms=200, threshold_cents=10)
-          -> "merge selection 200.0 10.0"
-        - merge(threshold_ms=200, threshold_cents=10,
-                time_policy_set=True, time_policy=-1,
-                pitch_policy_set=True, pitch_policy=1)
-          -> "merge 200.0 10.0 -1 1"
-        """
-        parts = ["merge"]
-        if selection:
-            parts.append("selection")
-        parts.append(str(float(threshold_ms)))
-        parts.append(str(float(threshold_cents)))
-        if time_policy_set:
-            parts.append(str(int(time_policy)))
-        if pitch_policy_set:
-            parts.append(str(int(pitch_policy)))
-        return _send_max_message(" ".join(parts))
-
-    @mcp.tool()
     def subroll(
         voices: str = "[]",
         time_lapse: str = "[]",
@@ -1604,47 +1518,6 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
             parts.append(selective_options.strip())
         command = " ".join(parts)
         return _request_max_and_wait(command, timeout_seconds=timeout_seconds)
-
-    @mcp.tool()
-    def tail(expression: str) -> Dict[str, Any]:
-        """Set or modify the tail position (end point) of selected notes in bach.roll.
-
-        The tail is the end position of a note in milliseconds. Always operates
-        on the current selection — use sel() to select notes first.
-
-        The expression can be:
-
-        SIMPLE VALUE:
-        A number sets the absolute tail position in milliseconds.
-        - tail("1000")        set tail at 1000ms
-        - tail("= 1000")      same (explicit assignment)
-        - tail("= 30000")     make all selected notes end together at 30s
-
-        RELATIVE MODIFICATION via llll [value function]:
-        function is one of: plus, minus, times, div
-        - tail("= [tail plus 1000]")    lengthen all notes by 1s
-        - tail("= [tail minus 500]")    shorten all notes by 500ms
-        - tail("= [duration times 2]")  double the duration of all notes
-
-        EQUATION using symbolic variables (preceded by "= "):
-        Available variables: onset, duration, velocity, cents, tail, voice, part,
-        numnotes, numchords, index, chordindex, noteindex
-        - tail("= onset + random[0, 1000]")   random duration up to 1s after onset
-        - tail("= onset + duration * 2")      double each note's duration
-
-        LIST OF VALUES (one per note in chord, bottom to top):
-        - tail("1000 2000 3000")   different tails per note
-
-        Examples (exact string sent to Max):
-        - tail("1000")                         -> "tail 1000"
-        - tail("= 1000")                       -> "tail = 1000"
-        - tail("= tail + 1000")                -> "tail = tail + 1000"
-        - tail("= onset + random[0, 1000]")    -> "tail = onset + random[0, 1000]"
-        """
-        expression = expression.strip()
-        if not expression:
-            return {"ok": False, "message": "expression cannot be empty"}
-        return _send_max_message(f"tail {expression}")
 
     @mcp.tool()
     def write(filename: str = "") -> Dict[str, Any]:
@@ -1985,28 +1858,6 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         return _send_max_message(" ".join(parts))
 
     @mcp.tool()
-    def copyslot(slot_from: str, slot_to: str) -> Dict[str, Any]:
-        """Copy the content of one slot to another for all selected notes in bach.roll.
-
-        Always operates on the current selection. Use sel() to select notes first.
-
-        Parameters:
-        - slot_from: source slot — number (e.g. "2"), name (e.g. "amplienv"),
-                     or "active" for the currently open slot.
-        - slot_to:   destination slot — number, name, or "active".
-
-        Examples (exact string sent to Max):
-        - copyslot("2", "7")            -> "copyslot 2 7"
-        - copyslot("2", "active")       -> "copyslot 2 active"
-        - copyslot("amplienv", "myfunction") -> "copyslot amplienv myfunction"
-        """
-        slot_from = slot_from.strip()
-        slot_to = slot_to.strip()
-        if not slot_from or not slot_to:
-            return {"ok": False, "message": "slot_from and slot_to cannot be empty"}
-        return _send_max_message(f"copyslot {slot_from} {slot_to}")
-
-    @mcp.tool()
     def delete(
         transferslots: str = "",
         empty: bool = False,
@@ -2098,47 +1949,6 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         - distribute() -> "distribute"
         """
         return _send_max_message("distribute")
-
-    @mcp.tool()
-    def domain(
-        start_or_duration_ms: float,
-        end_ms: float = float("nan"),
-        pad_pixels: float = float("nan"),
-    ) -> Dict[str, Any]:
-        """Set the displayed domain (visible time range) of bach.roll.
-
-        Controls what portion of the score is visible by adjusting zoom
-        and scrollbar position.
-
-        Parameters:
-        - start_or_duration_ms: if end_ms is not given, this is the total duration
-                                 of the domain in milliseconds (zoom to fit N ms).
-                                 If end_ms is given, this is the start of the
-                                 visible range in milliseconds.
-
-        - end_ms: end of the visible range in milliseconds.
-                  Leave as nan to use start_or_duration_ms as total duration.
-
-        - pad_pixels: ending pad in pixels (scaled with vzoom).
-                      Positive = end point is that many pixels before the edge.
-                      Negative = end point is past the edge.
-                      Leave as nan for no padding.
-
-        Examples (exact string sent to Max):
-        - domain(4000)                      -> "domain 4000.0"
-          (zoom so that 4 seconds are visible)
-        - domain(2000, 3000)                -> "domain 2000.0 3000.0"
-          (display from 2s to 3s)
-        - domain(2000, 3000, 10)            -> "domain 2000.0 3000.0 10.0"
-          (display from 2s to 3s, with 10px ending pad)
-        """
-        import math
-        parts = ["domain", str(float(start_or_duration_ms))]
-        if not math.isnan(end_ms):
-            parts.append(str(float(end_ms)))
-        if not math.isnan(pad_pixels):
-            parts.append(str(float(pad_pixels)))
-        return _send_max_message(" ".join(parts))
 
     @mcp.tool()
     def clear() -> Dict[str, Any]:
