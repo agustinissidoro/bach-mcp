@@ -138,8 +138,8 @@ CORE_TOOLS: List[Dict[str, Any]] = [
         "Alto Tenor Soprano Mezzo Barytone Percussion None "
         "FG FFG FGG FFGG (multi-staff: ONE voice, multiple staves). "
         "WRONG: perc alto G8vb — use exact symbols as listed.",
-        {"clefs_list": _s("e.g. 'G'  or  'G F'  or  'FG'  or  'Percussion'  or  'FFGG'")},
-        ["clefs_list"]),
+        {"value": _s("e.g. 'G'  or  'G F'  or  'FG'  or  'Percussion'  or  'FFGG'")},
+        ["value"]),
 
     # ── Selection → edit ───────────────────────────────────────────────── #
 
@@ -173,63 +173,40 @@ CORE_TOOLS: List[Dict[str, Any]] = [
 
 # ══════════════════════════════════════════════════════════════════════════
 # EXTENDED TOOLS  (added on top of CORE when extended=True)
-# Slots, markers, export, appearance, voice management, dynamics, etc.
-# Recommended for 32 B+ models.
+# Layout, markers, save, memory. Recommended for 14 B+ models.
+# Kept intentionally small — every tool costs context tokens every request.
 # ══════════════════════════════════════════════════════════════════════════
 
 EXTENDED_TOOLS: List[Dict[str, Any]] = [
 
-    # ── More score queries ─────────────────────────────────────────────── #
+    # ── Voice count query ──────────────────────────────────────────────── #
 
-    _tool("subroll",
-        "Extract a time/voice slice of the score as llll (read-only).",
-        {
-            "voices":            _s("Voice list e.g. '[1 2]', '[]'=all"),
-            "time_lapse":        _s("Time range e.g. '[1000 3000]', '[]'=all"),
-            "selective_options": _s("e.g. '[body]' or '[clefs markers body]'"),
-            "onset_only":        _b("Only notes whose onset is inside range"),
-            "timeout_seconds":   _n("Max wait (default 15)"),
-        },
-        []),
+    _tool("getnumvoices", "Return current voice count.",
+        {"timeout_seconds": _n("Default 10")}, []),
 
-    _tool("getnumvoices",    "Return voice count.",                     {"timeout_seconds": _n("Default 15")}, []),
-    _tool("getnumchords",    "Return chord count per voice.",           {"timeout_seconds": _n("Default 15")}, []),
-    _tool("getnumnotes",     "Return note count per chord per voice.",  {"timeout_seconds": _n("Default 15")}, []),
-    _tool("get_length",      "Return total score duration in ms.",      {"timeout_seconds": _n("Default 10")}, []),
-    _tool("getcurrentchord", "Return pitches/velocities at cursor.",    {"timeout_seconds": _n("Default 10")}, []),
-
-    _tool("get_marker",
-        "Query markers by name. Empty names returns all.",
-        {
-            "names":           _s("Space-separated names to look up (empty=all)"),
-            "name_first":      _b("Output name before position"),
-            "timeout_seconds": _n("Default 10"),
-        },
-        []),
-
-    # ── Voice management ───────────────────────────────────────────────── #
+    # ── Layout ─────────────────────────────────────────────────────────── #
 
     _tool("numparts",
-        "Group voices into ensemble staves. Ints must sum to voice count. "
-        "'1 1'=separate staves. '2'=two voices share one grand staff.",
-        {"parts": _s("e.g. '1'  '1 1'  '2 2'  '3'")},
+        "Group voices into bracket groups. Ints must sum to numvoices. "
+        "'1 1'=separate. '2'=two voices share one grand staff.",
+        {"parts": _s("e.g. '1'  '1 1'  '2 2 1'")},
         ["parts"]),
 
     _tool("stafflines",
         "Set staff line count per voice. 5=standard, 1=single-line, 0=invisible.",
-        {"value": _s("e.g. '5'  or  '1 5 5'")},
+        {"value": _s("e.g. '5'  or  '5 5 1'")},
         ["value"]),
 
     _tool("voicenames",
-        "Set voice name labels shown on the score. Space-separate; use [] to skip a voice.",
-        {"value": _s("e.g. 'Violin'  or  'Violin Cello'  or  '[RH LH] Bass'")},
+        "Set voice name labels. Space-separate; use [] to skip a voice.",
+        {"value": _s("e.g. 'Violin Cello'  or  '[RH LH] Bass'")},
         ["value"]),
 
     _tool("insertvoice",
         "Insert a new empty voice at position (1-indexed).",
         {
             "voice_number": _i("Insertion position"),
-            "voice_or_ref": _s("Empty=blank, int=copy props from that voice, or llll content"),
+            "voice_or_ref": _s("Empty=blank, int=copy props from that voice"),
         },
         ["voice_number"]),
 
@@ -238,73 +215,6 @@ EXTENDED_TOOLS: List[Dict[str, Any]] = [
         {"voice_number": _i("1-indexed voice to delete")},
         ["voice_number"]),
 
-    # ── Appearance ─────────────────────────────────────────────────────── #
-
-    _tool("domain",
-        "Set the visible time window. "
-        "One arg = total duration in ms. Two args = start + end ms.",
-        {
-            "start_or_duration_ms": _n("Total duration OR range start"),
-            "end_ms":               _n("Range end (omit for duration mode)"),
-            "pad_pixels":           _n("Ending pad in pixels"),
-        },
-        ["start_or_duration_ms"]),
-
-    _tool("set_appearance",
-        "Set a display attribute by name. "
-        "Common names: ruler zoom vzoom showmarkers showdurations showvelocity "
-        "showgroups selectioncolor voicespacing showaccidentalspreferences.",
-        {
-            "attribute": _s("Attribute name e.g. 'zoom'"),
-            "value":     _s("Value e.g. '150'  or  '0.8 0. 0.8 1.'"),
-        },
-        ["attribute", "value"]),
-
-    # ── Selection extras ───────────────────────────────────────────────── #
-
-    _tool("clearselection", "Deselect everything.", {}, []),
-
-    # ── Note editing ───────────────────────────────────────────────────── #
-
-    _tool("tail",
-        "Set or modify note end positions for selected notes. "
-        "Expressions: '1000'  '= tail + 500'  '= onset + duration * 2'.",
-        {"expression": _s("Value or equation")},
-        ["expression"]),
-
-    _tool("legato",
-        "Make selected notes legato (extend each note to the next onset).",
-        {"trim_or_extend": _s("'' (full legato) | 'trim' | 'extend'")},
-        []),
-
-    _tool("glissando",
-        "Apply a glissando to selected notes.",
-        {
-            "trim_or_extend": _s("'' | 'trim' | 'extend'"),
-            "slope":          _n("Curve slope: -1 to 1 (0 = straight)"),
-        },
-        []),
-
-    _tool("distribute",
-        "Evenly redistribute the onsets of selected items between first and last.",
-        {}, []),
-
-    _tool("explodechords",
-        "Split polyphonic chords into single-note chords.",
-        {"selection": _b("True = selected only")},
-        []),
-
-    _tool("merge",
-        "Merge nearby chords/notes. Pass -1 to skip a dimension.",
-        {
-            "threshold_ms":    _n("Time threshold in ms (-1=skip)"),
-            "threshold_cents": _n("Pitch threshold in cents (-1=skip)"),
-            "selection":       _b("Selected only"),
-            "time_policy":     _i("-1=leftmost  0=average  1=rightmost"),
-            "pitch_policy":    _i("-1=bottom  0=average  1=top"),
-        },
-        ["threshold_ms", "threshold_cents"]),
-
     # ── Markers ────────────────────────────────────────────────────────── #
 
     _tool("addmarker",
@@ -312,85 +222,21 @@ EXTENDED_TOOLS: List[Dict[str, Any]] = [
         {
             "position":      _s("Time in ms, 'cursor', or 'end'"),
             "name_or_names": _s("Marker name e.g. 'intro'"),
-            "role":          _s("Optional role string"),
-            "content":       _s("Optional llll content"),
         },
         ["position", "name_or_names"]),
 
     _tool("deletemarker",
-        "Delete the first marker that matches the given name.",
+        "Delete the first marker matching the given name.",
         {"marker_names": _s("Name to match")},
         ["marker_names"]),
 
-    # ── Slots ──────────────────────────────────────────────────────────── #
+    # ── Save ───────────────────────────────────────────────────────────── #
 
-    _tool("define_slot",
-        "Configure a slot. Defaults: 20=dynamics 22=articulations 23=notehead. "
-        "Types: function int float text articulations notehead dynamics color spat etc.",
-        {
-            "slot_number":    _i("Slot index (1+)"),
-            "type":           _s("Slot type"),
-            "name":           _s("Display name"),
-            "key":            _s("Hotkey character"),
-            "range_min":      _n("Y-axis minimum"),
-            "range_max":      _n("Y-axis maximum"),
-            "representation": _s("Unit label e.g. 'Hz'"),
-            "slope":          _n("0=linear  0.5=log-like"),
-            "width":          _s("Pixels or 'temporal'"),
-            "default":        _s("Default value"),
-        },
-        ["slot_number"]),
-
-    _tool("copyslot",
-        "Copy slot content from one slot to another for selected notes.",
-        {
-            "slot_from": _s("Source: number, name, or 'active'"),
-            "slot_to":   _s("Destination: number, name, or 'active'"),
-        },
-        ["slot_from", "slot_to"]),
-
-    _tool("eraseslot",
-        "Clear slot data for selected notes. slot: number, name, 'active', or 'all'.",
-        {"slot": _s("Slot identifier")},
-        ["slot"]),
-
-    _tool("erasebreakpoints",
-        "Remove all pitch breakpoints (glissandi) from selected notes.",
-        {}, []),
-
-    _tool("deleteslotitem",
-        "Delete one item from a slot for selected notes.",
-        {
-            "slot":     _s("Slot number or name"),
-            "position": _s("Integer index or wrapped X e.g. '[0.7]'"),
-            "thresh":   _n("X-matching tolerance (omit for exact)"),
-        },
-        ["slot", "position"]),
-
-    # ── Dynamics ───────────────────────────────────────────────────────── #
-
-    _tool("dynamics2velocities",
-        "Convert slot 20 dynamics markings to MIDI velocities.",
-        {
-            "selection":      _b("Selected only"),
-            "mapping":        _s("Custom map e.g. '[pp 40] [p 55] [ff 115]'"),
-            "maxchars":       _i("Spectrum width (default 4 = pppp–ffff)"),
-            "exp":            _n("Curve exponent (1=linear, 0.8=default)"),
-            "breakpointmode": _i("0=keep  1=add (default)  2=clear+add"),
-        },
+    _tool("write",
+        "Save the score to disk in native llll format. "
+        "Leave filename empty to open a save dialog.",
+        {"filename": _s("e.g. 'score.llll' (empty = dialog)")},
         []),
-
-    _tool("velocities2dynamics",
-        "Infer dynamics from MIDI velocities and write to slot 20.",
-        {
-            "selection": _b("Selected only"),
-            "mapping":   _s("Custom map e.g. '[pp 20] [p 40] [ff 125]'"),
-            "maxchars":  _i("Spectrum width (default 4)"),
-            "exp":       _n("Curve exponent (default 0.8)"),
-        },
-        []),
-
-    # ── Export / save ──────────────────────────────────────────────────── #
 
     _tool("exportmidi",
         "Export the score as a MIDI file. Leave filename empty to open a dialog.",
@@ -402,61 +248,25 @@ EXTENDED_TOOLS: List[Dict[str, Any]] = [
         },
         []),
 
-    _tool("exportimage",
-        "Export the score as a PNG image. view: 'line' (default) 'raw' 'multiline' 'scroll'.",
-        {
-            "filename":    _s("e.g. '/tmp/score.png' (empty = dialog)"),
-            "view":        _s("'line' | 'raw' | 'multiline' | 'scroll'"),
-            "mspersystem": _n("System length in ms (multiline/scroll)"),
-            "dpi":         _i("DPI (default 72)"),
-        },
-        []),
-
-    _tool("write",
-        "SAVE the score to disk in native llll format. "
-        "Leave filename empty to open a save dialog. "
-        "NOT for clearing or erasing — use clear() for that.",
-        {"filename": _s("e.g. 'score.llll' (empty = dialog)")},
-        []),
-
-    _tool("writetxt",
-        "Save the score to disk as human-readable text. Leave filename empty for dialog.",
-        {
-            "filename":    _s("e.g. 'score.txt' (empty = dialog)"),
-            "maxdecimals": _i("Float precision (-1 = default 10)"),
-        },
-        []),
-
     # ── Memory ─────────────────────────────────────────────────────────── #
 
     _tool("project_memory_read",
-        "Read persistent memory for a project across sessions. "
-        "Call at session start when working on a known project. "
+        "Read persistent project memory across sessions. "
+        "Call at session start when working on a named project. "
         "Leave project empty to list all known projects.",
-        {"project": _s("Project name, or empty string to list all")},
+        {"project": _s("Project name, or empty to list all")},
         []),
 
     _tool("project_memory_write",
-        "Save intent, workflow, or notes for a project to persistent memory. "
-        "Merges with existing memory — only supplied fields are updated. "
-        "Call when the user states goals, changes approach, or you want to "
-        "record something that should survive session restarts.",
+        "Save intent, workflow, or notes for a project. "
+        "Merges — only supplied fields are updated.",
         {
             "project":  _s("Project name (required)"),
-            "intent":   _s("What this piece is trying to be — mood, form, concept"),
-            "workflow": _s("Current compositional approach or technique"),
-            "notes":    _s("Observations, decisions, voice roles, open questions"),
+            "intent":   _s("Mood, form, concept"),
+            "workflow": _s("Compositional approach"),
+            "notes":    _s("Voice roles, decisions, open questions"),
         },
         ["project"]),
-
-    # ── Score snapshot ─────────────────────────────────────────────────── #
-
-    _tool("score_snapshot",
-        "Export the current score as a PNG image for visual verification. "
-        "Use when running in circles, after many edits, or when something seems wrong. "
-        "Do NOT call after every edit — only when genuinely uncertain.",
-        {},
-        []),
 
 ]
 

@@ -1,8 +1,9 @@
 """
 ollama_bridge.py
 ----------------
-Connects Qwen2.5-14B (via Ollama) to Max/MSP through the same TCP bridge
-used by the Claude/MCP path.
+Connects Qwen3 / Qwen2.5 (via Ollama) to Max/MSP through the same TCP bridge
+used by the Claude/MCP path. Supports qwen3:8b (core tools), qwen3:14b and
+qwen3:32b (extended tools), and qwen2.5 variants as fallback.
 
 Usage
 -----
@@ -146,15 +147,42 @@ TOOL GUIDE
 "Clear / erase the score"       → clear()                  [not write, not delete]
 "Start fresh"                   → new_default_score()
 "What instruments / voices?"    → dump(mode="header")
-"Replace entire score"          → send_score_to_max(...)
+"Replace entire score"          → send_score_to_max(...)   [primary tool]
 "Add notes to existing score"   → addchord(...) or addchords(...)
 "Delete specific notes"         → sel("...") then delete()  [not clear]
 "Play"                          → play()
 "Stop"                          → send_process_message_to_max("stop")
-"Save / export"                 → send_process_message_to_max("write") or exportmidi(...)
-"Set clef / voices"             → send_process_message_to_max("clefs G F") or numvoices(n)
+"Save / export"                 → write() or exportmidi(...)
+"Set clef / voices"             → clefs("G F") or numvoices(n)
 
 When no dedicated tool fits, send_process_message_to_max("command") handles anything else.
+
+Layout tools (numvoices, clefs, numparts, stafflines, voicenames) DELETE content if called
+on an existing score. Only call them when the user explicitly changes instrumentation or on
+a fresh score.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROJECT MEMORY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Call project_memory_read("project_name") at the start of any session where the user mentions
+a project by name. It returns intent, workflow, notes, and voice roles from previous sessions.
+Leave the name empty to list all known projects.
+
+Call project_memory_write(...) when:
+- The user states what they want the piece to feel or be
+- The approach or technique changes
+- You learn something worth remembering (voice assignments, structural decisions, constraints)
+
+Only write fields that are actually new or changed. Fields not supplied are preserved.
+
+  project_memory_read("")                 # list all known projects
+  project_memory_read("symphony_no1")     # read one project
+  project_memory_write(
+      project="symphony_no1",
+      intent="brooding, late-romantic, through-composed",
+      workflow="building by voice — strings first, then winds layered in",
+      notes="voice 1=violin I, voice 2=violin II, voice 3=viola, voice 4=cello"
+  )
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ORCHESTRAL LAYOUT REFERENCE
@@ -329,15 +357,23 @@ class ToolExecutor:
         if name == "addchord":
             voice  = int(args.get("voice", 1))
             select = args.get("select", False)
-            onset  = float(args["onset_ms"])
-            notes  = args["notes"]
-            chord_llll = _build_chord_llll(onset, notes)
-            parts = ["addchord"]
+            chord  = args["chord_llll"]
+            parts  = ["addchord"]
             if voice != 1:
                 parts.append(str(voice))
-            parts.append(chord_llll)
+            parts.append(chord)
             if select:
                 parts.append("@sel 1")
+            ok = self._bach.send_info(" ".join(parts))
+            return json.dumps({"ok": ok, "sent": " ".join(parts)})
+
+        if name == "addchords":
+            chords = args["chords_llll"]
+            parts  = ["addchords"]
+            offset = args.get("offset_ms")
+            if offset is not None:
+                parts.append(f"@offset {float(offset)}")
+            parts.append(chords)
             ok = self._bach.send_info(" ".join(parts))
             return json.dumps({"ok": ok, "sent": " ".join(parts)})
 
@@ -443,34 +479,40 @@ class ToolExecutor:
             return json.dumps({"ok": ok})
 
         # ── Score structure ────────────────────────────────────────────── #
+        def _get(a, *keys, default=""):
+            for k in keys:
+                if k in a and a[k] is not None:
+                    return str(a[k])
+            return default
+
         _simple_msg = {
-            "numvoices":    lambda a: f"numvoices {int(a['count'])}",
-            "clefs":        lambda a: f"clefs {a['clefs_list'].strip()}",
-            "numparts":     lambda a: f"numparts {a['parts'].strip()}",
-            "stafflines":   lambda a: f"stafflines {a['value'].strip()}",
-            "voicenames":   lambda a: f"voicenames {a['value'].strip()}",
-            "deletevoice":  lambda a: f"deletevoice {int(a['voice_number'])}",
+            "numvoices":    lambda a: f"numvoices {int(_get(a, 'count', 'num_voices', 'voices', default='1'))}",
+            "clefs":        lambda a: f"clefs {_get(a, 'value', 'clefs_list', 'clefs').strip()}",
+            "numparts":     lambda a: f"numparts {_get(a, 'parts', 'value').strip()}",
+            "stafflines":   lambda a: f"stafflines {_get(a, 'value', 'lines').strip()}",
+            "voicenames":   lambda a: f"voicenames {_get(a, 'value', 'names').strip()}",
+            "deletevoice":  lambda a: f"deletevoice {int(_get(a, 'voice_number', 'voice', default='1'))}",
             "clear":        lambda a: "clear",
             "distribute":   lambda a: "distribute",
             "clearselection": lambda a: "clearselection",
             "erasebreakpoints": lambda a: "erasebreakpoints",
-            "set_appearance": lambda a: f"{a['attribute'].strip()} {a['value'].strip()}",
-            "sel":          lambda a: f"sel {a['arguments'].strip()}",
+            "set_appearance": lambda a: f"{_get(a, 'attribute').strip()} {_get(a, 'value').strip()}",
+            "sel":          lambda a: f"sel {_get(a, 'arguments', 'expression', 'selection').strip()}",
             "delete":       lambda a: ("delete @transferslots " + a["transferslots"].strip() +
                                        (" @empty 1" if a.get("empty") else ""))
                                        if a.get("transferslots","").strip() else "delete",
-            "copyslot":     lambda a: f"copyslot {a['slot_from'].strip()} {a['slot_to'].strip()}",
-            "tail":         lambda a: f"tail {a['expression'].strip()}",
+            "copyslot":     lambda a: f"copyslot {_get(a, 'slot_from').strip()} {_get(a, 'slot_to').strip()}",
+            "tail":         lambda a: f"tail {_get(a, 'expression').strip()}",
             "legato":       lambda a: f"legato {a.get('trim_or_extend','').strip()}".strip(),
-            "eraseslot":    lambda a: f"eraseslot {a['slot'].strip()}",
+            "eraseslot":    lambda a: f"eraseslot {_get(a, 'slot').strip()}",
             "addmarker":    lambda a: " ".join(filter(None, [
                                 "addmarker",
                                 a.get("position","").strip(),
-                                a.get("name_or_names","").strip(),
+                                _get(a, "name_or_names", "name").strip(),
                                 a.get("role","").strip(),
                                 a.get("content","").strip(),
                             ])),
-            "deletemarker": lambda a: f"deletemarker {a['marker_names'].strip()}",
+            "deletemarker": lambda a: f"deletemarker {_get(a, 'marker_names', 'name').strip()}",
             "write":        lambda a: f"write {a.get('filename','').strip()}".strip(),
         }
         if name in _simple_msg:
@@ -917,8 +959,16 @@ def repl() -> None:
     ensure_ollama_running()
 
     model = select_model()
-    # Auto-enable extended tools for larger models (32B+)
-    extended = any(tag in model for tag in ("32b", "72b"))
+    # Tool tier selection:
+    #   qwen3:8b              → core  (~12 tools)
+    #   qwen3:14b / 32b       → extended (~40 tools)
+    #   qwen2.5:32b / 72b     → extended (~40 tools)
+    #   everything else       → core
+    model_lower = model.lower()
+    extended = (
+        ("qwen3" in model_lower and any(s in model_lower for s in ("14b", "32b")))
+        or ("qwen2.5" in model_lower and any(s in model_lower for s in ("32b", "72b")))
+    )
     config = BridgeConfig(model=model, extended_tools=extended)
 
     with OllamaBridge(config=config) as bridge:

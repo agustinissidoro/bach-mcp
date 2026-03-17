@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"from tool_registry import get_ollama_tools, get_tool_names; core=get_ollama_tools\\(False\\); ext=get_ollama_tools\\(True\\); print\\(f''Core: {len\\(core\\)} tools -> {get_tool_names\\(False\\)}''\\); print\\(f''Extended: {len\\(ext\\)} tools -> {get_tool_names\\(True\\)}''\\)\")",
+      "Bash(python -c \"from tool_registry import get_ollama_tools, get_tool_names; core=get_ollama_tools\\(False\\); ext=get_ollama_tools\\(True\\); print\\(''Core:'', len\\(core\\), ''->'', get_tool_names\\(False\\)\\); print\\(''Extended:'', len\\(ext\\), ''->'', get_tool_names\\(True\\)\\)\")"
+    ]
+  }
+}

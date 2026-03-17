@@ -27,6 +27,11 @@ import requests
 
 QWEN_MODELS: List[tuple[str, str]] = [
     # (ollama tag,                  human description)
+    # Qwen3 — latest generation (instruction-tuned by default)
+    ("qwen3:32b",                  "~20 GB  — Qwen3 large, excellent quality"),
+    ("qwen3:14b",                  "~9 GB   — Qwen3 recommended, great balance"),
+    ("qwen3:8b",                   "~5 GB   — Qwen3 good balance"),
+    # Qwen2.5 — previous generation
     ("qwen2.5:72b-instruct",       "~47 GB  — flagship, best quality"),
     ("qwen2.5:72b",                "~47 GB  — flagship base"),
     ("qwen2.5:32b-instruct",       "~20 GB  — large, excellent quality"),
@@ -41,6 +46,13 @@ QWEN_MODELS: List[tuple[str, str]] = [
     ("qwen2.5:1.5b",               "~1 GB   — 1.5B base"),
     ("qwen2.5:0.5b-instruct",      "~400 MB — ultra-light"),
     ("qwen2.5:0.5b",               "~400 MB — 0.5B base"),
+]
+
+# Qwen3 models offered in the pull menu (in preference order)
+QWEN3_PULL_MODELS: List[tuple[str, str]] = [
+    ("qwen3:32b",   "~20 GB  — large, excellent quality"),
+    ("qwen3:14b",   "~9 GB   — recommended, great balance"),
+    ("qwen3:8b",    "~5 GB   — good balance"),
 ]
 
 # Flat list of tags in preference order — used by BridgeConfig
@@ -196,13 +208,24 @@ def _choice_menu(installed: List[str], base_url: str) -> str:
 
 def _pull_menu(base_url: str) -> str:
     """Show an interactive menu to pull a Qwen model and return its tag."""
-    print("\nNo models installed. Choose a Qwen model to download:\n")
-    _print_model_table(QWEN_MODELS)
+    print("\nChoose a Qwen3 model to download (recommended):\n")
+    _print_model_table(QWEN3_PULL_MODELS)
+    print(f"\n  [a] Show all Qwen models (including Qwen2.5)")
 
     while True:
-        choice = input("\nEnter model number to download: ").strip()
-        if choice.isdigit() and 1 <= int(choice) <= len(QWEN_MODELS):
-            tag = QWEN_MODELS[int(choice) - 1][0]
+        choice = input("\nEnter model number to download, or [a] for all: ").strip().lower()
+        if choice == "a":
+            print("\nAll available Qwen models:\n")
+            _print_model_table(QWEN_MODELS)
+            while True:
+                choice2 = input("\nEnter model number to download: ").strip()
+                if choice2.isdigit() and 1 <= int(choice2) <= len(QWEN_MODELS):
+                    tag = QWEN_MODELS[int(choice2) - 1][0]
+                    pull_model(tag)
+                    return tag
+                print("  Invalid choice — try again.")
+        if choice.isdigit() and 1 <= int(choice) <= len(QWEN3_PULL_MODELS):
+            tag = QWEN3_PULL_MODELS[int(choice) - 1][0]
             pull_model(tag)
             return tag
         print("  Invalid choice — try again.")
