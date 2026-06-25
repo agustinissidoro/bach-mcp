@@ -4,5 +4,5 @@
 # FastMCP API used by py/bach_mcp/mcp_app.py
 mcp~=1.26.0
 
-# Ollama HTTP client used by py/bach_mcp/ollama_bridge.py
+# HTTP client used by the OpenAI-compatible provider (py/bach_mcp/llm/openai_compat.py)
 requests~=2.32.0
