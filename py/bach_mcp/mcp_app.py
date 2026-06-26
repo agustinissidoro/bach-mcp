@@ -5,16 +5,69 @@ breakpoints, and orchestral layout reference are all documented in BACH_SKILL.md
 Read that skill at the start of every session before taking any action.
 """
 
+import functools
+import logging
+import os
 from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
 
 from .server import BachMCPServer
 
+_tool_log = logging.getLogger("bach.tools")
+
+
+def _configure_tool_logging() -> None:
+    """Attach a human-readable handler to the bach.tools logger (once per process)."""
+    if getattr(_tool_log, "_bach_configured", False):
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%H:%M:%S"))
+    _tool_log.addHandler(handler)
+    _tool_log.setLevel(logging.INFO)
+    _tool_log.propagate = False  # don't double-print through uvicorn's root handlers
+    _tool_log._bach_configured = True  # type: ignore[attr-defined]
+
+
+def _truncate(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _format_call_args(kwargs: Dict[str, Any]) -> str:
+    """Render tool kwargs as a compact, readable `key=value` list."""
+    return ", ".join(f"{k}={_truncate(repr(v), 120)}" for k, v in kwargs.items())
+
 
 def create_mcp_app(bach: BachMCPServer) -> FastMCP:
     """Create and configure MCP tools/resources for bridge communication."""
-    mcp = FastMCP("max-bridge")
+    mcp = FastMCP("bach")
+
+    # Wrap mcp.tool so every registered tool logs its name, arguments, and result
+    # in a human-readable form. Toggle off with BACH_TOOL_LOG=0.
+    if os.getenv("BACH_TOOL_LOG", "1") != "0":
+        _configure_tool_logging()
+        _register_tool = mcp.tool
+
+        def _logging_tool(*d_args: Any, **d_kwargs: Any):
+            decorator = _register_tool(*d_args, **d_kwargs)
+
+            def wrap(fn):
+                @functools.wraps(fn)
+                def logged(*args: Any, **kwargs: Any):
+                    _tool_log.info("→ %s(%s)", fn.__name__, _format_call_args(kwargs))
+                    try:
+                        result = fn(*args, **kwargs)
+                    except Exception as exc:  # noqa: BLE001 — log then re-raise
+                        _tool_log.info("✗ %s raised %s: %s", fn.__name__, type(exc).__name__, exc)
+                        raise
+                    _tool_log.info("← %s  %s", fn.__name__, _truncate(repr(result), 200))
+                    return result
+
+                return decorator(logged)
+
+            return wrap
+
+        mcp.tool = _logging_tool  # type: ignore[method-assign]
 
     def _send_max_message(command: str) -> Dict[str, Any]:
         command = command.strip()

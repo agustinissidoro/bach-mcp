@@ -69,16 +69,36 @@ def run_serve(stdio: bool = False, host: str = "127.0.0.1", port: int = 8000) ->
             return f"[BACH_SKILL.md not found at {_SKILL_PATH}]"
 
     if stdio:
-        transport = "stdio"
-    else:
-        transport = "streamable-http"
-        mcp.settings.host = host
-        mcp.settings.port = port
-        url = f"http://{host}:{port}{mcp.settings.streamable_http_path}"
-        print(f"Bach MCP server (streamable HTTP) listening at {url}", flush=True)
+        try:
+            mcp.run(transport="stdio")
+        finally:
+            bach.stop()
+        return
+
+    # Streamable HTTP. Build the Starlette app ourselves so we can wrap it in
+    # CORS middleware: browser-based MCP clients (e.g. the llama.cpp web UI)
+    # make cross-origin fetches and are blocked without these headers, even
+    # though curl / Node / the MCP Inspector work fine (they don't enforce CORS).
+    # Mcp-Session-Id MUST be exposed so the browser can read the session id the
+    # streamable transport returns and complete the handshake.
+    import uvicorn
+    from starlette.middleware.cors import CORSMiddleware
+
+    mcp.settings.host = host
+    mcp.settings.port = port
+    app = mcp.streamable_http_app()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["Mcp-Session-Id"],
+    )
+    url = f"http://{host}:{port}{mcp.settings.streamable_http_path}"
+    print(f"Bach MCP server (streamable HTTP) listening at {url}", flush=True)
 
     try:
-        mcp.run(transport=transport)
+        uvicorn.run(app, host=host, port=port, log_level="info")
     finally:
         bach.stop()
 
