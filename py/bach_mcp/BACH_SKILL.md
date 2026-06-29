@@ -30,8 +30,8 @@ VOICE  [ CHORD  CHORD ...  flag ]
 SCORE  roll [VOICE1] [VOICE2] ...
 ```
 
-- `pitch_cents`: middle C = 6000, one semitone = 100. C4=4800 D5=6200 E5=6400 G5=6700 A5=6900
-- `flag`: 0=normal 1=locked 2=muted 4=solo. Usually 0, may be omitted.
+- `pitch_cents`: middle C = 6000, one semitone = 100. Middle C is C5 in bach. So C4=4800 D5=6200 E5=6400 G5=6700 A5=6900
+- `flag`: 0=normal 1=locked 2=muted 4=solo, combinable via sums. Usually 0, may be omitted.
 - `specs`: optional, between velocity and flag — `[breakpoints...]` `[slots...]` `[name...]`
 
 Voices are SEPARATE top-level lllls — never nest them in an extra bracket.
@@ -80,13 +80,16 @@ Multi-note cresc: note1 `[slots [20 p<]]` / note2 `[slots [20 f]]`
 
 ### Articulations (slot 22)
 Common: `staccato` `accent` `fermata` `trill` `portato` `martellato`
-         `upbowing` `downbowing` `tremolo1` `tremolo2` `tremolo3`
-Shortcuts: `stacc` `acc` `ferm` `tr` `port` `mart` `ubow` `dbow` `trem1/2/3`
+         `upbowing` `downbowing` `tremolo1` `tremolo2` `tremolo3` `harmonic`
+Shortcuts: `stacc` `acc` `ferm` `tr` `port` `mart` `ubow` `dbow` `trem1/2/3` `harm`
 Multiple: space-separated — `[slots [22 staccato accent]]`
 
 ### Noteheads (slot 23)
 `default` `diamond` `cross` `white` `black` `whole` `doublewhole` `none` `plus`
 `blacksquare` `whitesquare` `blacktriangle` `whitetriangle`
+
+Natural harmonics can be written with sounding note and `harm` articulation.
+For artificial harmonic, the lightly touched node is typically marked with notehead `diamond`.
 
 ### Combining
 ```
@@ -99,10 +102,10 @@ Multiple: space-separated — `[slots [22 staccato accent]]`
 [breakpoints [0 0 0] [rel_x delta_cents slope] ... [1 delta_cents slope]]
 ```
 - First point always `[0 0 0]`, last always starts with `1`
-- `delta_cents`: offset from base pitch; `slope`: -1 to 1 (0=linear)
+- `delta_cents`: offset from base pitch; `slope` is tension: -1 to 1 (0=linear)
 
 ```
-[breakpoints [0 0 0] [1 200 0]]    # gliss up 200 cents
+[breakpoints [0 0 0] [1 200 0]]    # linear gliss up 200 cents
 ```
 
 ---
