@@ -53,7 +53,7 @@ This hosts a web UI you can use to chat with local LLMs. Run `llama-server -h` f
 
 **5. Add the MCP server to llama-server web UI**
 
-Open the llama-server web UI at `https://localhost:8080`. 
+Open the llama-server web UI at `http://localhost:8080`. 
 
 1. Click the `+` icon next to the chat bar and navigate to 'MCP Servers' -> 'Manage MCP Servers'
 2. Under 'Manage Servers' click 'Add New Server'
