@@ -185,3 +185,9 @@ cython_debug/
 
 # macOS
 .DS_Store
+
+# Editor / IDE
+.vscode/
+
+# Claude Code local (machine-specific) settings
+.claude/settings.local.json
