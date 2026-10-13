@@ -41,17 +41,26 @@ class MaxTCPServer extends EventEmitter {
 
       this.emit('clientConnected', { id: clientId, address: clientAddress });
 
+      // Commands are newline-terminated. Buffer so that a long score split across
+      // packets stays one message, and two commands in one packet stay two.
+      let pending = '';
       socket.on('data', (data) => {
-        const message = data.toString('utf8').trim();
-        if (!message) {
-          return;
+        pending += data.toString('utf8');
+        let newline = pending.indexOf('\n');
+        while (newline !== -1) {
+          const message = pending.slice(0, newline).trim();
+          pending = pending.slice(newline + 1);
+          newline = pending.indexOf('\n');
+          if (!message) {
+            continue;
+          }
+          this.broadcast(`${message}\n`, clientId);
+          this.emit('message', {
+            clientId: clientId,
+            address: clientAddress,
+            message: message,
+          });
         }
-        this.broadcast(`${message}\n`, clientId);
-        this.emit('message', {
-          clientId: clientId,
-          address: clientAddress,
-          message: message,
-        });
       });
 
       socket.on('end', () => {

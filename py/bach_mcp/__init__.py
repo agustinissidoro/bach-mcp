@@ -1,6 +1,6 @@
 """Public exports for the Bach MCP module."""
 
-from .mcp_app import create_mcp_app
+from .mcp_app import create_mcp_app, load_skill
 from .server import BachMCPServer, MCPConfig
 from .mcp_tools import McpToolBridge
 from .agent import Agent, AgentConfig
@@ -18,6 +18,7 @@ __all__ = [
     "BachMCPServer",
     "MCPConfig",
     "create_mcp_app",
+    "load_skill",
     "McpToolBridge",
     "Agent",
     "AgentConfig",

@@ -6,3 +6,6 @@ mcp~=1.26.0
 
 # HTTP client used by the OpenAI-compatible provider (py/bach_mcp/llm/openai_compat.py)
 requests~=2.32.0
+
+# HTTP client used by the Ollama gateway (py/bach_mcp/gateway.py); also a dependency of mcp
+httpx~=0.28.0

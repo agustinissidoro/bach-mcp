@@ -30,8 +30,11 @@ def _log(msg: str) -> None:
 @dataclass
 class AgentConfig:
     system_prompt: str = ""
-    max_tool_rounds: int = 10
+    max_tool_rounds: int = 6
     stateful: bool = True
+    # Tool results from finished turns are cut to this many characters in the
+    # history: a local model's context is small and old output is rarely reread.
+    history_tool_result_chars: int = 600
 
 
 class Agent:
@@ -70,10 +73,19 @@ class Agent:
 
         reply = self._run_tool_loop(messages)
         self._history.append({"role": "assistant", "content": reply})
+        self._compact_history()
         return reply
+
+    def _compact_history(self) -> None:
+        limit = self.config.history_tool_result_chars
+        for msg in self._history:
+            content = msg.get("content") or ""
+            if msg.get("role") == "tool" and len(content) > limit:
+                msg["content"] = content[:limit] + " ...[truncated]"
 
     def _run_tool_loop(self, messages: List[Dict[str, Any]]) -> str:
         last_content = ""
+        seen_calls: set = set()
         for round_num in range(self.config.max_tool_rounds):
             _log(f"[Agent] LLM call #{round_num + 1}")
             turn: AssistantTurn = self._provider.chat(messages, self._tool_specs)
@@ -104,7 +116,15 @@ class Agent:
 
             for tc in turn.tool_calls:
                 _log(f"[Agent] tool: {tc.name}({tc.arguments})")
-                result = self._tools.call_tool(tc.name, tc.arguments)
+                signature = (tc.name, json.dumps(tc.arguments, sort_keys=True, default=str))
+                if signature in seen_calls:
+                    result = (
+                        "You already made this exact call in this turn and have its result. "
+                        "Do not repeat it: answer the user now."
+                    )
+                else:
+                    seen_calls.add(signature)
+                    result = self._tools.call_tool(tc.name, tc.arguments)
                 tool_msg = {
                     "role": "tool",
                     "tool_call_id": tc.id,

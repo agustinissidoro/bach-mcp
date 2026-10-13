@@ -4,13 +4,81 @@
 
 ## Quickstart
 
-After running the first time installation instructions (see below) you can start using bach MCP with the following steps:
+After the first-time installation (below):
 
-1. Navigate to your `bach-mcp` folder and activate your conda environment with `conda activate bach-mcp`
-2. Start the MCP server with `python py/main.py`
-3. Start the llama.cpp server with `llama-server`
-4. In Max, open the `bach-mcp.maxpat` and hit the `script start` message
-5. In your browser, navigate to the llama.cpp webui at `https://localhost:8080` and begin chatting
+1. Set your model in `bach.toml`: an Ollama model (`backend = "ollama"`, the way
+   to run MLX models on Apple Silicon) or a GGUF file for llama.cpp (`backend = "llama"`).
+2. In Max, open `bach-mcp.maxpat` and click `script start`.
+3. Double-click `run.command` (or run `./run.command` in a terminal).
+
+`run.command` starts the MCP server and the model server, and opens the
+llama.cpp web chat already configured: the skill as system prompt, the Bach
+tools connected and switched on, and the token limits from `bach.toml`. Ctrl-C
+in that terminal stops everything. The first time the model calls a tool, the
+chat asks for permission; choose "Always allow" from the button's menu.
+
+### Model backends
+
+- **`ollama`** — the model is served by Ollama, which is opened automatically
+  if it is not running. This is how MLX models are used. The web chat is still llama.cpp's: a small
+  gateway (`py/bach_mcp/gateway.py`) takes llama-server's place and translates
+  between the chat and Ollama, so `llama-server` must be installed too (it
+  provides the chat's page, without loading a model).
+- **`llama`** — `llama-server` loads a GGUF file itself.
+
+## Configuration (`bach.toml`)
+
+One file configures the model, generation, chat, tools and ports:
+
+| Section | What it sets |
+|---|---|
+| `[model]` | backend, Ollama model name or GGUF path / Hugging Face repo, context size, GPU layers |
+| `[generation]` | reply token limit, temperature, top-p/top-k, reasoning (off / on / auto / a level) and its token budget |
+| `[chat]` | system prompt file, tool calls allowed per answer, tool timeout, show thinking, open browser |
+| `[mcp]` | host/port, tool set (`lean`/`full`), write verification, tool logging |
+| `[llama]` | `llama-server` binary, host/port of the chat, slots, extra flags |
+| `[ollama]` | Ollama address, how long the model stays loaded |
+| `[max]` | TCP ports of the Max bridge |
+
+The web chat treats these values as defaults: a setting you change by hand in
+the browser wins from then on. To go back to `bach.toml`, use the reset button
+next to that setting in the chat's settings.
+
+## How the model writes music
+
+The model never writes bach's llll syntax. A deterministic layer
+(`py/bach_mcp/translate.py`, no LLM involved) converts between a JSON score and
+llll in both directions. The JSON is bach.roll's gathered syntax with named
+fields: the same hierarchy (voices > chords > notes) and the same units.
+
+```json
+{"voices": [{"name": "Flute", "chords": [
+  {"onset": 0, "dyn": "p<", "notes": [{"pitch": 6900, "dur": 1000}]},
+  {"onset": 1000, "dyn": "f", "notes": [{"pitch": 7200, "dur": 2000},
+                                        {"pitch": 7600, "dur": 500}]},
+  {"onset": 4000, "art": "staccato", "notes": [{"pitch": 6700, "dur": 250}]}]}]}
+```
+
+- A **chord** holds the `onset` (milliseconds) and what is marked once for the
+  whole chord: articulation, dynamic, text.
+- A **note** holds `pitch` (midicents, 6000 = middle C), `dur` (milliseconds),
+  velocity, glissando and notehead. It has no onset of its own.
+- Silence is a gap between onsets; there are no rests, beats or tempo.
+
+Five tools are exposed by default (the `lean` tool set):
+
+- `write_score(score, add)` — the score as JSON. This is how the model composes.
+- `read_score(voice, from_ms, to_ms)` — the current score as JSON.
+- `play`, `stop`, `clear_score`.
+
+Every write is checked against bach.roll in code and answered with a compact
+summary, so the model does not need to dump the score to verify it.
+
+Set `toolset = "full"` in `bach.toml` to additionally expose the ~45 raw
+bach.roll commands that take llll strings (with `BACH_SKILL_LLLL.md` as the
+skill), and `verify_writes = false` to skip the post-write check.
+
+Run the tests with `python -m unittest discover -s py/tests`.
 
 ## Installation instructions (llama.cpp)
 
@@ -24,42 +92,18 @@ conda activate bach-mcp
 python -m pip install -r requirements.txt
 ```
 
-**2. Set up Max** — copy the `max/bach-mcp` folder into your Max Packages folder,
-open the patcher, and start the Node bridge:
+**2. Install llama.cpp** so that `llama-server` is available (e.g. `brew install llama.cpp`).
+
+**3. Set up Max** — copy the `max/bach-mcp` folder into your Max Packages folder:
 
 - macOS: `~/Documents/Max 9/Packages/`
 - Windows: `%USERPROFILE%\Documents\Max 9\Packages\`
 
-Then open `max/bach-mcp/patchers/bach-mcp.maxpat` and run `script start` in the
-patch.
+**4. Edit `bach.toml`** and follow the Quickstart above.
 
-**3. Start the server:**
-
-The server must remain running for you to interact with it, start it by running:
-
-```bash
-python py/main.py                 # serves over HTTP at http://127.0.0.1:8000/mcp
-```
-
-**4. Start llama-server (llama.cpp)**
-
-After installing llama.cpp, run the llama.cpp server with:
-
-```bash
-llama-server
-```
-
-This hosts a web UI you can use to chat with local LLMs. Run `llama-server -h` for flags to set the context window, cache type, etc.
-
-**5. Add the MCP server to llama-server web UI**
-
-Open the llama-server web UI at `http://localhost:8080`. 
-
-1. Click the `+` icon next to the chat bar and navigate to 'MCP Servers' -> 'Manage MCP Servers'
-2. Under 'Manage Servers' click 'Add New Server'
-3. In the 'Server URL' field, enter the URL that was printed when you started the MCP server (default is `http://127.0.0.1:8000/mcp`) 
-4. Click 'Add', save settings, and begin chatting with the LLM
-
+The pieces can also be started separately: `python py/main.py serve` runs only
+the MCP server (at the `[mcp]` address), and `python py/main.py agent` is a
+terminal chat against the running `llama-server`.
 
 ## Installation instructions (Claude Desktop)
 
@@ -100,6 +144,8 @@ Then fully restart Claude Desktop.
 ### Root files
 
 - `README.md`: setup and usage.
+- `bach.toml`: the configuration file (model, generation, chat, tools, ports).
+- `run.command`: starts the MCP server, `llama-server` and the web chat.
 - `environment.yml`: Conda env definition (Python 3.11).
 - `requirements.in`: direct Python dependencies (`mcp`, `requests`).
 - `requirements.txt`: pinned, compiled dependency lock for pip install.
@@ -108,15 +154,22 @@ Then fully restart Claude Desktop.
 
 ### Python package (`py/`)
 
-- `py/main.py`: single entrypoint with two subcommands — `serve` (default; MCP server for MCP host apps like Claude Desktop, over HTTP by default or stdio with `--stdio`) and `agent` (self-hosted REPL against any OpenAI-compatible provider). Both build the same `BachMCPServer` + FastMCP app.
+- `py/main.py`: single entrypoint — `run` (MCP server + `llama-server` + web chat), `serve` (default; MCP server only, HTTP or `--stdio`) and `agent` (terminal chat against any OpenAI-compatible endpoint).
+- `py/bach_mcp/config.py`: loads `bach.toml` and derives the `llama-server` command line and the web chat's default settings.
+- `py/bach_mcp/gateway.py`: lets the llama.cpp web chat use a model served by Ollama (translates the chat's requests and the streamed replies).
 - `py/bach_mcp/__init__.py`: public exports.
 - `py/bach_mcp/server.py`: high-level bridge server (message queue, send/wait helpers, lifecycle).
 - `py/bach_mcp/tcp.py`: low-level TCP server/client classes (`3001` inbound, `3000` outbound).
-- `py/bach_mcp/mcp_app.py`: FastMCP tool registration — the single source of truth for tools, used by both roles.
+- `py/bach_mcp/mcp_app.py`: FastMCP app factory; selects the tool set and holds the raw llll tools of the `full` set.
+- `py/bach_mcp/translate.py`: deterministic JSON ↔ llll translator (voices > chords > notes in milliseconds and midicents, slots, dump parsing).
+- `py/bach_mcp/compose.py`: restricted Python runner for generating scores from code. Currently not exposed as a tool.
+- `py/bach_mcp/score_tools.py`: the lean JSON tool set (`write_score`, `read_score`, `play`, `stop`, `clear_score`).
 - `py/bach_mcp/mcp_tools.py`: in-process bridge exposing the MCP tools to the local agent (`list_tools` / `call_tool`).
 - `py/bach_mcp/agent.py`: provider-agnostic tool-calling loop (`Agent`, `AgentConfig`).
-- `py/bach_mcp/BACH_SKILL.md`: system prompt / skill (session protocol, llll syntax, slots, orchestral layout).
-- `py/bach_mcp/bach_score_schema.json`: JSON schema describing the Bach score format.
+- `py/bach_mcp/BACH_SKILL.md`: system prompt / skill for the lean tool set (principle first, then notation; note table; JSON format). Also sent as the MCP server instructions.
+- `py/bach_mcp/BACH_SKILL_LLLL.md`: the previous llll skill, used with `toolset = "full"`.
+- `py/bach_mcp/bach_score_schema.json`: earlier JSON schema draft; not used by the code.
+- `py/tests/test_translate.py`: tests for the translator and the compose runner.
 - `py/bach_mcp/llm/provider.py`: `LLMProvider` interface, neutral types (`ToolSpec`/`ToolCall`/`AssistantTurn`), `ProviderConfig`, and `build_provider()` factory.
 - `py/bach_mcp/llm/openai_compat.py`: `OpenAICompatibleProvider` — covers Ollama, llama.cpp, vLLM, OpenAI, etc.
 

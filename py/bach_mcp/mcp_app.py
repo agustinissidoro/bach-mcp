@@ -1,8 +1,11 @@
 """FastMCP app factory and tool/resource registration.
 
-Session protocol, llll syntax, slot types, articulations, noteheads, dynamics,
-breakpoints, and orchestral layout reference are all documented in BACH_SKILL.md.
-Read that skill at the start of every session before taking any action.
+Two tool sets, selected by `toolset` (or the BACH_TOOLSET env var):
+
+    lean (default)  the five JSON tools of score_tools.py. Built for local models:
+                    bach's hierarchy and units as JSON, no llll. Skill: BACH_SKILL.md.
+    full            the lean tools plus every raw bach.roll command below, which
+                    take llll strings. Skill: BACH_SKILL_LLLL.md.
 """
 
 import functools
@@ -12,7 +15,23 @@ from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
 
+from .score_tools import register_score_tools
 from .server import BachMCPServer
+
+_SKILL_DIR = os.path.dirname(__file__)
+
+
+def resolve_toolset(toolset: Optional[str] = None) -> str:
+    """Return "lean" or "full" from the argument, else BACH_TOOLSET, else lean."""
+    value = (toolset or os.getenv("BACH_TOOLSET") or "lean").strip().lower()
+    return "full" if value == "full" else "lean"
+
+
+def load_skill(toolset: Optional[str] = None) -> str:
+    """Read the skill doc matching the tool set (also used as system prompt)."""
+    name = "BACH_SKILL_LLLL.md" if resolve_toolset(toolset) == "full" else "BACH_SKILL.md"
+    with open(os.path.join(_SKILL_DIR, name), encoding="utf-8") as f:
+        return f.read()
 
 _tool_log = logging.getLogger("bach.tools")
 
@@ -38,9 +57,15 @@ def _format_call_args(kwargs: Dict[str, Any]) -> str:
     return ", ".join(f"{k}={_truncate(repr(v), 120)}" for k, v in kwargs.items())
 
 
-def create_mcp_app(bach: BachMCPServer) -> FastMCP:
+def create_mcp_app(
+    bach: BachMCPServer,
+    toolset: Optional[str] = None,
+    instructions: Optional[str] = None,
+) -> FastMCP:
     """Create and configure MCP tools/resources for bridge communication."""
-    mcp = FastMCP("bach")
+    toolset = resolve_toolset(toolset)
+    # The skill doubles as the server instructions, for hosts that use them.
+    mcp = FastMCP("bach", instructions=instructions or load_skill(toolset), log_level="WARNING")
 
     # Wrap mcp.tool so every registered tool logs its name, arguments, and result
     # in a human-readable form. Toggle off with BACH_TOOL_LOG=0.
@@ -68,6 +93,10 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
             return wrap
 
         mcp.tool = _logging_tool  # type: ignore[method-assign]
+
+    if toolset == "lean":
+        register_score_tools(mcp, bach)
+        return mcp
 
     def _send_max_message(command: str) -> Dict[str, Any]:
         command = command.strip()
@@ -2203,4 +2232,7 @@ def create_mcp_app(bach: BachMCPServer) -> FastMCP:
         b64 = base64.b64encode(png.read_bytes()).decode("ascii")
         return {"ok": True, "path": str(png), "base64": b64, "timestamp": ts.isoformat()}
 
+    # The JSON tools ship in both sets; their play() takes beats and replaces the raw one.
+    mcp.remove_tool("play")
+    register_score_tools(mcp, bach)
     return mcp

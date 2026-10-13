@@ -123,18 +123,22 @@ class TCPServer:
     
     def _handle_client(self, client_socket, address):
         """Handle individual client connection"""
+        # Messages are newline-terminated. A large dump arrives over several
+        # recv() calls, so buffer bytes and only dispatch complete lines.
+        buffer = b""
         try:
             while self.running:
-                data = client_socket.recv(4096).decode('utf-8')
+                data = client_socket.recv(65536)
                 
                 if not data:
                     break
                 
-                # Process each message (split by newlines if present)
-                messages = data.strip().split('\n')
-                for message in messages:
-                    if message.strip():
-                        self._process_message(message.strip(), address)
+                buffer += data
+                while b"\n" in buffer:
+                    line, buffer = buffer.split(b"\n", 1)
+                    message = line.decode('utf-8', errors='replace').strip()
+                    if message:
+                        self._process_message(message, address)
         
         except Exception as e:
             pass
@@ -147,7 +151,7 @@ class TCPServer:
     
     def _process_message(self, message, address):
         """Process received message and route to handlers"""
-        _log(message)
+        _log(message if len(message) <= 300 else f"{message[:300]}... ({len(message)} chars)")
         
         # Try to parse as JSON
         try:

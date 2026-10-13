@@ -4,13 +4,23 @@
         "appversion": {
             "major": 9,
             "minor": 1,
-            "revision": 2,
+            "revision": 5,
             "architecture": "x64",
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 77.0, 1357.0, 921.0 ],
+        "rect": [ -24.0, 216.0, 1357.0, 921.0 ],
         "boxes": [
+            {
+                "box": {
+                    "id": "obj-7",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 427.0, 1041.0, 69.0, 22.0 ],
+                    "text": "print output"
+                }
+            },
             {
                 "box": {
                     "id": "obj-37",
@@ -337,8 +347,6 @@
                     "saved_object_attributes": {
                         "autostart": 0,
                         "defer": 0,
-                        "node_bin_path": "",
-                        "npm_bin_path": "",
                         "watch": 1
                     },
                     "text": "node.script bachTCP.js @watch 1",
@@ -446,6 +454,14 @@
             {
                 "patchline": {
                     "destination": [ "obj-2", 0 ],
+                    "order": 1,
+                    "source": [ "obj-1", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-7", 0 ],
+                    "order": 0,
                     "source": [ "obj-1", 0 ]
                 }
             },

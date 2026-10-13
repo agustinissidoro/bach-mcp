@@ -1,91 +1,87 @@
-"""Single entrypoint for Bach — two roles, one shared core.
+"""Single entrypoint for Bach. Everything is configured in bach.toml.
 
-    serve  (default)   MCP server for MCP host apps such as Claude Desktop (or
-                       any MCP-capable client). The HOST owns the model and the
-                       agent loop; here we only expose the bach.roll tools and
-                       wait to be driven. Serves over HTTP by default; pass
+    run                Start the whole local setup: the MCP server, llama-server
+                       with the model from bach.toml, and the llama.cpp web chat
+                       already wired to both (system prompt, tools, limits).
+                       This is what run.command launches.
+
+    serve  (default)   Only the MCP server, for an MCP host you start yourself
+                       (Claude Desktop, another web UI). HTTP by default; pass
                        --stdio for the subprocess transport.
 
-    agent              Self-hosted agent REPL. For driving any OpenAI-compatible
-                       LLM endpoint yourself (Ollama, llama.cpp, vLLM, OpenAI,
-                       ...). THIS process owns the model loop and calls the same
-                       tools in-process. Configured via BACH_LLM_* env vars.
+    agent              Terminal chat against any OpenAI-compatible endpoint
+                       (by default the llama-server of bach.toml). This process
+                       owns the tool loop. Useful for testing without a browser.
 
 Usage:
-    python main.py                       # serve over HTTP (default) at 127.0.0.1:8000/mcp
-    python main.py serve
-    python main.py serve --host 0.0.0.0 --port 9000   # bind for remote clients
-    python main.py serve --stdio         # serve over stdio (host launches this process)
-    python main.py agent                 # self-hosted REPL against an OpenAI-compatible provider
-
-Both roles share the same core: BachMCPServer (TCP bridge to Max),
-create_mcp_app (the single tool definition), and BACH_SKILL.md.
+    python main.py run                   # everything, then open the chat
+    python main.py serve                 # MCP server at the [mcp] host/port of bach.toml
+    python main.py serve --stdio         # MCP over stdio (the host launches this process)
+    python main.py agent                 # terminal chat
+    python main.py run --config other.toml
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import urllib.error
+import urllib.request
+import webbrowser
 
 from bach_mcp import (
     Agent,
     AgentConfig,
     BachMCPServer,
     McpToolBridge,
+    MCPConfig,
     ProviderConfig,
     build_provider,
     create_mcp_app,
 )
+from bach_mcp.config import REPO_ROOT, BachConfig, ConfigError, load_config
 
-_SKILL_PATH = os.path.join(os.path.dirname(__file__), "bach_mcp", "BACH_SKILL.md")
-
-
-def _read_skill() -> str:
-    with open(_SKILL_PATH, encoding="utf-8") as f:
-        return f.read()
+LLAMA_LOG = os.path.join(REPO_ROOT, "logs", "llama-server.log")
 
 
-def run_serve(stdio: bool = False, host: str = "127.0.0.1", port: int = 8000) -> None:
-    """Run the MCP server for an external MCP host (e.g. Claude Desktop).
-
-    By default serves over streamable HTTP (a standalone, long-lived listener at
-    http://{host}:{port}/mcp). Pass stdio=True to instead speak MCP over the
-    process's stdin/stdout, the transport an MCP host uses when it launches this
-    process itself. host/port are ignored under stdio.
-
-    The skill doc is exposed as an MCP resource so the host can read it at the
-    start of each session via read_resource("bach://skill").
-    """
-    bach = BachMCPServer()
+def _start_bach(config: BachConfig) -> BachMCPServer:
+    config.apply_env()
+    bach = BachMCPServer(MCPConfig(
+        incoming_port=config.max.receive_port,
+        outgoing_port=config.max.send_port,
+    ))
     bach.start()
-    mcp = create_mcp_app(bach)
+    return bach
 
-    @mcp.resource("bach://skill")
-    def bach_skill() -> str:
-        """Bach MCP skill — session protocol, llll syntax, slots, orchestral layout."""
-        try:
-            return _read_skill()
-        except FileNotFoundError:
-            return f"[BACH_SKILL.md not found at {_SKILL_PATH}]"
 
-    if stdio:
-        try:
-            mcp.run(transport="stdio")
-        finally:
-            bach.stop()
-        return
+def _serve_http(bach: BachMCPServer, config: BachConfig) -> None:
+    """Serve the MCP app over streamable HTTP until interrupted.
 
-    # Streamable HTTP. Build the Starlette app ourselves so we can wrap it in
-    # CORS middleware: browser-based MCP clients (e.g. the llama.cpp web UI)
-    # make cross-origin fetches and are blocked without these headers, even
-    # though curl / Node / the MCP Inspector work fine (they don't enforce CORS).
-    # Mcp-Session-Id MUST be exposed so the browser can read the session id the
-    # streamable transport returns and complete the handshake.
+    The Starlette app is wrapped in CORS middleware: browser-based MCP clients
+    (the llama.cpp web chat) make cross-origin fetches and are blocked without
+    these headers. Mcp-Session-Id must be exposed so the browser can read the
+    session id the transport returns and complete the handshake.
+    """
     import uvicorn
     from starlette.middleware.cors import CORSMiddleware
 
-    mcp.settings.host = host
-    mcp.settings.port = port
+    mcp = create_mcp_app(bach, config.mcp.toolset, instructions=config.system_prompt())
+
+    @mcp.resource("bach://skill")
+    def bach_skill() -> str:
+        """Bach MCP skill — how to compose with the tools of this server."""
+        return config.system_prompt()
+
+    mcp.settings.host = config.mcp.host
+    mcp.settings.port = config.mcp.port
     app = mcp.streamable_http_app()
     app.add_middleware(
         CORSMiddleware,
@@ -94,60 +90,242 @@ def run_serve(stdio: bool = False, host: str = "127.0.0.1", port: int = 8000) ->
         allow_headers=["*"],
         expose_headers=["Mcp-Session-Id"],
     )
-    url = f"http://{host}:{port}{mcp.settings.streamable_http_path}"
-    print(f"Bach MCP server (streamable HTTP) listening at {url}", flush=True)
+    uvicorn.run(app, host=config.mcp.host, port=config.mcp.port, log_level="warning")
 
+
+def run_serve(config: BachConfig, stdio: bool = False) -> None:
+    """Run only the MCP server, for an external MCP host."""
+    bach = _start_bach(config)
     try:
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        if stdio:
+            mcp = create_mcp_app(bach, config.mcp.toolset, instructions=config.system_prompt())
+            mcp.run(transport="stdio")
+        else:
+            print(f"Bach MCP server listening at {config.mcp_url}", flush=True)
+            _serve_http(bach, config)
     finally:
         bach.stop()
 
 
-def run_agent() -> None:
-    """Run the self-hosted agent REPL against an OpenAI-compatible provider.
+def _port_in_use(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex((host, port)) == 0
 
-    Provider/model/connection come from BACH_LLM_* env vars (see ProviderConfig).
-    The skill doc is used directly as the system prompt — the same single source
-    of truth the serve path exposes as a resource.
-    """
+
+def _tail(path: str, lines: int = 15) -> str:
     try:
-        system_prompt = _read_skill()
-    except FileNotFoundError:
-        raise RuntimeError(
-            f"BACH_SKILL.md not found at {_SKILL_PATH}. "
-            "Make sure the file exists inside the bach_mcp/ folder."
-        )
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return "".join(f.readlines()[-lines:])
+    except OSError:
+        return ""
 
-    provider_cfg = ProviderConfig.from_env()
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _ollama_is_up(config: BachConfig) -> bool:
+    try:
+        with urllib.request.urlopen(f"{config.ollama.url}/api/version", timeout=2):
+            return True
+    except OSError:
+        return False
+
+
+def _ensure_ollama(config: BachConfig):
+    """Start Ollama if it is not running. Returns the process we started, if any.
+
+    The Ollama app is preferred (it stays in the menu bar and is left running on
+    exit, as if the user had opened it). Without the app, `ollama serve` is run
+    as a child process and stopped again when Bach exits.
+    """
+    if _ollama_is_up(config) or not config.ollama.autostart:
+        return None
+    print("  ollama    not running, starting it", end="", flush=True)
+    process = None
+    opened = sys.platform == "darwin" and subprocess.run(
+        ["open", "-g", "-a", "Ollama"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    if not opened:
+        binary = shutil.which("ollama")
+        if not binary:
+            print()
+            raise ConfigError("Ollama is not running and could not be started: neither the Ollama app "
+                              "nor the `ollama` command was found.")
+        process = subprocess.Popen([binary, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(60):
+        if _ollama_is_up(config):
+            print(" ... ready")
+            return process
+        if process is not None and process.poll() is not None:
+            break
+        print(".", end="", flush=True)
+        time.sleep(0.5)
+    print()
+    if process is not None and process.poll() is None:
+        process.terminate()
+    raise ConfigError(f"Ollama was started but did not answer at {config.ollama.url} within 30 seconds.")
+
+
+def _ollama_capabilities(config: BachConfig) -> list:
+    """Check that Ollama is up and has the model; return the model's capabilities."""
+    request = urllib.request.Request(
+        f"{config.ollama.url}/api/show",
+        data=json.dumps({"model": config.model.ollama_model}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return json.load(response).get("capabilities", [])
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise ConfigError(
+                f"Ollama has no model \"{config.model.ollama_model}\". Check `ollama list`, "
+                f"or get it with `ollama pull {config.model.ollama_model}`."
+            ) from None
+        raise ConfigError(f"Ollama answered with an error ({exc.code}) at {config.ollama.url}.") from None
+    except OSError:
+        raise ConfigError(f"Cannot reach Ollama at {config.ollama.url}. Open the Ollama app, "
+                          "or set autostart = true in [ollama].") from None
+
+
+def run_all(config: BachConfig) -> None:
+    """Start the MCP server, the model server and the web chat, wired together."""
+    binary = shutil.which(config.llama.binary)
+    if not binary:
+        raise ConfigError(f"[llama] binary \"{config.llama.binary}\" was not found. Install llama.cpp or set its full path.")
+    for label, host, port in (("[mcp]", config.mcp.host, config.mcp.port),
+                              ("[llama]", config.llama.host, config.llama.port)):
+        if _port_in_use(host, port):
+            raise ConfigError(f"{label} port {port} is already in use. Stop the other program or change the port.")
+
+    print(f"Bach — config: {config.source}")
+    ollama_process = _ensure_ollama(config) if config.uses_ollama else None
+    try:
+        capabilities = _ollama_capabilities(config) if config.uses_ollama else []
+        if config.uses_ollama and "tools" not in capabilities:
+            raise ConfigError(f"The Ollama model \"{config.model.ollama_model}\" does not support tool calling.")
+        _run_stack(config, capabilities)
+    finally:
+        if ollama_process is not None and ollama_process.poll() is None:
+            ollama_process.terminate()
+
+
+def _run_stack(config: BachConfig, capabilities: list) -> None:
+    if config.has_model:
+        print(f"  model     {config.model_label}")
+    else:
+        print("  model     NOT SET in [model]: llama-server starts without one.\n"
+              "            Set path or hf_repo in bach.toml; context and reasoning settings need it.")
+    print(f"  context   {config.model.context_size} tokens, reply limit {config.generation.max_tokens}, "
+          f"reasoning {config.generation.reasoning}")
+    print(f"  tools     {config.mcp.toolset} set at {config.mcp_url}")
+
+    ui_file = tempfile.NamedTemporaryFile("w", suffix=".json", prefix="bach-webui-", delete=False, encoding="utf-8")
+    json.dump(config.webui_settings(), ui_file)
+    ui_file.close()
+
+    os.makedirs(os.path.dirname(LLAMA_LOG), exist_ok=True)
+    log = open(LLAMA_LOG, "w", encoding="utf-8")
+    if config.uses_ollama:
+        # llama-server runs without a model, only to provide the web chat's files;
+        # the gateway takes its place on the chat port and talks to Ollama.
+        import uvicorn
+        from bach_mcp.gateway import create_gateway_app
+
+        ui_port = _free_port()
+        llama = subprocess.Popen(config.llama_ui_args(ui_port), stdout=log, stderr=subprocess.STDOUT)
+        gateway = uvicorn.Server(uvicorn.Config(
+            create_gateway_app(config, f"http://127.0.0.1:{ui_port}", capabilities),
+            host=config.llama.host, port=config.llama.port, log_level="warning",
+        ))
+        threading.Thread(target=gateway.run, daemon=True).start()
+        print("  chat      llama.cpp web chat through the Ollama gateway")
+    else:
+        llama = subprocess.Popen(config.llama_args(ui_file.name), stdout=log, stderr=subprocess.STDOUT)
+        print(f"  llama     starting (log: {os.path.relpath(LLAMA_LOG, REPO_ROOT)})")
+
+    def announce_when_ready() -> None:
+        # With Ollama the gateway answers at once; wait for the chat page itself,
+        # which comes from the model-less llama-server behind it.
+        url = f"{config.chat_url}/" if config.uses_ollama else f"{config.chat_url}/health"
+        started = time.time()
+        while llama.poll() is None:
+            try:
+                with urllib.request.urlopen(url, timeout=2) as response:
+                    if response.status == 200:
+                        break
+            except OSError:
+                pass
+            if time.time() - started > 900:
+                print("\nllama-server is still not ready after 15 minutes; see the log.")
+                return
+            time.sleep(1)
+        else:
+            print(f"\nllama-server stopped (exit code {llama.returncode}). Last lines of its log:\n{_tail(LLAMA_LOG)}")
+            os._exit(1)
+        print(f"\nReady. Chat: {config.chat_url}   (Ctrl-C here stops everything)\n", flush=True)
+        if config.chat.open_browser:
+            webbrowser.open(config.chat_url)
+
+    threading.Thread(target=announce_when_ready, daemon=True).start()
+
+    bach = _start_bach(config)
+    try:
+        _serve_http(bach, config)
+    finally:
+        bach.stop()
+        if llama.poll() is None:
+            llama.terminate()
+            try:
+                llama.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                llama.kill()
+        log.close()
+        try:
+            os.unlink(ui_file.name)
+        except OSError:
+            pass
+        print("Stopped.")
+
+
+def run_agent(config: BachConfig) -> None:
+    """Terminal chat against an OpenAI-compatible endpoint.
+
+    Uses the llama-server of bach.toml unless BACH_LLM_BASE_URL points elsewhere
+    (then all BACH_LLM_* variables apply, see ProviderConfig).
+    """
+    if os.getenv("BACH_LLM_BASE_URL"):
+        provider_cfg = ProviderConfig.from_env()
+    else:
+        provider_cfg = ProviderConfig(
+            base_url=f"{config.ollama.url}/v1" if config.uses_ollama else f"{config.chat_url}/v1",
+            model=config.model.ollama_model if config.uses_ollama else config.model.alias,
+            temperature=config.generation.temperature,
+            max_tokens=config.generation.max_tokens,
+        )
     provider = build_provider(provider_cfg)
 
-    bach = BachMCPServer()
-    bach.start()
-    mcp = create_mcp_app(bach)
+    bach = _start_bach(config)
+    mcp = create_mcp_app(bach, config.mcp.toolset)
     tools = McpToolBridge(mcp)
-    agent = Agent(provider, tools, AgentConfig(system_prompt=system_prompt))
+    agent = Agent(provider, tools, AgentConfig(
+        system_prompt=config.system_prompt(),
+        max_tool_rounds=config.chat.max_tool_rounds,
+    ))
 
     print(f"\nBach — {provider_cfg.provider}:{provider_cfg.model} @ {provider_cfg.base_url}")
     print(f"{len(agent.tool_specs)} tools exposed.")
+    print("Type a message and press Enter. Ctrl-C to quit.\n")
 
     try:
-        try:
-            greeting = agent.chat(
-                "Introduce yourself in one sentence, starting with: I am ready"
-            )
-        except RuntimeError as exc:
-            print(f"[Error] {exc}")
-            return
-        print(f"\nBach: {greeting}\n")
-        bach.send_info(f"bach_ready {greeting}")
-
-        print("Type a message and press Enter. Ctrl-C to quit.\n")
         while True:
             try:
                 user_input = input("You: ").strip()
             except (KeyboardInterrupt, EOFError):
                 print("\nBye.")
-                bach.send_info("bach_offline")
                 break
             if not user_input:
                 continue
@@ -162,43 +340,32 @@ def run_agent() -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        prog="bach",
-        description="Bridge bach.roll in Max to an LLM.",
-    )
+    parser = argparse.ArgumentParser(prog="bach", description="Bridge bach.roll in Max to an LLM.")
     parser.add_argument(
         "mode",
         nargs="?",
         default="serve",
-        choices=["serve", "agent"],
-        help=(
-            "serve = MCP server for Claude Desktop / MCP hosts (default; HTTP "
-            "unless --stdio). agent = self-hosted REPL against an "
-            "OpenAI-compatible provider."
-        ),
+        choices=["run", "serve", "agent"],
+        help="run = MCP server + llama-server + web chat. serve = MCP server only (default). "
+             "agent = terminal chat.",
     )
-    parser.add_argument(
-        "--stdio",
-        action="store_true",
-        help="serve over stdio instead of HTTP (host launches this process).",
-    )
-    parser.add_argument(
-        "--host",
-        default="127.0.0.1",
-        help="HTTP bind address for serve (default: 127.0.0.1; use 0.0.0.0 for remote clients).",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=8000,
-        help="HTTP port for serve (default: 8000).",
-    )
+    parser.add_argument("--config", default="", help="path to the config file (default: bach.toml in the repo root).")
+    parser.add_argument("--stdio", action="store_true", help="serve over stdio instead of HTTP.")
     args = parser.parse_args()
+    sys.stdout.reconfigure(line_buffering=True)
 
-    if args.mode == "agent":
-        run_agent()
-    else:
-        run_serve(stdio=args.stdio, host=args.host, port=args.port)
+    try:
+        config = load_config(args.config)
+        if args.mode == "run":
+            run_all(config)
+        elif args.mode == "agent":
+            run_agent(config)
+        else:
+            run_serve(config, stdio=args.stdio)
+    except ConfigError as exc:
+        sys.exit(f"Configuration problem: {exc}")
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
