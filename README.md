@@ -169,7 +169,9 @@ Then fully restart Claude Desktop.
 - `py/bach_mcp/BACH_SKILL.md`: system prompt / skill for the lean tool set (principle first, then notation; note table; JSON format). Also sent as the MCP server instructions.
 - `py/bach_mcp/BACH_SKILL_LLLL.md`: the previous llll skill, used with `toolset = "full"`.
 - `py/bach_mcp/bach_score_schema.json`: earlier JSON schema draft; not used by the code.
+- `py/bach_mcp/docs/`: instrument reference for the model (strings, woodwinds, piano): ranges, techniques and harmonics in midicents, one file per instrument plus one per family. Not wired in yet; the format is in `docs/README.md`.
 - `py/tests/test_translate.py`: tests for the translator and the compose runner.
+- `py/tests/test_docs.py`: checks the instrument docs (fields, ranges, clefs, JSON spellings the translator accepts).
 - `py/bach_mcp/llm/provider.py`: `LLMProvider` interface, neutral types (`ToolSpec`/`ToolCall`/`AssistantTurn`), `ProviderConfig`, and `build_provider()` factory.
 - `py/bach_mcp/llm/openai_compat.py`: `OpenAICompatibleProvider` — covers Ollama, llama.cpp, vLLM, OpenAI, etc.
 
