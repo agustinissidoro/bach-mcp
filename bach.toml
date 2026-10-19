@@ -26,6 +26,7 @@ max_tool_rounds = 4       # tool calls the model may chain in one answer before 
 tool_timeout_seconds = 60 # how long the chat waits for one tool call
 show_thinking = true      # show the model's reasoning while it is being written
 open_browser = true       # open the chat when everything is ready
+docs = true               # add the instrument docs (py/bach_mcp/docs) to each message that names an instrument
 
 [mcp]
 host = "127.0.0.1"

@@ -1,13 +1,17 @@
-"""Tests for the request translation of the Ollama gateway."""
+"""Tests for the gateway: Ollama request translation and the llama-server proxy."""
 
+import json
 import os
+import socket
 import sys
+import threading
+import time
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from bach_mcp.config import BachConfig  # noqa: E402
-from bach_mcp.gateway import build_ollama_request, to_ollama_messages  # noqa: E402
+from bach_mcp.gateway import build_ollama_request, create_llama_gateway_app, to_ollama_messages  # noqa: E402
 
 
 def _config(reasoning: str = "auto") -> BachConfig:
@@ -47,6 +51,70 @@ class RequestTests(unittest.TestCase):
         self.assertIs(build_ollama_request(on, _config("auto"))["think"], True)
         self.assertIs(build_ollama_request(off, _config("low"))["think"], False)
         self.assertIs(build_ollama_request({"messages": []}, _config("off"))["think"], False)
+
+
+class LlamaProxyTests(unittest.TestCase):
+    """The proxy against a fake llama-server running on a local port."""
+
+    @classmethod
+    def setUpClass(cls):
+        import uvicorn
+        from starlette.applications import Starlette
+        from starlette.responses import JSONResponse, StreamingResponse
+        from starlette.routing import Route
+
+        cls.received = []
+
+        async def chat(request):
+            cls.received.append(await request.json())
+
+            async def sse():
+                for word in ("Hel", "lo"):
+                    yield f"data: {json.dumps({'choices': [{'delta': {'content': word}}]})}\n\n".encode()
+                yield b"data: [DONE]\n\n"
+            return StreamingResponse(sse(), media_type="text/event-stream")
+
+        async def props(request):
+            return JSONResponse({"model_alias": "bach", "query": request.url.query})
+
+        upstream = Starlette(routes=[Route("/v1/chat/completions", chat, methods=["POST"]), Route("/props", props)])
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        cls.server = uvicorn.Server(uvicorn.Config(upstream, host="127.0.0.1", port=port, log_level="error"))
+        threading.Thread(target=cls.server.run, daemon=True).start()
+        while not cls.server.started:
+            time.sleep(0.01)
+        cls.origin = f"http://127.0.0.1:{port}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.should_exit = True
+
+    def client(self, docs=True):
+        from starlette.testclient import TestClient
+        config = BachConfig()
+        config.chat.docs = docs
+        return TestClient(create_llama_gateway_app(config, self.origin))
+
+    def test_other_requests_pass_through(self):
+        response = self.client().get("/props?a=1")
+        self.assertEqual(response.json(), {"model_alias": "bach", "query": "a=1"})
+
+    def test_chat_gets_the_docs_and_streams_back(self):
+        body = {"stream": True, "messages": [{"role": "user", "content": "a piece for oboe"}]}
+        response = self.client().post("/v1/chat/completions", json=body)
+        self.assertIn("Hel", response.text)
+        self.assertTrue(response.text.rstrip().endswith("data: [DONE]"))
+        sent = self.received[-1]["messages"][0]["content"]
+        self.assertTrue(sent.startswith("a piece for oboe\n\nReference for this request"))
+        self.assertIn("# Oboe", sent)
+        self.assertIn("# Woodwinds", sent)
+
+    def test_docs_off_forwards_the_request_unchanged(self):
+        body = {"messages": [{"role": "user", "content": "a piece for oboe"}]}
+        self.client(docs=False).post("/v1/chat/completions", json=body)
+        self.assertEqual(self.received[-1], body)
 
 
 if __name__ == "__main__":

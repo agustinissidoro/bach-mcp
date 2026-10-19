@@ -48,6 +48,7 @@ from bach_mcp import (
     create_mcp_app,
 )
 from bach_mcp.config import REPO_ROOT, BachConfig, ConfigError, load_config
+from bach_mcp.docs import DocLibrary
 
 LLAMA_LOG = os.path.join(REPO_ROOT, "logs", "llama-server.log")
 
@@ -229,23 +230,27 @@ def _run_stack(config: BachConfig, capabilities: list) -> None:
 
     os.makedirs(os.path.dirname(LLAMA_LOG), exist_ok=True)
     log = open(LLAMA_LOG, "w", encoding="utf-8")
+    # The gateway always holds the chat port; llama-server runs behind it on an internal port.
+    import uvicorn
+    from bach_mcp.gateway import create_gateway_app, create_llama_gateway_app
+
+    internal_port = _free_port()
+    internal = f"http://127.0.0.1:{internal_port}"
     if config.uses_ollama:
         # llama-server runs without a model, only to provide the web chat's files;
-        # the gateway takes its place on the chat port and talks to Ollama.
-        import uvicorn
-        from bach_mcp.gateway import create_gateway_app
-
-        ui_port = _free_port()
-        llama = subprocess.Popen(config.llama_ui_args(ui_port), stdout=log, stderr=subprocess.STDOUT)
-        gateway = uvicorn.Server(uvicorn.Config(
-            create_gateway_app(config, f"http://127.0.0.1:{ui_port}", capabilities),
-            host=config.llama.host, port=config.llama.port, log_level="warning",
-        ))
-        threading.Thread(target=gateway.run, daemon=True).start()
+        # the gateway answers for it and talks to Ollama.
+        llama = subprocess.Popen(config.llama_ui_args(internal_port), stdout=log, stderr=subprocess.STDOUT)
+        gateway_app = create_gateway_app(config, internal, capabilities)
         print("  chat      llama.cpp web chat through the Ollama gateway")
     else:
-        llama = subprocess.Popen(config.llama_args(ui_file.name), stdout=log, stderr=subprocess.STDOUT)
+        llama = subprocess.Popen(config.llama_args(ui_file.name, internal_port), stdout=log, stderr=subprocess.STDOUT)
+        gateway_app = create_llama_gateway_app(config, internal)
         print(f"  llama     starting (log: {os.path.relpath(LLAMA_LOG, REPO_ROOT)})")
+    gateway = uvicorn.Server(uvicorn.Config(
+        gateway_app, host=config.llama.host, port=config.llama.port, log_level="warning",
+    ))
+    threading.Thread(target=gateway.run, daemon=True).start()
+    print(f"  docs      {'added to messages that name an instrument' if config.chat.docs else 'off'}")
 
     def announce_when_ready() -> None:
         # With Ollama the gateway answers at once; wait for the chat page itself,
@@ -316,6 +321,10 @@ def run_agent(config: BachConfig) -> None:
         max_tool_rounds=config.chat.max_tool_rounds,
     ))
 
+    # This process talks to the model directly, so it adds the docs itself.
+    library = DocLibrary() if config.chat.docs else None
+    seen_docs: set = set()
+
     print(f"\nBach — {provider_cfg.provider}:{provider_cfg.model} @ {provider_cfg.base_url}")
     print(f"{len(agent.tool_specs)} tools exposed.")
     print("Type a message and press Enter. Ctrl-C to quit.\n")
@@ -329,6 +338,10 @@ def run_agent(config: BachConfig) -> None:
                 break
             if not user_input:
                 continue
+            if library is not None:
+                user_input, added = library.augment_text(user_input, seen_docs)
+                if added:
+                    print(f"  docs      {', '.join(added)}")
             try:
                 reply = agent.chat(user_input)
                 print(f"\nBach: {reply}\n")

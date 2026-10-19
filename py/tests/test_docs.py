@@ -8,6 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from bach_mcp.docs import DocLibrary  # noqa: E402
 from bach_mcp.translate import CLEFS, MAX_CENTS, ScoreError, normalize_score  # noqa: E402
 
 DOCS = os.path.join(os.path.dirname(__file__), "..", "bach_mcp", "docs")
@@ -93,6 +94,55 @@ class DocsTests(unittest.TestCase):
                     normalize_score({"voices": [{"name": "T", "chords": [chord]}]})
                 except ScoreError as exc:
                     self.fail(f"{path}: \"head\": {head!r} rejected ({exc})")
+
+
+class LibraryTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.library = DocLibrary()
+
+    def keys(self, text):
+        return [d.key for d in self.library.find(text)]
+
+    def test_family_comes_with_the_instrument(self):
+        self.assertEqual(self.keys("a slow piece for Cello and flute"),
+                         ["strings/_family", "strings/cello", "woodwinds/_family", "woodwinds/flute"])
+
+    def test_longest_name_wins(self):
+        self.assertEqual(self.keys("alto flute and bass clarinet"),
+                         ["woodwinds/_family", "woodwinds/alto-flute", "woodwinds/bass-clarinet"])
+
+    def test_whole_words_only(self):
+        self.assertEqual(self.keys("celloist? no: violoncellist, pianissimo, clarity"), [])
+
+    def test_whole_file_without_front_matter_or_clefs(self):
+        doc = self.library.docs["strings/cello"]
+        self.assertTrue(doc.text.startswith("# Cello"))
+        self.assertIn("## Harmonics", doc.text)
+        self.assertNotIn("clefs:", doc.text)
+        self.assertNotIn("aliases:", doc.text)
+
+    def test_each_file_once_and_deterministic(self):
+        messages = [
+            {"role": "system", "content": "skill"},
+            {"role": "user", "content": "a cello solo"},
+            {"role": "assistant", "content": "done"},
+            {"role": "user", "content": [{"type": "text", "text": "now add a violin to the cello"}]},
+        ]
+        out, added = self.library.augment(messages)
+        self.assertEqual(added, ["strings/violin"])
+        self.assertIn("# Cello", out[1]["content"])
+        later = out[3]["content"][-1]["text"]
+        self.assertIn("# Violin", later)
+        self.assertNotIn("# Cello", later)
+        self.assertEqual(self.library.augment(messages)[0], out)
+        self.assertEqual(messages[1]["content"], "a cello solo")  # the input is not modified
+
+    def test_already_augmented_messages_are_left_alone(self):
+        text, _ = self.library.augment_text("a cello solo", set())
+        out, added = self.library.augment([{"role": "user", "content": text}])
+        self.assertEqual(out[0]["content"], text)
+        self.assertEqual(added, [])
 
 
 if __name__ == "__main__":

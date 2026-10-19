@@ -1,5 +1,5 @@
 ---
-aliases: [viola, violas, va, vla, viole, bratsche]
+aliases: [viola, violas, vla, viole, bratsche]
 family: strings
 ---
 # Viola

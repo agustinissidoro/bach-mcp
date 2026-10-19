@@ -57,6 +57,7 @@ class ChatConfig:
     tool_timeout_seconds: int = 60
     show_thinking: bool = True
     open_browser: bool = True
+    docs: bool = True
 
 
 @dataclass
@@ -151,10 +152,14 @@ class BachConfig:
         """Command line for a model-less llama-server that only serves the chat's files."""
         return [self.llama.binary, "--host", "127.0.0.1", "--port", str(port), "--no-models-autoload"]
 
-    def llama_args(self, ui_config_path: str) -> List[str]:
-        """Command line for llama-server."""
+    def llama_args(self, ui_config_path: str, port: int = 0) -> List[str]:
+        """Command line for llama-server.
+
+        port: run it on this internal port (127.0.0.1), behind the gateway; 0 = the [llama] host and port.
+        """
         m, g, l = self.model, self.generation, self.llama
-        args = [l.binary, "--host", l.host, "--port", str(l.port)]
+        host, port = ("127.0.0.1", port) if port else (l.host, l.port)
+        args = [l.binary, "--host", host, "--port", str(port)]
         if m.path:
             args += ["--model", os.path.expanduser(m.path)]
         elif m.hf_repo:

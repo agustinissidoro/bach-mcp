@@ -1,5 +1,5 @@
 ---
-aliases: [oboe, oboes, ob, oboi, hautbois, oboe d'orchestra, hoboe]
+aliases: [oboe, oboes, oboi, hautbois, oboe d'orchestra, hoboe]
 family: woodwinds
 ---
 # Oboe

@@ -1,11 +1,16 @@
 """
 gateway.py
 ----------
-Lets the llama.cpp web chat talk to a model served by Ollama (which runs MLX
-models on Apple Silicon).
+The small HTTP app that stands between the llama.cpp web chat and the model,
+on the chat's port. With either backend it adds the instrument docs to the
+messages that name an instrument (see docs.py).
 
-The web chat only knows llama-server's API. This small HTTP app stands where
-llama-server would be and:
+With the llama backend (`create_llama_gateway_app`) it is a plain proxy:
+every request goes to llama-server unchanged, except that the chat requests
+get the docs.
+
+With the Ollama backend (`create_gateway_app`), which runs MLX models on
+Apple Silicon, it also replaces llama-server's API:
 
     - answers /props and /v1/models itself, from bach.toml;
     - translates /v1/chat/completions to Ollama's native /api/chat and streams
@@ -33,12 +38,28 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from .config import BachConfig
+from .docs import DocLibrary
 
 _THINK_LEVELS = ("low", "medium", "high", "xhigh")
+_CHAT_PATHS = ("/v1/chat/completions", "/chat/completions")
+# Hop-by-hop headers and the ones the proxy recomputes.
+_SKIP_REQUEST_HEADERS = ("host", "content-length", "connection")
+_SKIP_RESPONSE_HEADERS = ("content-length", "transfer-encoding", "connection")
 
 
 def _error(status: int, message: str) -> JSONResponse:
     return JSONResponse({"error": {"message": message, "type": "server_error", "code": status}}, status_code=status)
+
+
+def with_docs(body: Dict[str, Any], library: Optional[DocLibrary]) -> Dict[str, Any]:
+    """Return the chat request with the instrument docs added to its user messages."""
+    messages = body.get("messages")
+    if library is None or not isinstance(messages, list):
+        return body
+    augmented, added = library.augment(messages)
+    if added and messages and messages[-1].get("role") == "user":
+        print(f"  docs      {', '.join(added)}", flush=True)
+    return {**body, "messages": augmented}
 
 
 def to_ollama_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -127,6 +148,7 @@ def create_gateway_app(config: BachConfig, ui_origin: str, capabilities: Optiona
     alias = config.model.alias
     client = httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0))
     static_cache: Dict[str, Response] = {}
+    library = DocLibrary() if config.chat.docs else None
 
     async def props(request: Request) -> JSONResponse:
         g = config.generation
@@ -163,7 +185,7 @@ def create_gateway_app(config: BachConfig, ui_origin: str, capabilities: Optiona
             body = await request.json()
         except ValueError:
             return _error(400, "request body is not valid JSON")
-        payload = build_ollama_request(body, config)
+        payload = build_ollama_request(with_docs(body, library), config)
         upstream_request = client.build_request("POST", f"{config.ollama.url}/api/chat", json=payload)
         try:
             upstream = await client.send(upstream_request, stream=True)
@@ -292,3 +314,46 @@ def create_gateway_app(config: BachConfig, ui_origin: str, capabilities: Optiona
     ])
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     return app
+
+
+def create_llama_gateway_app(config: BachConfig, llama_origin: str) -> Starlette:
+    """Create the proxy that stands in front of llama-server (llama backend).
+
+    llama_origin: base URL of llama-server, which runs the model on an internal port.
+    Everything is forwarded as it is, byte for byte and streamed; only the chat
+    requests get the instrument docs added to their messages.
+    """
+    client = httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0))
+    library = DocLibrary() if config.chat.docs else None
+
+    async def proxy(request: Request) -> Response:
+        content = await request.body()
+        if library is not None and request.method == "POST" and request.url.path in _CHAT_PATHS:
+            try:
+                body = json.loads(content)
+            except ValueError:
+                body = None
+            if isinstance(body, dict):
+                content = json.dumps(with_docs(body, library), ensure_ascii=False).encode("utf-8")
+        url = f"{llama_origin}{request.url.path}"
+        if request.url.query:
+            url += f"?{request.url.query}"
+        headers = {k: v for k, v in request.headers.items() if k.lower() not in _SKIP_REQUEST_HEADERS}
+        try:
+            upstream = await client.send(
+                client.build_request(request.method, url, headers=headers, content=content), stream=True)
+        except httpx.HTTPError as exc:
+            return _error(502, f"Cannot reach llama-server at {llama_origin} ({exc}). See logs/llama-server.log.")
+
+        async def relay() -> AsyncIterator[bytes]:
+            try:
+                async for data in upstream.aiter_raw():
+                    yield data
+            finally:
+                await upstream.aclose()
+
+        headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _SKIP_RESPONSE_HEADERS}
+        return StreamingResponse(relay(), status_code=upstream.status_code, headers=headers)
+
+    methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+    return Starlette(routes=[Route("/{rest:path}", proxy, methods=methods)], on_shutdown=[client.aclose])

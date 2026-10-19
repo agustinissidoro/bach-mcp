@@ -1,8 +1,9 @@
 # Instrument docs
 
 Reference for the model: one file per instrument, one `_family.md` per family.
-Not wired in yet. The plan is that the gateway finds the files named in a
-request and adds their relevant parts to the prompt, with no tool call.
+The gateway (`docs.py`) finds the files named in a user message by their
+aliases and appends each whole file, with its family file, to that message,
+with no tool call. A file is added once per conversation.
 
 Rules for every file:
 
@@ -33,10 +34,9 @@ techniques: the family techniques (strings/_family.md), plus:
 How they work, how to calculate them, the values, how to write them.
 ```
 
-- **Core**: everything before the first `##`. Sent whenever the instrument is
-  named, together with the family core. Keep it short.
-- **Sections** (`## ...`): sent only when the request asks for them. Each one
-  must stand alone, since it can be sent without the core.
+- **Core**: everything before the first `##`. **Sections** (`## ...`): detail.
+  For now the whole file is sent; keep each section self-contained, so that
+  sections can later be sent on their own.
 - `clefs:` is read by the code, not sent to the model: bach.roll has one clef
   per voice, so clef changes cannot be written; the line says which clef suits
   a voice depending on where its notes lie.

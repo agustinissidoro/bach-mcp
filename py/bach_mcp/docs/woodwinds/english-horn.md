@@ -1,5 +1,5 @@
 ---
-aliases: [english horn, english horns, cor anglais, cors anglais, eh, c.a., corno inglese, corno inglés, englischhorn]
+aliases: [english horn, english horns, cor anglais, cors anglais, c.a., corno inglese, corno inglés, englischhorn]
 family: woodwinds
 ---
 # English horn

@@ -24,7 +24,23 @@ chat asks for permission; choose "Always allow" from the button's menu.
   gateway (`py/bach_mcp/gateway.py`) takes llama-server's place and translates
   between the chat and Ollama, so `llama-server` must be installed too (it
   provides the chat's page, without loading a model).
-- **`llama`** — `llama-server` loads a GGUF file itself.
+- **`llama`** — `llama-server` loads a GGUF file itself. It runs on an
+  internal port behind the same gateway, which passes everything through
+  unchanged except for adding the instrument docs (below).
+
+With both backends the chat's port belongs to the gateway, and `llama-server`
+runs behind it.
+
+### Instrument docs
+
+`py/bach_mcp/docs/` holds a reference file per instrument (strings, woodwinds,
+piano): ranges, techniques and harmonics in midicents. When a message names an
+instrument ("a duet for cello and alto flute"), the gateway appends that
+instrument's whole file, and its family's, to the message before the model sees
+it; no tool call is involved. Each file is added once per conversation, at its
+first mention. The terminal names the files it added (`docs  strings/cello, ...`).
+`python py/main.py agent` does the same itself. Set `docs = false` in `[chat]`
+to switch it off.
 
 ## Configuration (`bach.toml`)
 
@@ -156,7 +172,8 @@ Then fully restart Claude Desktop.
 
 - `py/main.py`: single entrypoint — `run` (MCP server + `llama-server` + web chat), `serve` (default; MCP server only, HTTP or `--stdio`) and `agent` (terminal chat against any OpenAI-compatible endpoint).
 - `py/bach_mcp/config.py`: loads `bach.toml` and derives the `llama-server` command line and the web chat's default settings.
-- `py/bach_mcp/gateway.py`: lets the llama.cpp web chat use a model served by Ollama (translates the chat's requests and the streamed replies).
+- `py/bach_mcp/gateway.py`: sits on the chat's port in front of the model: a pass-through proxy to llama-server (llama backend) or a translator to Ollama (ollama backend); with both it adds the instrument docs to the messages.
+- `py/bach_mcp/docs.py`: finds the instruments named in a message (keyword matching on each file's aliases) and builds the reference block from their files.
 - `py/bach_mcp/__init__.py`: public exports.
 - `py/bach_mcp/server.py`: high-level bridge server (message queue, send/wait helpers, lifecycle).
 - `py/bach_mcp/tcp.py`: low-level TCP server/client classes (`3001` inbound, `3000` outbound).
@@ -169,7 +186,7 @@ Then fully restart Claude Desktop.
 - `py/bach_mcp/BACH_SKILL.md`: system prompt / skill for the lean tool set (principle first, then notation; note table; JSON format). Also sent as the MCP server instructions.
 - `py/bach_mcp/BACH_SKILL_LLLL.md`: the previous llll skill, used with `toolset = "full"`.
 - `py/bach_mcp/bach_score_schema.json`: earlier JSON schema draft; not used by the code.
-- `py/bach_mcp/docs/`: instrument reference for the model (strings, woodwinds, piano): ranges, techniques and harmonics in midicents, one file per instrument plus one per family. Not wired in yet; the format is in `docs/README.md`.
+- `py/bach_mcp/docs/`: instrument reference for the model (strings, woodwinds, piano): ranges, techniques and harmonics in midicents, one file per instrument plus one per family. Added to the messages by the gateway (`docs.py`); the format is in `docs/README.md`.
 - `py/tests/test_translate.py`: tests for the translator and the compose runner.
 - `py/tests/test_docs.py`: checks the instrument docs (fields, ranges, clefs, JSON spellings the translator accepts).
 - `py/bach_mcp/llm/provider.py`: `LLMProvider` interface, neutral types (`ToolSpec`/`ToolCall`/`AssistantTurn`), `ProviderConfig`, and `build_provider()` factory.
@@ -178,6 +195,6 @@ Then fully restart Claude Desktop.
 ### Max package (`max/bach-mcp`)
 
 - `max/bach-mcp/patchers/bach-mcp.maxpat`: patcher containing `bach.roll`, `bach.portal`, and `node.script`.
-- `max/bach-mcp/js/bachTCP.js`: Node for Max TCP bridge.
+- `max/bach-mcp/javascript/bachTCP.js`: Node for Max TCP bridge.
   - Max listens on `0.0.0.0:3000` for Python commands.
   - Max client connects to Python on `127.0.0.1:3001` for replies/events.

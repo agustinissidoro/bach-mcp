@@ -1,5 +1,5 @@
 ---
-aliases: [double bass, double basses, contrabass, contrabasses, string bass, upright bass, cb, db, contrabbasso, contrebasse, contrabajo, kontrabass]
+aliases: [double bass, double basses, contrabass, contrabasses, string bass, upright bass, cb, contrabbasso, contrebasse, contrabajo, kontrabass]
 family: strings
 ---
 # Double bass
