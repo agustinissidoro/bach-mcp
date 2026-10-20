@@ -2,8 +2,9 @@
 
 Two tool sets, selected by `toolset` (or the BACH_TOOLSET env var):
 
-    lean (default)  the five JSON tools of score_tools.py. Built for local models:
-                    bach's hierarchy and units as JSON, no llll. Skill: BACH_SKILL.md.
+    lean (default)  the three JSON tools of score_tools.py and send_algorithm of
+                    algo_tools.py. Built for local models: bach's hierarchy and
+                    units as JSON, no llll. Skill: BACH_SKILL.md.
     full            the lean tools plus every raw bach.roll command below, which
                     take llll strings. Skill: BACH_SKILL_LLLL.md.
 """
@@ -15,6 +16,8 @@ from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
 
+from .algo_tools import register_algo_tools
+from .modes import skill_for
 from .score_tools import register_score_tools
 from .server import BachMCPServer
 
@@ -27,11 +30,16 @@ def resolve_toolset(toolset: Optional[str] = None) -> str:
     return "full" if value == "full" else "lean"
 
 
-def load_skill(toolset: Optional[str] = None) -> str:
-    """Read the skill doc matching the tool set (also used as system prompt)."""
+def load_skill(toolset: Optional[str] = None, mode: Optional[str] = None, raw: bool = False) -> str:
+    """Read the skill doc matching the tool set (also used as system prompt).
+
+    mode: "score" or "algo" for that mode's part only (see modes.py); None for all of it.
+    raw: the file as it is, with its mode markers.
+    """
     name = "BACH_SKILL_LLLL.md" if resolve_toolset(toolset) == "full" else "BACH_SKILL.md"
     with open(os.path.join(_SKILL_DIR, name), encoding="utf-8") as f:
-        return f.read()
+        text = f.read()
+    return text if raw else skill_for(text, mode)
 
 _tool_log = logging.getLogger("bach.tools")
 
@@ -96,6 +104,7 @@ def create_mcp_app(
 
     if toolset == "lean":
         register_score_tools(mcp, bach)
+        register_algo_tools(mcp, bach)
         return mcp
 
     def _send_max_message(command: str) -> Dict[str, Any]:
@@ -2232,7 +2241,8 @@ def create_mcp_app(
         b64 = base64.b64encode(png.read_bytes()).decode("ascii")
         return {"ok": True, "path": str(png), "base64": b64, "timestamp": ts.isoformat()}
 
-    # The JSON tools ship in both sets; their play() takes beats and replaces the raw one.
+    # The JSON tools ship in both sets. Playback is left to the patch: no play tool.
     mcp.remove_tool("play")
     register_score_tools(mcp, bach)
+    register_algo_tools(mcp, bach)
     return mcp

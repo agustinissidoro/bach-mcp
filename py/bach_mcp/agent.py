@@ -57,6 +57,11 @@ class Agent:
     def tool_specs(self) -> List[ToolSpec]:
         return self._tool_specs
 
+    def set_mode(self, system_prompt: str, tool_specs: List[ToolSpec]) -> None:
+        """Change the system prompt and the tools for the next turns; the history stays."""
+        self.config.system_prompt = system_prompt
+        self._tool_specs = list(tool_specs)
+
     def reset_history(self) -> None:
         self._history = []
 

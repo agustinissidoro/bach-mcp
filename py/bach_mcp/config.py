@@ -16,7 +16,7 @@ import json
 import os
 import tomllib
 from dataclasses import dataclass, field, fields
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_CONFIG_PATH = os.path.join(REPO_ROOT, "bach.toml")
@@ -92,6 +92,12 @@ class MaxConfig:
 
 
 @dataclass
+class AlgoConfig:
+    dir: str = "algorithms"
+    node: str = "node"
+
+
+@dataclass
 class BachConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     generation: GenerationConfig = field(default_factory=GenerationConfig)
@@ -100,6 +106,7 @@ class BachConfig:
     llama: LlamaConfig = field(default_factory=LlamaConfig)
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
     max: MaxConfig = field(default_factory=MaxConfig)
+    algo: AlgoConfig = field(default_factory=AlgoConfig)
     source: str = ""
 
     # ── Derived values ──────────────────────────────────────────────────── #
@@ -133,9 +140,11 @@ class BachConfig:
         os.environ["BACH_TOOLSET"] = self.mcp.toolset
         os.environ["BACH_VERIFY"] = "1" if self.mcp.verify_writes else "0"
         os.environ["BACH_TOOL_LOG"] = "1" if self.mcp.tool_log else "0"
+        os.environ["BACH_ALGO_DIR"] = self.algo.dir
+        os.environ["BACH_NODE"] = self.algo.node
 
-    def system_prompt(self) -> str:
-        """The skill text: the configured file, else the built-in skill of the tool set."""
+    def skill_source(self) -> str:
+        """The skill file as it is, with its mode markers: the configured file, else the built-in one."""
         if self.chat.skill_file:
             path = os.path.expanduser(self.chat.skill_file)
             if not os.path.isabs(path):
@@ -146,7 +155,12 @@ class BachConfig:
             except OSError as exc:
                 raise ConfigError(f"[chat] skill_file: cannot read {path} ({exc.strerror})") from None
         from .mcp_app import load_skill
-        return load_skill(self.mcp.toolset)
+        return load_skill(self.mcp.toolset, raw=True)
+
+    def system_prompt(self, mode: Optional[str] = None) -> str:
+        """The skill text for a mode ("score" or "algo", see modes.py), or all of it."""
+        from .modes import skill_for
+        return skill_for(self.skill_source(), mode)
 
     def llama_ui_args(self, port: int) -> List[str]:
         """Command line for a model-less llama-server that only serves the chat's files."""

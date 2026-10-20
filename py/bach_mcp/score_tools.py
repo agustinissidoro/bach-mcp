@@ -1,7 +1,7 @@
 """
 score_tools.py
 --------------
-The lean, JSON-facing tool set: write_score, read_score, play, stop, clear_score.
+The lean, JSON-facing tool set: write_score, read_score, clear_score.
 
 These are the only tools a local model needs. They speak the JSON score of
 `translate.py`: bach.roll's own hierarchy (voices > chords > notes) and units
@@ -30,7 +30,7 @@ from .translate import (
     summarize,
 )
 
-LEAN_TOOLS = ("write_score", "read_score", "play", "stop", "clear_score")
+LEAN_TOOLS = ("write_score", "read_score", "clear_score")
 
 # Gap between two messages to Max so the Node bridge receives them as separate packets.
 _SEND_GAP_SECONDS = 0.05
@@ -163,16 +163,6 @@ def register_score_tools(mcp: FastMCP, bach: BachMCPServer) -> None:
         state["last_read"] = key
         note = f"\n(truncated to {_READ_CHORD_LIMIT} chords; narrow with voice/from_ms/to_ms)" if truncated else ""
         return f"{len(score['voices'])} voice(s), {total} notes in the whole score.\n{text}{note}"
-
-    @mcp.tool()
-    def play(from_ms: float = 0.0) -> str:
-        """Start playback from the given position in milliseconds (default: the beginning)."""
-        return "Playing." if bach.send_info(f"play {max(0.0, from_ms):.1f}") else "ERROR: could not reach Max."
-
-    @mcp.tool()
-    def stop() -> str:
-        """Stop playback."""
-        return "Stopped." if bach.send_info("stop") else "ERROR: could not reach Max."
 
     @mcp.tool()
     def clear_score() -> str:

@@ -49,6 +49,7 @@ from bach_mcp import (
 )
 from bach_mcp.config import REPO_ROOT, BachConfig, ConfigError, load_config
 from bach_mcp.docs import DocLibrary
+from bach_mcp.modes import DEFAULT_MODE, split_prefix, tools_for
 
 LLAMA_LOG = os.path.join(REPO_ROOT, "logs", "llama-server.log")
 
@@ -317,16 +318,22 @@ def run_agent(config: BachConfig) -> None:
     mcp = create_mcp_app(bach, config.mcp.toolset)
     tools = McpToolBridge(mcp)
     agent = Agent(provider, tools, AgentConfig(
-        system_prompt=config.system_prompt(),
+        system_prompt=config.system_prompt(DEFAULT_MODE),
         max_tool_rounds=config.chat.max_tool_rounds,
     ))
+    all_tools = list(agent.tool_specs)
+
+    def enter(mode: str) -> None:
+        agent.set_mode(config.system_prompt(mode), tools_for(all_tools, mode, name_of=lambda t: t.name))
+
+    enter(DEFAULT_MODE)
 
     # This process talks to the model directly, so it adds the docs itself.
     library = DocLibrary() if config.chat.docs else None
     seen_docs: set = set()
 
     print(f"\nBach — {provider_cfg.provider}:{provider_cfg.model} @ {provider_cfg.base_url}")
-    print(f"{len(agent.tool_specs)} tools exposed.")
+    print(f"Mode {DEFAULT_MODE}: {len(agent.tool_specs)} tools. Start a message with /algo or /score to switch.")
     print("Type a message and press Enter. Ctrl-C to quit.\n")
 
     try:
@@ -338,6 +345,13 @@ def run_agent(config: BachConfig) -> None:
                 break
             if not user_input:
                 continue
+            mode, rest = split_prefix(user_input)
+            if mode:
+                enter(mode)
+                print(f"  mode      {mode} ({len(agent.tool_specs)} tools)")
+                if rest == user_input:  # only the prefix: switch, send nothing
+                    continue
+                user_input = rest
             if library is not None:
                 user_input, added = library.augment_text(user_input, seen_docs)
                 if added:

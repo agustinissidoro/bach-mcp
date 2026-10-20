@@ -2,8 +2,10 @@
 gateway.py
 ----------
 The small HTTP app that stands between the llama.cpp web chat and the model,
-on the chat's port. With either backend it adds the instrument docs to the
-messages that name an instrument (see docs.py).
+on the chat's port. With either backend it puts each request in its mode
+(/score or /algo: that mode's part of the skill and its tools, see modes.py)
+and adds the instrument docs to the messages that name an instrument (see
+docs.py).
 
 With the llama backend (`create_llama_gateway_app`) it is a plain proxy:
 every request goes to llama-server unchanged, except that the chat requests
@@ -39,6 +41,7 @@ from starlette.routing import Route
 
 from .config import BachConfig
 from .docs import DocLibrary
+from .modes import apply_mode, split_prefix
 
 _THINK_LEVELS = ("low", "medium", "high", "xhigh")
 _CHAT_PATHS = ("/v1/chat/completions", "/chat/completions")
@@ -60,6 +63,26 @@ def with_docs(body: Dict[str, Any], library: Optional[DocLibrary]) -> Dict[str, 
     if added and messages and messages[-1].get("role") == "user":
         print(f"  docs      {', '.join(added)}", flush=True)
     return {**body, "messages": augmented}
+
+
+class ModeSwitch:
+    """Puts chat requests in their mode. The skill is read once, when the chat is set up with it."""
+
+    def __init__(self, config: BachConfig) -> None:
+        self.full = config.system_prompt()
+        self.raw = config.skill_source()
+
+    def __call__(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        messages = body.get("messages")
+        moded, mode = apply_mode(body, self.full, self.raw)
+        if isinstance(messages, list) and messages and messages[-1].get("role") == "user":
+            content = messages[-1].get("content")
+            text = content if isinstance(content, str) else ""
+            if isinstance(content, list):
+                text = next((str(p.get("text", "")) for p in content if isinstance(p, dict) and p.get("type") == "text"), "")
+            if split_prefix(text)[0]:
+                print(f"  mode      {mode}", flush=True)
+        return moded
 
 
 def to_ollama_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -149,6 +172,7 @@ def create_gateway_app(config: BachConfig, ui_origin: str, capabilities: Optiona
     client = httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0))
     static_cache: Dict[str, Response] = {}
     library = DocLibrary() if config.chat.docs else None
+    with_mode = ModeSwitch(config)
 
     async def props(request: Request) -> JSONResponse:
         g = config.generation
@@ -185,7 +209,7 @@ def create_gateway_app(config: BachConfig, ui_origin: str, capabilities: Optiona
             body = await request.json()
         except ValueError:
             return _error(400, "request body is not valid JSON")
-        payload = build_ollama_request(with_docs(body, library), config)
+        payload = build_ollama_request(with_docs(with_mode(body), library), config)
         upstream_request = client.build_request("POST", f"{config.ollama.url}/api/chat", json=payload)
         try:
             upstream = await client.send(upstream_request, stream=True)
@@ -321,20 +345,21 @@ def create_llama_gateway_app(config: BachConfig, llama_origin: str) -> Starlette
 
     llama_origin: base URL of llama-server, which runs the model on an internal port.
     Everything is forwarded as it is, byte for byte and streamed; only the chat
-    requests get the instrument docs added to their messages.
+    requests are put in their mode and get the instrument docs.
     """
     client = httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0))
     library = DocLibrary() if config.chat.docs else None
+    with_mode = ModeSwitch(config)
 
     async def proxy(request: Request) -> Response:
         content = await request.body()
-        if library is not None and request.method == "POST" and request.url.path in _CHAT_PATHS:
+        if request.method == "POST" and request.url.path in _CHAT_PATHS:
             try:
                 body = json.loads(content)
             except ValueError:
                 body = None
             if isinstance(body, dict):
-                content = json.dumps(with_docs(body, library), ensure_ascii=False).encode("utf-8")
+                content = json.dumps(with_docs(with_mode(body), library), ensure_ascii=False).encode("utf-8")
         url = f"{llama_origin}{request.url.path}"
         if request.url.query:
             url += f"?{request.url.query}"
