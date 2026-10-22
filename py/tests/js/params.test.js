@@ -297,3 +297,118 @@ test("the element library uses no ES2015 built-ins", () => {
   panel.setFlatValues(panel.flatValues());
   panel.restore(panel.snapshot());
 });
+
+test("a transformer's panel shows its source and a capture button", () => {
+  const m = panelWith(Object.assign({}, SPEC, { kind: "transformer", source: { notes: 893, from: "file" } }));
+  m.ctx.paint();
+  const texts = m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
+  assert.ok(texts.includes("capture"));
+  assert.ok(texts.includes("source: 893 notes"));
+  const b = m.ctx.panel.captureRect(320);
+  m.ctx.onclick(b.x + 5, b.y + 5, 1, 0, 0, 0, 0, 0);
+  assert.deepEqual(sent(m), [["capture"]]);
+  m.send("source", 12, "inlet");
+  assert.equal(m.ctx.panel.source.notes, 12);
+  const producer = panelWith();
+  producer.ctx.paint();
+  assert.ok(!producer.ctx.mgraphics.calls.some((c) => c[0] === "show_text" && c[1] === "capture"));
+});
+
+const KINDS = {
+  title: "kinds",
+  params: [
+    { name: "target", type: "slider", kind: "pitch", grid: 100, unit: "mc", range: [0, 12700], step: 1, value: 6400, default: 6400 },
+    { name: "step", type: "slider", kind: "interval", grid: 100, unit: "mc", range: [-1200, 1200], step: 1, value: 400, default: 400 },
+    { name: "register", type: "range", kind: "pitch", grid: 100, unit: "mc", range: [0, 12700], step: 1, value: [4800, 8400], default: [4800, 8400] },
+    { name: "gap", type: "slider", kind: "time", grid: 20, unit: "ms", range: [50, 2000], step: 1, value: 300, default: 300 },
+  ],
+};
+
+function texts(m) {
+  m.ctx.mgraphics.calls.length = 0;
+  m.ctx.paint();
+  return m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
+}
+
+function clickValue(m, name) {
+  const v = row(m, name).value;
+  m.ctx.onclick(v.x + v.w / 2, v.y + v.h / 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+}
+
+test("a pitch shows as a name; clicking its value text switches to midicents, MIDI and back, sending nothing", () => {
+  const m = panelWith(KINDS);
+  let t = texts(m);
+  for (const shown of ["E4", "+400 mc", "C3–C6", "300 ms", "snap"]) assert.ok(t.includes(shown), `draws ${shown}`);
+  clickValue(m, "target");
+  assert.ok(texts(m).includes("6400 mc"));
+  clickValue(m, "target");
+  assert.ok(texts(m).includes("64 midi"));
+  clickValue(m, "target");
+  assert.ok(texts(m).includes("E4"));
+  clickValue(m, "step");
+  assert.ok(texts(m).includes("+4 st"));
+  clickValue(m, "gap");
+  assert.ok(texts(m).includes("300 ms"), "a time has one way to be shown");
+  assert.deepEqual(sent(m), []);
+});
+
+test("drags snap to the grid; alt or the snap switch lets them through", () => {
+  const m = panelWith(KINDS);
+  click(m, "target", 0.5513);  // about 7001 cents
+  assert.deepEqual(sent(m), [["target", 7000]]);
+  release(m);
+  const [x, y] = at(m, "target", 0.5037);
+  m.ctx.onclick(x, y, 1, 0, 0, 0, 1, 0);  // alt
+  const [[, free]] = sent(m);
+  assert.notEqual(free % 100, 0, `alt drag is free: ${free}`);
+  release(m);
+  click(m, "register", 0.01);
+  assert.equal(sent(m)[0][1] % 100, 0);
+  release(m);
+  const sw = m.ctx.panel.snapRect(m.ctx.panel.width);
+  m.ctx.onclick(sw.x + 2, sw.y + 2, 1, 0, 0, 0, 0, 0);
+  assert.equal(m.ctx.panel.snap, false);
+  release(m);
+  click(m, "target", 0.5513);
+  assert.notEqual(sent(m)[0][1] % 100, 0, "snap off: free");
+  release(m);
+  click(m, "gap", 0);
+  assert.deepEqual(sent(m), [["gap", 50]], "the ends of the range stay reachable");
+});
+
+test("the display and the snap switch are saved with the patch, and kept when the code is reloaded", () => {
+  const m = panelWith(KINDS);
+  clickValue(m, "target");
+  const sw = m.ctx.panel.snapRect(m.ctx.panel.width);
+  m.ctx.onclick(sw.x + 2, sw.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  m.send("spec", JSON.stringify(KINDS));
+  assert.equal(m.ctx.panel.find("target").display, "mc", "a new spec keeps the display");
+  const snapshot = m.ctx.panel.snapshot();
+  const n = loadPanel({ width: 320, height: 100 });
+  n.ctx.panel.restore(snapshot);
+  assert.equal(n.ctx.panel.find("target").display, "mc");
+  assert.equal(n.ctx.panel.snap, false);
+});
+
+test("a transformer's source mode: click to switch, sent to the runner, kept with the patch", () => {
+  const spec = Object.assign({}, SPEC, { kind: "transformer", source: { notes: 4, from: "file" } });
+  const m = panelWith(spec);
+  const r = m.ctx.panel.modeRect(m.ctx.panel.width);
+  assert.ok(texts(m).includes("keep"));
+  m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  assert.deepEqual(sent(m), [["sourcemode", "follow"]]);
+  assert.ok(texts(m).includes("follow"));
+  m.send("spec", JSON.stringify(spec));
+  assert.deepEqual(sent(m).filter((x) => x[0] === "sourcemode"), [["sourcemode", "follow"]], "a reload tells the runner");
+  m.send("sourcemode", "keep");
+  assert.equal(m.ctx.panel.sourceMode, "keep");
+  assert.deepEqual(sent(m), [], "the runner's echo is not sent back");
+  m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  const n = loadPanel({ width: 320, height: 100 });
+  n.ctx.panel.restore(m.ctx.panel.snapshot());
+  assert.equal(n.ctx.panel.sourceMode, "follow");
+});

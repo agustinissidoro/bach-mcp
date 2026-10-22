@@ -1,7 +1,7 @@
 /*
 A small stand-in for Max's JavaScript environment, enough to run the bach.mcp
 scripts (v8 and jsui) in Node: outlets, post, Dict, Task, File, messagename,
-mgraphics and box. Tasks run only when the test calls flush().
+messnamed, mgraphics and box. Tasks run only when the test calls flush().
 */
 "use strict";
 
@@ -32,23 +32,39 @@ class Dict {
 
 function makeFileClass() {
   return class File {
-    constructor(file) {
+    constructor(file, access) {
+      this.file = file;
+      this.writing = access === "write" || access === "readwrite";
       try {
         this.bytes = Array.from(fs.readFileSync(file));
         this.isopen = true;
       } catch (e) {
         this.bytes = [];
-        this.isopen = false;
+        this.isopen = this.writing;
       }
       this.position = 0;
-      this.eof = this.bytes.length;
+      this._eof = this.bytes.length;
+    }
+    get eof() {
+      return this._eof;
+    }
+    set eof(n) {  // Max's File: setting eof truncates (or extends) the file
+      this._eof = n;
+      this.bytes.length = n;
     }
     readbytes(n) {
-      const out = this.bytes.slice(this.position, this.position + n);
+      const out = this.bytes.slice(this.position, Math.min(this.position + n, this._eof));
       this.position += out.length;
       return out;
     }
+    writestring(text) {
+      const bytes = Array.from(Buffer.from(String(text), "utf8"));
+      this.bytes.splice(this.position, bytes.length, ...bytes);
+      this.position += bytes.length;
+      this._eof = Math.max(this._eof, this.position);
+    }
     close() {
+      if (this.writing && this.isopen) fs.writeFileSync(this.file, Buffer.from(this.bytes.slice(0, this._eof)));
       this.isopen = false;
     }
   };
@@ -99,6 +115,7 @@ function legacyRequire(name) {
  */
 function load(script, options = {}) {
   const out = [];
+  const named = [];
   const posts = [];
   const embedded = [];
   const tasks = [];
@@ -112,6 +129,11 @@ function load(script, options = {}) {
     setinletassist() {},
     setoutletassist() {},
     embedmessage: (...a) => embedded.push(a),
+    // A [send] to a named [receive]: recorded, and handed to options.receivers[name] if the test gives one.
+    messnamed: (name, ...a) => {
+      named.push([name, ...a]);
+      if (options.receivers && options.receivers[name]) options.receivers[name](...a);
+    },
     arrayfromargs: (args) => Array.prototype.slice.call(args),
     Dict,
     File: makeFileClass(),
@@ -159,7 +181,7 @@ function load(script, options = {}) {
     }
   }
 
-  return { ctx, out, posts, embedded, send, flush, dicts };
+  return { ctx, out, posts, embedded, named, send, flush, dicts };
 }
 
 function readDict(name) {

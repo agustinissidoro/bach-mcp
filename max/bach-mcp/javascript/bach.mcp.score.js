@@ -16,6 +16,7 @@ Units, always: onset and dur in milliseconds, pitch in midicents (6000 = middle 
 const DEFAULT_VELOCITY = 80;
 const MAX_NOTES = 20000;
 const MAX_CENTS = 12700;
+const MIN_CENTS = 1200; // C0: anything lower is a mistake, usually pitch and duration swapped
 
 const CLEFS = [
   "G", "F", "FG", "FGG", "FFG", "FFGG", "G8va", "G15ma", "G8vb", "G15mb",
@@ -161,7 +162,42 @@ function num(value, what, where, minimum) {
   return value;
 }
 
+// A pitch name: letter, accidental, octave (C4 = middle C = 6000), optional cent offset.
+const NOTE_NAME = /^([A-G])(##|bb|#|b|x)?(-?\d+)(?:([+-]\d+(?:\.\d+)?)c?)?$/;
+const NAME_CLASS = { C: 0, D: 200, E: 400, F: 500, G: 700, A: 900, B: 1100 };
+const NAME_ACCIDENTAL = { "#": 100, b: -100, "##": 200, x: 200, bb: -200 };
+const SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+/** Midicents of a pitch name such as "Db4", "F#5", "E4-14" or "C4+50" (C4 = middle C = 6000), or null. */
+function nameToCents(text) {
+  const m = NOTE_NAME.exec(String(text).trim());
+  if (!m) return null;
+  const [, letter, accidental, octave, offset] = m;
+  return (parseInt(octave, 10) + 1) * 1200 + NAME_CLASS[letter] + (accidental ? NAME_ACCIDENTAL[accidental] : 0) +
+    (offset ? parseFloat(offset) : 0);
+}
+
+/** The name of a pitch in midicents: nearest semitone with sharps, then the offset (-50, +50]. */
+function centsToName(cents) {
+  cents = tidy(cents);
+  const semitone = Math.ceil((cents - 50) / 100);
+  const offset = tidy(cents - semitone * 100);
+  let name = `${SHARP_NAMES[((semitone % 12) + 12) % 12]}${Math.floor(semitone / 12) - 1}`;
+  if (offset) name += `${offset > 0 ? "+" : "-"}${fmt(Math.abs(offset))}`;
+  return name;
+}
+
 function pitchOf(value, where) {
+  if (typeof value === "string" && value.trim() && !/^\s*[+-]?[\d.]+\s*$/.test(value)) {
+    const named = nameToCents(value);
+    if (named === null) {
+      throw new ScoreError(
+        `${where}: invalid pitch ${repr(value)}. A pitch is a name: letter, accidental (# or b), octave, ` +
+        "with C4 = middle C, e.g. \"Db4\", \"F#5\"; for a microtone add cents: \"E4-14\", \"C4+50\""
+      );
+    }
+    value = named;
+  }
   let cents;
   try {
     cents = num(value, "pitch", where);
@@ -175,6 +211,12 @@ function pitchOf(value, where) {
     throw new ScoreError(
       `${where}: pitch ${fmt(cents)} looks like a MIDI note number. Pitch is in midicents: ` +
       `6000 = middle C, 100 = one semitone (MIDI ${fmt(cents)} is ${fmt(cents * 100)})`
+    );
+  }
+  if (cents >= 0 && cents < MIN_CENTS) {
+    throw new ScoreError(
+      `${where}: pitch ${fmt(cents)} is below C0 (${MIN_CENTS}). Pitch is in midicents (6000 = middle C); ` +
+      "in a note written as a list the order is [pitch, dur, vel]"
     );
   }
   if (!(cents >= 0 && cents <= MAX_CENTS)) {
@@ -327,7 +369,7 @@ function noteOf(raw, where) {
   const note = { pitch: pitchOf(n.pitch, where) };
   note.dur = num(n.dur, "dur", where);
   if (note.dur <= 0) throw new ScoreError(`${where}: "dur" must be > 0 (milliseconds), got ${fmt(note.dur)}`);
-  // null = filled from the prevailing dynamic once the chords are in time order.
+  // null = the last loudness set in the voice (a dyn or a vel), filled once the chords are in time order.
   note.vel = given(n.vel) ? Math.min(127, Math.max(1, Math.round(num(n.vel, "vel", where)))) : null;
   if (given(n.gliss) && n.gliss !== 0 && !(Array.isArray(n.gliss) && !n.gliss.length)) {
     note.gliss = glissOf(n.gliss, where);
@@ -343,8 +385,48 @@ function noteOf(raw, where) {
   return note;
 }
 
+/** [pitch, dur, vel?, {gliss, head}?] -> the note as an object. */
+function noteFromList(raw, where) {
+  const numbers = raw.filter((x) => !isObject(x));
+  const extras = raw.filter(isObject);
+  if (numbers.length < 2 || numbers.length > 3 || extras.length > 1 || (extras.length && raw[raw.length - 1] !== extras[0])) {
+    throw new ScoreError(`${where}: a note list is [pitch, dur] or [pitch, dur, vel], then optionally ` +
+      "{\"gliss\": ..., \"head\": ...}, e.g. [6000, 500] or [6000, 500, 90]");
+  }
+  const note = Object.assign({}, extras[0] || {}, { pitch: numbers[0], dur: numbers[1] });
+  if (numbers.length === 3) note.vel = numbers[2];
+  return note;
+}
+
+/** [onset, {marks}?, note, note, ...] -> the chord as an object. */
+function chordFromList(raw, where) {
+  if (!raw.length || Array.isArray(raw[0]) || isObject(raw[0])) {
+    throw new ScoreError(`${where}: a chord list starts with its onset: [onset, note, ...], e.g. [0, [6000, 500]]`);
+  }
+  const chord = {};
+  let rest = raw.slice(1);
+  if (rest.length && isObject(rest[0])) {
+    const marks = {};
+    for (const [k, v] of Object.entries(rest[0])) marks[CHORD_ALIASES[k] || k] = v;
+    const bad = Object.keys(marks).filter((k) => !["dyn", "art", "text", "lyric"].includes(k));
+    if (bad.length) throw new ScoreError(`${where}: the chord's marks have only dyn, art, text, lyric (got "${bad[0]}")`);
+    Object.assign(chord, marks);
+    rest = rest.slice(1);
+  }
+  const notes = rest.map((n, i) => {
+    if (!Array.isArray(n)) {
+      throw new ScoreError(`${where}: after the onset (and the marks) come the notes as lists, e.g. [6000, 500]`);
+    }
+    return noteFromList(n, `${where}, note ${i + 1}`);
+  });
+  chord.onset = raw[0];
+  chord.notes = notes;
+  return chord;
+}
+
 function chordOf(raw, where) {
-  const example = "{\"onset\": 0, \"notes\": [{\"pitch\": 6000, \"dur\": 500}]}";
+  const example = "{\"onset\": 0, \"notes\": [{\"pitch\": 6000, \"dur\": 500}]} or [0, [6000, 500]]";
+  if (Array.isArray(raw)) raw = chordFromList(raw, where);
   if (!isObject(raw)) throw new ScoreError(`${where}: must be an object like ${example}`);
   const c = keysOf(raw, CHORD_ALIASES, CHORD_KEYS, NOTE_KEYS.concat(Object.keys(NOTE_ALIASES)), where, "chord");
   if (!given(c.onset)) throw new ScoreError(`${where}: "onset" is required: when the chord starts, in milliseconds`);
@@ -358,7 +440,7 @@ function chordOf(raw, where) {
   if (!Array.isArray(notes) || !notes.length) {
     throw new ScoreError(`${where}: "notes" must be a non-empty list, like ${example}`);
   }
-  chord.notes = notes.map((n, i) => noteOf(n, `${where}, note ${i + 1}`));
+  chord.notes = notes.map((n, i) => noteOf(Array.isArray(n) ? noteFromList(n, `${where}, note ${i + 1}`) : n, `${where}, note ${i + 1}`));
   return chord;
 }
 
@@ -398,13 +480,15 @@ function normalizeScore(score) {
     const chords = chordsIn.map((c, ci) => chordOf(c, `voice ${vi}, chord ${ci + 1}`));
     chords.sort((a, b) => a.onset - b.onset);
 
-    // A dynamic holds until the next one, so it also sets the velocity of the notes that follow it.
+    // Loudness holds until it changes: a note without "vel" has the last loudness set
+    // in its voice, by a dynamic or by a velocity.
     let prevailing = DEFAULT_VELOCITY;
     for (const chord of chords) {
       const implied = chord.dyn ? dynamicVelocity(chord.dyn) : null;
       if (implied !== null) prevailing = implied;
       for (const note of chord.notes) {
         if (note.vel === null) note.vel = prevailing;
+        else prevailing = note.vel;
       }
       total += chord.notes.length;
     }
@@ -796,6 +880,7 @@ function summarize(score, preview = 8) {
 }
 
 module.exports = {
+  nameToCents, centsToName,
   ScoreError,
   DEFAULT_VELOCITY, MAX_NOTES, MAX_CENTS, CLEFS, NOTEHEADS, ARTICULATIONS,
   fmt, tidy,

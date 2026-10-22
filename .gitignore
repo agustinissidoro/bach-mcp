@@ -196,3 +196,9 @@ logs/
 .claude/settings.local.json
 # Previous versions of algorithm files, kept by send_algorithm
 algorithms/.history/
+
+# The score exchange file between the MCP server and bach.roll
+buffer.txt
+.buffer.txt.tmp
+max/bach-mcp/buffer.txt
+max/bach-mcp/.buffer.txt.tmp

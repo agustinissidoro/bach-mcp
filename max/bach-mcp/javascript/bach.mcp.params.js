@@ -8,11 +8,19 @@ Create it as [jsui] with this file (or drag the file onto a jsui), then:
 The panel builds itself from the spec the runner sends when it loads a file:
 one element per parameter, placed automatically (see bach.mcp.gui.js). Moving
 an element sends "<param> <value...>". Double-click an element: back to its
-declared value. The panel resizes itself to its content (autosize 0 to stop).
+declared value. Click a pitch's value text to show it as a name, midicents or
+MIDI (an interval: cents or semitones); "snap" in the title row makes drags
+land on round values (alt inverts it while dragging). The panel resizes itself to its content (autosize 0 to stop).
 
 It is saved with the patch (parameters, values and the file path), and on
 reopening it asks the runner to load the file again with those values. It also
 works with pattr / pattrstorage: give it a scripting name to store presets.
+
+A transformer shows its source score in the title row, its source mode
+("keep" the original, or "follow" every score at the runner's right inlet;
+click to switch, sends "sourcemode keep|follow"), and a capture button that
+sends "capture" to the runner (take the score now in the roll as the new
+source).
 
 Other messages: reset (all parameters to their declared values), bang (send
 every value), clear, autosize 0/1.
@@ -39,7 +47,7 @@ if (!panel) post("bach.mcp.params: cannot load bach.mcp.gui.js; it must be in Ma
 var autosizing = true;
 var reloader = new Task(askForFile, this);
 
-setinletassist(0, "from bach.mcp.algo middle outlet: spec, set, status");
+setinletassist(0, "from bach.mcp.algo middle outlet: spec, set, status, source, sourcemode");
 setoutletassist(0, "to bach.mcp.algo: <param> <value...>");
 
 function emit(messages) {
@@ -79,6 +87,16 @@ function set() {
   if (!panel) return;
   var a = arrayfromargs(arguments);
   if (panel.setValue(String(a[0]), a.slice(1))) mgraphics.redraw();
+}
+
+function source(notes, from) {
+  if (!panel) return;
+  panel.setSource(notes, from);
+  mgraphics.redraw();
+}
+
+function sourcemode(mode) {
+  if (panel && panel.setSourceMode(String(mode))) mgraphics.redraw();
 }
 
 function status() {
@@ -143,7 +161,7 @@ onclick.local = 1;
 
 function ondrag(x, y, button, cmd, shift, capslock, option, ctrl) {
   if (!panel) return;
-  if (button) emit(panel.mouseDrag(x, y, { shift: Boolean(shift) }));
+  if (button) emit(panel.mouseDrag(x, y, { shift: Boolean(shift), alt: Boolean(option) }));
   else panel.mouseUp();
   mgraphics.redraw();
 }

@@ -9,6 +9,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from bach_mcp.compose import euclid, run_program, scale  # noqa: E402
+from bach_mcp.translate import name_to_cents  # noqa: E402
 from bach_mcp.translate import (  # noqa: E402
     ScoreError,
     bach_pitch_to_cents,
@@ -96,11 +97,13 @@ class HierarchyTests(unittest.TestCase):
         self.assertIn("\"notes\" must be a non-empty list", error(one_voice({"onset": 0, "notes": []})))
         self.assertIn("\"dur\" must be > 0", error(one_voice(chord(0, (6000, 0)))))
 
-    def test_pitch_is_midicents_only(self):
+    def test_pitch_is_midicents_or_a_name(self):
         self.assertIn("looks like a MIDI note number", error(one_voice(chord(0, (60, 500)))))
         self.assertIn("MIDI 60 is 6000", error(one_voice(chord(0, (60, 500)))))
-        self.assertIn("Pitch is a number in midicents", error(one_voice(chord(0, ("C4", 500)))))
         self.assertIn("out of range", error(one_voice(chord(0, (20000, 500)))))
+        named = normalize_score(one_voice(chord(0, ("C4", 500), ("Db4", 500), ("E4-14", 500), ("C#5+50", 500))))
+        self.assertEqual([n["pitch"] for n in named["voices"][0]["chords"][0]["notes"]], [6000, 6100, 6386, 7350])
+        self.assertIn("A pitch is a name", error(one_voice(chord(0, ("H4", 500)))))
 
     def test_key_aliases(self):
         score = normalize_score({"voices": [{"chords": [
@@ -301,17 +304,39 @@ class SkillTests(unittest.TestCase):
 
     def test_the_worked_example_follows_its_own_table(self):
         last = json.loads(re.findall(r"```json\n(.*?)```", self.text, re.S)[-1])
-        chords = last["voices"][0]["chords"]
-        self.assertEqual([c["onset"] for c in chords], [n * 250 for n in range(9)])
-        self.assertEqual([c["notes"][0]["pitch"] for c in chords],
-                         [6200, 6500, 6900, 6700, 7100, 6400, 7300, 6600, 6900])
+        chords = last["voices"][0]["chords"]  # [onset, {marks}, [pitch, dur, vel], ...]
+        self.assertEqual([c[0] for c in chords], [n * 250 for n in range(9)])
+        self.assertEqual([c[2][0] for c in chords], [6200, 6500, 6900, 6700, 7100, 6400, 7300, 6600, 6900])
 
-    def test_pitch_table_is_in_midicents(self):
-        rows = re.findall(r"^  (\d) ((?: +\d+){12})$", self.text, re.M)
-        self.assertEqual(len(rows), 7)
-        for octave, cells in rows:
-            self.assertEqual([int(c) for c in cells.split()],
-                             [(int(octave) + 1) * 1200 + i * 100 for i in range(12)])
+    def test_the_worked_example_shows_what_the_pitch_tools_answer(self):
+        from bach_mcp.pitch_tools import call_pitch_tool
+        calls = re.findall(r"^(p2mc|transpose)\((.*?)\)\s+→ (\[[^\]]*\])", self.text, re.M)
+        self.assertEqual(len(calls), 3)
+        for name, args, shown in calls:
+            call = json.loads(f"[{args}]")
+            arguments = {"pitches": call[0]} if name == "p2mc" else {"pitches": call[0], "cents": call[1]}
+            self.assertEqual(call_pitch_tool(name, arguments), shown)
+
+    def test_the_skill_teaches_one_fixed_form(self):
+        for block in re.findall(r"```json\n(.*?)```", self.text, re.S):
+            data = json.loads(block)
+            chords = [data] if isinstance(data, list) else [c for v in data["voices"] for c in v["chords"]]
+            for c in chords:
+                self.assertIsInstance(c[1], dict, c)
+                for note in c[2:]:
+                    self.assertEqual(len([x for x in note if not isinstance(x, dict)]), 3, note)
+
+    def test_the_score_part_writes_pitches_in_midicents(self):
+        from bach_mcp.modes import skill_for
+        score_part = skill_for(self.text, "score")
+        self.assertNotIn("Pitch table", score_part)
+        for block in re.findall(r"```json\n(.*?)```", score_part, re.S):
+            data = json.loads(block)
+            chords = [data] if isinstance(data, list) else [c for v in data["voices"] for c in v["chords"]]
+            for c in chords:
+                for note in c[2:]:
+                    self.assertIsInstance(note[0], (int, float), note)
+                    self.assertGreaterEqual(note[0], 1200, note)
 
     def test_inline_values_named_in_the_skill_are_accepted(self):
         section = lambda key: re.split(r"\n- |\n\n", self.text.split(f'- Optional `"{key}"`:', 1)[1], 1)[0]  # noqa: E731

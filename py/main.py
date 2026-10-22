@@ -311,6 +311,8 @@ def run_agent(config: BachConfig) -> None:
             model=config.model.ollama_model if config.uses_ollama else config.model.alias,
             temperature=config.generation.temperature,
             max_tokens=config.generation.max_tokens,
+            sampling={"top_p": config.generation.top_p, "top_k": config.generation.top_k,
+                      "presence_penalty": config.generation.presence_penalty},
         )
     provider = build_provider(provider_cfg)
 
@@ -372,12 +374,15 @@ def main() -> None:
         "mode",
         nargs="?",
         default="serve",
-        choices=["run", "serve", "agent"],
+        choices=["run", "serve", "agent", "eval"],
         help="run = MCP server + llama-server + web chat. serve = MCP server only (default). "
-             "agent = terminal chat.",
+             "agent = terminal chat. eval = the evaluation suite against the model.",
     )
     parser.add_argument("--config", default="", help="path to the config file (default: bach.toml in the repo root).")
     parser.add_argument("--stdio", action="store_true", help="serve over stdio instead of HTTP.")
+    parser.add_argument("--runs", type=int, default=5, help="eval: runs per case (default 5).")
+    parser.add_argument("--case", default="", help="eval: only these cases, comma-separated "
+                        "(neapolitan, trio, spiral, microtonal, algo).")
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
 
@@ -387,6 +392,9 @@ def main() -> None:
             run_all(config)
         elif args.mode == "agent":
             run_agent(config)
+        elif args.mode == "eval":
+            from bach_mcp.evaluate import run_suite
+            run_suite(config, runs=args.runs, only=[c.strip() for c in args.case.split(",") if c.strip()])
         else:
             run_serve(config, stdio=args.stdio)
     except ConfigError as exc:

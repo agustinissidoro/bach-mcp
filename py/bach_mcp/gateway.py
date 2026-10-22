@@ -27,10 +27,11 @@ the native one accepts the context size and the thinking switch per request.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 import httpx
 from starlette.applications import Starlette
@@ -42,8 +43,11 @@ from starlette.routing import Route
 from .config import BachConfig
 from .docs import DocLibrary
 from .modes import apply_mode, split_prefix
+from .session import new_conversation, starts_conversation
 
 _THINK_LEVELS = ("low", "medium", "high", "xhigh")
+# A reply that runs out of tokens inside an unfinished tool call is asked again this many times.
+_LOOP_RETRIES = 1
 _CHAT_PATHS = ("/v1/chat/completions", "/chat/completions")
 # Hop-by-hop headers and the ones the proxy recomputes.
 _SKIP_REQUEST_HEADERS = ("host", "content-length", "connection")
@@ -74,6 +78,8 @@ class ModeSwitch:
 
     def __call__(self, body: Dict[str, Any]) -> Dict[str, Any]:
         messages = body.get("messages")
+        if starts_conversation(messages):
+            new_conversation()
         moded, mode = apply_mode(body, self.full, self.raw)
         if isinstance(messages, list) and messages and messages[-1].get("role") == "user":
             content = messages[-1].get("content")
@@ -137,6 +143,7 @@ def build_ollama_request(body: Dict[str, Any], config: BachConfig) -> Dict[str, 
         "temperature": body.get("temperature", g.temperature),
         "top_p": body.get("top_p", g.top_p),
         "top_k": body.get("top_k", g.top_k),
+        "presence_penalty": body.get("presence_penalty", g.presence_penalty),
     }
     max_tokens = body.get("max_tokens", g.max_tokens)
     if isinstance(max_tokens, (int, float)) and max_tokens > 0:
@@ -159,6 +166,44 @@ def build_ollama_request(body: Dict[str, Any], config: BachConfig) -> Dict[str, 
     if wanted is not None:
         request["think"] = (g.reasoning if g.reasoning in _THINK_LEVELS else True) if wanted else False
     return request
+
+
+KEEPALIVE_SECONDS = 1.0
+
+
+async def keep_alive(source: AsyncIterator[Any], every: float = KEEPALIVE_SECONDS) -> AsyncIterator[Any]:
+    """The items of `source`, with a None whenever it has been silent for `every` seconds.
+
+    Ollama sends nothing while the model writes a tool call, which for a whole score takes
+    minutes. The web chat takes a stream that has been silent for 3 s, when its tab comes
+    back into view, as a lost connection and gives up ("Stream connection lost and could not
+    be resumed"); a keepalive comment line every second keeps it reading.
+    """
+    queue: "asyncio.Queue[Tuple[str, Any]]" = asyncio.Queue()
+
+    async def pump() -> None:
+        try:
+            async for item in source:
+                await queue.put(("item", item))
+            await queue.put(("end", None))
+        except BaseException as exc:  # noqa: BLE001 — handed to the reader below
+            await queue.put(("error", exc))
+
+    task = asyncio.create_task(pump())
+    try:
+        while True:
+            try:
+                kind, value = await asyncio.wait_for(queue.get(), timeout=every)
+            except asyncio.TimeoutError:
+                yield None
+                continue
+            if kind == "end":
+                return
+            if kind == "error":
+                raise value
+            yield value
+    finally:
+        task.cancel()  # the chat went away: stop reading from Ollama
 
 
 def create_gateway_app(config: BachConfig, ui_origin: str, capabilities: Optional[List[str]] = None) -> Starlette:
@@ -184,6 +229,7 @@ def create_gateway_app(config: BachConfig, ui_origin: str, capabilities: Optiona
             "default_generation_settings": {
                 "n_ctx": config.model.context_size,
                 "params": {"temperature": g.temperature, "top_p": g.top_p, "top_k": g.top_k,
+                           "presence_penalty": g.presence_penalty,
                            "n_predict": g.max_tokens},
             },
             "modalities": {"vision": "vision" in capabilities, "audio": False},
@@ -232,54 +278,81 @@ def create_gateway_app(config: BachConfig, ui_origin: str, capabilities: Optiona
                     "choices": [{"index": 0, "delta": delta, "finish_reason": finish}], **extra}
 
         async def events() -> AsyncIterator[Dict[str, Any]]:
-            """Yield OpenAI-style chunks translated from Ollama's NDJSON stream."""
+            """Yield OpenAI-style chunks translated from Ollama's NDJSON stream.
+
+            If a reply runs out of tokens having shown nothing (no text, no reasoning, no
+            finished tool call), the model looped inside a tool call: the request is sent
+            once more, which draws differently. Nothing was shown, so nothing repeats.
+            """
+            nonlocal upstream
             called = False
             n_calls = 0
             yield chunk({"role": "assistant", "content": None})
-            try:
-                async for line in upstream.aiter_lines():
-                    if not line.strip():
-                        continue
-                    data = json.loads(line)
-                    if data.get("error"):
-                        yield {"error": {"message": f"Ollama: {data['error']}", "type": "server_error", "code": 500}}
-                        return
-                    message = data.get("message") or {}
-                    if message.get("thinking"):
-                        yield chunk({"reasoning_content": message["thinking"]})
-                    if message.get("content"):
-                        yield chunk({"content": message["content"]})
-                    for tc in message.get("tool_calls") or []:
-                        fn = tc.get("function") or {}
-                        called = True
-                        yield chunk({"tool_calls": [{
-                            "index": n_calls,
-                            "id": tc.get("id") or f"call_{uuid.uuid4().hex[:8]}",
-                            "type": "function",
-                            "function": {"name": fn.get("name", ""),
-                                         "arguments": json.dumps(fn.get("arguments") or {}, ensure_ascii=False)},
-                        }]})
-                        n_calls += 1
-                    if data.get("done"):
-                        prompt_n, predicted_n = data.get("prompt_eval_count", 0), data.get("eval_count", 0)
-                        prompt_ms = data.get("prompt_eval_duration", 0) / 1e6
-                        predicted_ms = data.get("eval_duration", 0) / 1e6
-                        finish = "tool_calls" if called else ("length" if data.get("done_reason") == "length" else "stop")
-                        yield chunk(
-                            {}, finish,
-                            usage={"prompt_tokens": prompt_n, "completion_tokens": predicted_n,
-                                   "total_tokens": prompt_n + predicted_n},
-                            timings={"prompt_n": prompt_n, "prompt_ms": prompt_ms,
-                                     "predicted_n": predicted_n, "predicted_ms": predicted_ms,
-                                     "predicted_per_second": predicted_n / (predicted_ms / 1000) if predicted_ms else 0,
-                                     "prompt_per_second": prompt_n / (prompt_ms / 1000) if prompt_ms else 0},
-                        )
-            finally:
-                await upstream.aclose()
+            for attempt in range(1 + _LOOP_RETRIES):
+                shown = False
+                looped = False
+                try:
+                    async for line in upstream.aiter_lines():
+                        if not line.strip():
+                            continue
+                        data = json.loads(line)
+                        if data.get("error"):
+                            yield {"error": {"message": f"Ollama: {data['error']}", "type": "server_error", "code": 500}}
+                            return
+                        message = data.get("message") or {}
+                        if message.get("thinking"):
+                            shown = True
+                            yield chunk({"reasoning_content": message["thinking"]})
+                        if message.get("content"):
+                            shown = True
+                            yield chunk({"content": message["content"]})
+                        for tc in message.get("tool_calls") or []:
+                            fn = tc.get("function") or {}
+                            called = True
+                            yield chunk({"tool_calls": [{
+                                "index": n_calls,
+                                "id": tc.get("id") or f"call_{uuid.uuid4().hex[:8]}",
+                                "type": "function",
+                                "function": {"name": fn.get("name", ""),
+                                             "arguments": json.dumps(fn.get("arguments") or {}, ensure_ascii=False)},
+                            }]})
+                            n_calls += 1
+                        if data.get("done"):
+                            if (data.get("done_reason") == "length" and not called and not shown
+                                    and attempt < _LOOP_RETRIES):
+                                looped = True
+                                break
+                            prompt_n, predicted_n = data.get("prompt_eval_count", 0), data.get("eval_count", 0)
+                            prompt_ms = data.get("prompt_eval_duration", 0) / 1e6
+                            predicted_ms = data.get("eval_duration", 0) / 1e6
+                            finish = "tool_calls" if called else ("length" if data.get("done_reason") == "length" else "stop")
+                            yield chunk(
+                                {}, finish,
+                                usage={"prompt_tokens": prompt_n, "completion_tokens": predicted_n,
+                                       "total_tokens": prompt_n + predicted_n},
+                                timings={"prompt_n": prompt_n, "prompt_ms": prompt_ms,
+                                         "predicted_n": predicted_n, "predicted_ms": predicted_ms,
+                                         "predicted_per_second": predicted_n / (predicted_ms / 1000) if predicted_ms else 0,
+                                         "prompt_per_second": prompt_n / (prompt_ms / 1000) if prompt_ms else 0},
+                            )
+                finally:
+                    await upstream.aclose()
+                if not looped:
+                    return
+                print("  retry     the model looped inside a tool call until the token limit; asking again", flush=True)
+                try:
+                    upstream = await client.send(client.build_request("POST", f"{config.ollama.url}/api/chat", json=payload),
+                                                 stream=True)
+                except httpx.HTTPError as exc:
+                    yield {"error": {"message": f"Ollama: {exc}", "type": "server_error", "code": 502}}
+                    return
 
         if body.get("stream", False):
             async def sse() -> AsyncIterator[bytes]:
-                async for event in events():
+                async for event in keep_alive(events()):
+                    if event is None:
+                        yield b": keepalive\n\n"
+                        continue
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode("utf-8")
                 yield b"data: [DONE]\n\n"
             return StreamingResponse(sse(), media_type="text/event-stream",

@@ -13,9 +13,10 @@ gpu_layers = "auto"       # "auto", "all", or a number of layers to put on the G
 
 [generation]
 max_tokens = 16384        # limit for ONE reply, including thinking. An algorithm with its reasoning needs ~8,000-10,000.
-temperature = 0.4
-top_p = 0.9
-top_k = 40
+temperature = 0.7         # Qwen's recommended sampling without reasoning. With 0.4/0.9/40 and no presence
+top_p = 0.8               # penalty, 5 of 12 test replies looped inside the tool call until the token limit;
+top_k = 20                # with these, 0 of 12.
+presence_penalty = 1.5    # 0-2: against endless repetition (Qwen's recommendation); 0 = off
 reasoning = "off"         # "off", "on", "auto" (model default), or a level: "low" "medium" "high" "xhigh"
                           # (levels need the ollama backend and a model that has them; llama treats them as "on").
                           # Off by default: Qwen with reasoning on spends minutes thinking per answer. The chat's
@@ -24,7 +25,7 @@ reasoning_budget = 2048   # llama backend only: tokens the model may spend think
 
 [chat]
 skill_file = ""           # system prompt. Empty = the built-in skill for the tool set (py/bach_mcp/BACH_SKILL.md)
-max_tool_rounds = 4       # tool calls the model may chain in one answer before it is stopped
+max_tool_rounds = 8       # tool calls the model may chain in one answer before it is stopped (pitch tools, then the score)
 tool_timeout_seconds = 60 # how long the chat waits for one tool call
 show_thinking = true      # show the model's reasoning while it is being written
 open_browser = true       # open the chat when everything is ready
@@ -50,9 +51,10 @@ autostart = true          # open Ollama if it is not already running
 keep_alive = "30m"        # how long Ollama keeps the model in memory after the last message
 
 [max]
-send_port = 3000          # Python -> Max (must match bachTCP.js)
-receive_port = 3001       # Max -> Python
+send_port = 3000          # Python -> Max: [udpreceive 3000] in the patch
+receive_port = 3001       # Max -> Python: [udpsend 127.0.0.1 3001] in the patch
+buffer = "max/bach-mcp/buffer.txt"  # the file scores travel through, in bach's text format (relative to this folder)
 
 [algo]
-dir = "algorithms"        # where send_algorithm writes the algorithm files (relative to this folder, or absolute)
+dir = "max/bach-mcp/algorithms"  # where send_algorithm writes the algorithm files (relative to this folder, or absolute)
 node = "node"             # Node.js, to check each algorithm before it is loaded in Max (name on PATH or absolute path)

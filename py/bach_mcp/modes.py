@@ -29,8 +29,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 MODES = ("score", "algo")
 DEFAULT_MODE = "score"
+# The exact pitch arithmetic of pitch_tools.py, for /score.
+PITCH_TOOLS = ("p2mc", "mc2p", "get_midicents", "transpose", "reverse", "mirror", "force_scale",
+               "get_chord", "get_scale")
+
 MODE_TOOLS = {
-    "score": ("write_score", "read_score", "clear_score"),
+    "score": ("write_score", "read_score", "clear_score") + PITCH_TOOLS,
     "algo": ("send_algorithm",),
 }
 BACH_TOOLS = frozenset(name for names in MODE_TOOLS.values() for name in names)
@@ -133,4 +137,4 @@ def apply_mode(body: Dict[str, Any], full_skill: str, raw_skill: str) -> Tuple[D
     return body, mode
 
 
-__all__ = ["MODES", "DEFAULT_MODE", "MODE_TOOLS", "split_prefix", "skill_for", "tools_for", "mode_of", "apply_mode"]
+__all__ = ["MODES", "DEFAULT_MODE", "MODE_TOOLS", "PITCH_TOOLS", "split_prefix", "skill_for", "tools_for", "mode_of", "apply_mode"]

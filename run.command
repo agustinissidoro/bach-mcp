@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Starts everything Bach needs: the MCP server, llama-server and the web chat.
-# Open the Max patch and click "script start" first. Settings live in bach.toml.
+# Open the Max patch first (the UDP bridge needs no starting). Settings live in bach.toml.
 # Double-click this file in Finder, or run ./run.command in a terminal.
 
 cd "$(dirname "$0")" || exit 1

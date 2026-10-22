@@ -42,6 +42,7 @@ flags, breakpoint velocities, the legacy [graphic] spec, slots 1-19 and 25-30.
 
 from __future__ import annotations
 
+import math
 import re
 from fractions import Fraction
 from typing import Any, Dict, List, Optional, Tuple
@@ -49,6 +50,7 @@ from typing import Any, Dict, List, Optional, Tuple
 DEFAULT_VELOCITY = 80
 MAX_NOTES = 20000
 MAX_CENTS = 12700
+MIN_CENTS = 1200  # C0: anything lower is a mistake, usually pitch and duration swapped
 
 CLEFS = [
     "G", "F", "FG", "FGG", "FFG", "FFGG", "G8va", "G15ma", "G8vb", "G15mb",
@@ -169,7 +171,43 @@ def _num(value: Any, what: str, where: str, minimum: Optional[float] = None) -> 
     return float(value)
 
 
+# A pitch name: letter, accidental, octave (C4 = middle C = 6000), optional cent offset.
+_NOTE_NAME = re.compile(r"^([A-G])(##|bb|#|b|x)?(-?\d+)(?:([+-]\d+(?:\.\d+)?)c?)?$")
+_NAME_CLASS = {"C": 0, "D": 200, "E": 400, "F": 500, "G": 700, "A": 900, "B": 1100}
+_NAME_ACCIDENTAL = {None: 0, "#": 100, "b": -100, "##": 200, "x": 200, "bb": -200}
+_SHARP_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+
+
+def name_to_cents(text: str) -> Optional[float]:
+    """Midicents of a pitch name such as "Db4", "F#5", "E4-14" or "C4+50" (C4 = middle C = 6000), or None."""
+    m = _NOTE_NAME.match(str(text).strip())
+    if not m:
+        return None
+    letter, accidental, octave, offset = m.groups()
+    return (int(octave) + 1) * 1200 + _NAME_CLASS[letter] + _NAME_ACCIDENTAL[accidental] + (float(offset) if offset else 0.0)
+
+
+def cents_to_name(cents: float) -> str:
+    """The name of a pitch in midicents: the nearest semitone, spelled with sharps, then the
+    offset in cents (more than -50, up to +50): 6100 -> "C#4", 6050 -> "C4+50", 6933 -> "A4+33"."""
+    cents = round(float(cents), 3)
+    semitone = math.ceil((cents - 50) / 100)
+    offset = round(cents - semitone * 100, 3)
+    name = f"{_SHARP_NAMES[semitone % 12]}{semitone // 12 - 1}"
+    if offset:
+        name += f"{'+' if offset > 0 else '-'}{_fmt(abs(offset))}"
+    return name
+
+
 def _pitch(value: Any, where: str) -> float:
+    if isinstance(value, str) and value.strip() and not re.fullmatch(r"\s*[+-]?[\d.]+\s*", value):
+        named = name_to_cents(value)
+        if named is None:
+            raise ScoreError(
+                f"{where}: invalid pitch {value!r}. A pitch is a name: letter, accidental (# or b), octave, "
+                "with C4 = middle C, e.g. \"Db4\", \"F#5\"; for a microtone add cents: \"E4-14\", \"C4+50\""
+            )
+        value = named
     try:
         cents = _num(value, "pitch", where)
     except ScoreError:
@@ -181,6 +219,11 @@ def _pitch(value: Any, where: str) -> float:
         raise ScoreError(
             f"{where}: pitch {_fmt(cents)} looks like a MIDI note number. Pitch is in midicents: "
             f"6000 = middle C, 100 = one semitone (MIDI {_fmt(cents)} is {_fmt(cents * 100)})"
+        )
+    if 0 <= cents < MIN_CENTS:
+        raise ScoreError(
+            f"{where}: pitch {_fmt(cents)} is below C0 ({MIN_CENTS}). Pitch is in midicents (6000 = middle C); "
+            "in a note written as a list the order is [pitch, dur, vel]"
         )
     if not 0 <= cents <= MAX_CENTS:
         raise ScoreError(f"{where}: pitch {_fmt(cents)} is out of range (midicents, 0-{MAX_CENTS}; 6000 = middle C)")
@@ -326,7 +369,7 @@ def _note(raw: Any, where: str) -> Dict[str, Any]:
     note["dur"] = _num(n["dur"], "dur", where)
     if note["dur"] <= 0:
         raise ScoreError(f"{where}: \"dur\" must be > 0 (milliseconds), got {_fmt(note['dur'])}")
-    # None = filled from the prevailing dynamic once the chords are in time order.
+    # None = the last loudness set in the voice (a dyn or a vel), filled once the chords are in time order.
     note["vel"] = None if n.get("vel") is None else int(min(127, max(1, round(_num(n["vel"], "vel", where)))))
     if n.get("gliss") not in (None, 0, []):
         note["gliss"] = _gliss(n["gliss"], where)
@@ -340,8 +383,47 @@ def _note(raw: Any, where: str) -> Dict[str, Any]:
     return note
 
 
+def _note_from_list(raw: List[Any], where: str) -> Dict[str, Any]:
+    """[pitch, dur, vel?, {gliss, head}?] -> the note as an object."""
+    numbers = [x for x in raw if not isinstance(x, dict)]
+    extras = [x for x in raw if isinstance(x, dict)]
+    if not 2 <= len(numbers) <= 3 or len(extras) > 1 or (extras and raw[-1] is not extras[0]):
+        raise ScoreError(f"{where}: a note list is [pitch, dur] or [pitch, dur, vel], then optionally "
+                         "{\"gliss\": ..., \"head\": ...}, e.g. [6000, 500] or [6000, 500, 90]")
+    note = dict(extras[0]) if extras else {}
+    note.update(pitch=numbers[0], dur=numbers[1])
+    if len(numbers) == 3:
+        note["vel"] = numbers[2]
+    return note
+
+
+def _chord_from_list(raw: List[Any], where: str) -> Dict[str, Any]:
+    """[onset, {marks}?, note, note, ...] -> the chord as an object."""
+    if not raw or isinstance(raw[0], (list, dict)):
+        raise ScoreError(f"{where}: a chord list starts with its onset: [onset, note, ...], e.g. [0, [6000, 500]]")
+    chord: Dict[str, Any] = {}
+    rest = raw[1:]
+    if rest and isinstance(rest[0], dict):
+        marks = {_CHORD_ALIASES.get(k, k): v for k, v in rest[0].items()}
+        bad = [k for k in marks if k not in ("dyn", "art", "text", "lyric")]
+        if bad:
+            raise ScoreError(f"{where}: the chord's marks have only dyn, art, text, lyric (got \"{bad[0]}\")")
+        chord.update(marks)
+        rest = rest[1:]
+    notes = []
+    for ni, n in enumerate(rest, start=1):
+        if not isinstance(n, list):
+            raise ScoreError(f"{where}: after the onset (and the marks) come the notes as lists, e.g. [6000, 500]")
+        notes.append(_note_from_list(n, f"{where}, note {ni}"))
+    chord["onset"] = raw[0]
+    chord["notes"] = notes
+    return chord
+
+
 def _chord(raw: Any, where: str) -> Dict[str, Any]:
-    example = "{\"onset\": 0, \"notes\": [{\"pitch\": 6000, \"dur\": 500}]}"
+    example = "{\"onset\": 0, \"notes\": [{\"pitch\": 6000, \"dur\": 500}]} or [0, [6000, 500]]"
+    if isinstance(raw, list):
+        raw = _chord_from_list(raw, where)
     if not isinstance(raw, dict):
         raise ScoreError(f"{where}: must be an object like {example}")
     c = _keys(raw, _CHORD_ALIASES, _CHORD_KEYS, _NOTE_KEYS + tuple(_NOTE_ALIASES), where, "chord")
@@ -358,7 +440,8 @@ def _chord(raw: Any, where: str) -> Dict[str, Any]:
     notes = c.get("notes")
     if not isinstance(notes, list) or not notes:
         raise ScoreError(f"{where}: \"notes\" must be a non-empty list, like {example}")
-    chord["notes"] = [_note(n, f"{where}, note {ni}") for ni, n in enumerate(notes, start=1)]
+    chord["notes"] = [_note(_note_from_list(n, f"{where}, note {ni}") if isinstance(n, list) else n, f"{where}, note {ni}")
+                      for ni, n in enumerate(notes, start=1)]
     return chord
 
 
@@ -402,8 +485,8 @@ def normalize_score(score: Any) -> Dict[str, Any]:
         chords = [_chord(c, f"voice {vi}, chord {ci}") for ci, c in enumerate(chords_in, start=1)]
         chords.sort(key=lambda c: c["onset"])
 
-        # A dynamic holds until the next one, so it also sets the velocity of the
-        # notes that follow it.
+        # Loudness holds until it changes: a note without "vel" has the last loudness set
+        # in its voice, by a dynamic or by a velocity.
         prevailing = DEFAULT_VELOCITY
         for chord in chords:
             implied = dynamic_velocity(chord["dyn"]) if "dyn" in chord else None
@@ -412,6 +495,8 @@ def normalize_score(score: Any) -> Dict[str, Any]:
             for note in chord["notes"]:
                 if note["vel"] is None:
                     note["vel"] = prevailing
+                else:
+                    prevailing = note["vel"]
             total += len(chord["notes"])
         if total > MAX_NOTES:
             raise ScoreError(f"score has more than {MAX_NOTES} notes")
@@ -462,6 +547,10 @@ def _note_llll(note: Dict[str, Any], chord: Optional[Dict[str, Any]]) -> str:
 def _chord_llll(chord: Dict[str, Any]) -> str:
     notes = " ".join(_note_llll(n, chord if i == 0 else None) for i, n in enumerate(chord["notes"]))
     return f"[{_fmt(chord['onset'])} {notes}]"
+
+
+chord_llll = _chord_llll  # one canonical chord in gathered syntax
+fmt = _fmt  # a number as bach writes it
 
 
 def _body_llll(score: Dict[str, Any]) -> List[str]:
@@ -740,6 +829,48 @@ def llll_to_score(text: str) -> Dict[str, Any]:
     return score
 
 
+# ── Compact form (what read_score answers) ──────────────────────────────── #
+
+def score_to_positional(score: Dict[str, Any], fixed: bool = False, names: bool = False) -> Dict[str, Any]:
+    """A score with chords and notes as lists, in bach's own order: chord = [onset, {marks}?, note, ...],
+    note = [pitch, dur, vel?, {gliss, head}?].
+
+    names=True: pitches as names ("C#4", "A4+33"; see cents_to_name), as the model writes them.
+    fixed=True (what read_score answers, the form the model writes): every chord has its marks
+    object, {} when empty, and every note its vel. fixed=False: marks and vel only where needed
+    (vel only when it differs from the last loudness set in its voice, the rule normalize_score
+    fills it with), about half the tokens of the object form. Both read back to the same score."""
+    out: Dict[str, Any] = {"voices": []}
+    for v in score["voices"]:
+        voice = {k: v[k] for k in ("voice", "name", "clef") if k in v}
+        prevailing = DEFAULT_VELOCITY
+        chords = []
+        for c in sorted(v.get("chords", []), key=lambda c: c["onset"]):
+            row: List[Any] = [c["onset"]]
+            marks = {k: c[k] for k in ("dyn", "art", "text", "lyric") if c.get(k)}
+            if marks or fixed:
+                row.append(marks)
+            implied = dynamic_velocity(c["dyn"]) if c.get("dyn") else None
+            if implied is not None:
+                prevailing = implied
+            for n in c["notes"]:
+                note: List[Any] = [cents_to_name(n["pitch"]) if names else n["pitch"], n["dur"]]
+                vel = n.get("vel")
+                if vel is not None and (fixed or vel != prevailing):
+                    note.append(vel)
+                    prevailing = vel
+                extras = {k: n[k] for k in ("gliss", "head") if n.get(k) not in (None, "")}
+                if extras:
+                    note.append(extras)
+                row.append(note)
+            chords.append(row)
+        voice["chords"] = chords
+        out["voices"].append(voice)
+    if score.get("markers"):
+        out["markers"] = score["markers"]
+    return out
+
+
 # ── Summaries (what the model gets back instead of a dump) ───────────────── #
 
 def count_notes(score: Dict[str, Any]) -> int:
@@ -747,9 +878,11 @@ def count_notes(score: Dict[str, Any]) -> int:
     return sum(len(c["notes"]) for v in score["voices"] for c in v.get("chords", []))
 
 
-def summarize(score: Dict[str, Any], preview: int = 8) -> str:
-    """One compact line per voice describing a canonical score, in bach's units."""
+def summarize(score: Dict[str, Any], preview: int = 8, names: bool = False) -> str:
+    """One compact line per voice describing a canonical score, in bach's units
+    (names=True: pitches as names, chords as [C4 E4 G4])."""
     lines = []
+    pitch = cents_to_name if names else _fmt
     for vi, v in enumerate(score["voices"], start=1):
         chords = v["chords"]
         label = f"voice {vi}" + (f" ({v['name']})" if v["name"] else "") + f" clef {v['clef']}"
@@ -758,11 +891,15 @@ def summarize(score: Dict[str, Any], preview: int = 8) -> str:
             continue
         cents = [n["pitch"] for c in chords for n in c["notes"]]
         end = max(c["onset"] + max(n["dur"] for n in c["notes"]) for c in chords)
-        shown = [f"{'+'.join(_fmt(n['pitch']) for n in c['notes'])}@{_fmt(c['onset'])}" for c in chords[:preview]]
+        if names:
+            shown = [f"[{' '.join(pitch(n['pitch']) for n in c['notes'])}]@{_fmt(c['onset'])}" for c in chords[:preview]]
+        else:
+            shown = [f"{'+'.join(_fmt(n['pitch']) for n in c['notes'])}@{_fmt(c['onset'])}" for c in chords[:preview]]
         more = f" ... +{len(chords) - preview} more" if len(chords) > preview else ""
+        span = f"{pitch(min(cents))} to {pitch(max(cents))}" if names else f"{_fmt(min(cents))}-{_fmt(max(cents))}"
         lines.append(
             f"{label}: {len(cents)} notes in {len(chords)} chords, {_fmt(chords[0]['onset'])}-{_fmt(end)} ms, "
-            f"pitch {_fmt(min(cents))}-{_fmt(max(cents))}. Starts (pitch@onset): {' '.join(shown)}{more}"
+            f"pitch {span}. Starts (pitch@onset): {' '.join(shown)}{more}"
         )
     if score.get("markers"):
         lines.append("markers: " + " ".join(f"{m['name']}@{_fmt(m['onset'])}" for m in score["markers"]))

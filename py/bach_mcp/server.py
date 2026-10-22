@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from typing import Any, Deque, Dict, Optional
 
 try:
-    from .tcp import TCPSend, TCPServer
+    from .udp import UDPReceiver, UDPSend
 except ImportError:
-    from tcp import TCPSend, TCPServer
+    from udp import UDPReceiver, UDPSend
 
 
 def _log(message: str) -> None:
@@ -55,15 +55,15 @@ class BridgeMessage:
 
 
 class BachMCPServer:
-    """Owns MCP lifecycle and TCP transport wiring."""
+    """Owns MCP lifecycle and the UDP bridge to Max (plain-text messages, see udp.py)."""
 
     def __init__(self, config: Optional[MCPConfig] = None):
         self.config = config or MCPConfig()
-        self.server = TCPServer(
+        self.server = UDPReceiver(
             host=self.config.incoming_host,
             port=self.config.incoming_port,
         )
-        self.sender = TCPSend(
+        self.sender = UDPSend(
             host=self.config.outgoing_host,
             port=self.config.outgoing_port,
         )
@@ -84,8 +84,8 @@ class BachMCPServer:
         _log("=" * 50)
         _log("BACH MCP - Ready")
         _log("=" * 50)
-        _log(f"Incoming TCP: {self.config.incoming_host}:{self.config.incoming_port}")
-        _log(f"Outgoing TCP: {self.config.outgoing_host}:{self.config.outgoing_port}")
+        _log(f"Incoming UDP: {self.config.incoming_host}:{self.config.incoming_port}")
+        _log(f"Outgoing UDP: {self.config.outgoing_host}:{self.config.outgoing_port}")
 
     def stop(self) -> None:
         """Graceful server shutdown."""

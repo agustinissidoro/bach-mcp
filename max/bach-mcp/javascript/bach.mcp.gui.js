@@ -12,6 +12,15 @@ A parameter arrives as the runner describes it:
   { name: "times", type: "slider", range: [1, 64], step: 1, unit: "", value: 16, default: 16 }
 Types: slider, range, toggle, menu, seed, curve, list. Placement is automatic:
 one row per parameter, curve and list get a drawing area below their name.
+
+The runner also says what a number is (`kind`: pitch, interval, time or plain)
+and where a drag snaps to (`grid`). The panel builds on that by itself:
+  - a pitch shows as a name, midicents or MIDI, an interval as cents or
+    semitones: click the value text to switch;
+  - drags snap to the grid while "snap" (title row) is on; alt inverts it.
+A transformer's title row also has its source mode: "keep" (the original score
+stays until capture) or "follow" (every score at the runner's right inlet
+becomes the source); clicking it sends "sourcemode keep|follow".
 */
 "use strict";
 
@@ -71,6 +80,21 @@ function formatNumber(x, step) {
   if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
   return s;
 }
+
+var SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+/** The name of a pitch in midicents: nearest semitone with sharps, then the cents: 6050 -> "C4+50". */
+function centsToName(cents) {
+  cents = tidy(cents);
+  var semitone = Math.ceil((cents - 50) / 100);
+  var offset = tidy(cents - semitone * 100);
+  var text = SHARP_NAMES[((semitone % 12) + 12) % 12] + (Math.floor(semitone / 12) - 1);
+  if (offset) text += (offset > 0 ? "+" : "-") + formatNumber(Math.abs(offset), 0.01);
+  return text;
+}
+
+// How each kind of number can be shown; the first is the default.
+var DISPLAYS = { pitch: ["name", "mc", "midi"], interval: ["cents", "semitones"] };
 
 function copy(x) {
   return x === undefined ? undefined : JSON.parse(JSON.stringify(x));
@@ -140,9 +164,53 @@ function Element(spec) {
   this.options = spec.options ? spec.options.slice() : null;
   this.value = copy(spec.value);
   this.def = copy(spec["default"] !== undefined ? spec["default"] : spec.value);
+  this.kind = spec.kind || "";
+  this.grid = spec.grid || 0;
+  var shown = DISPLAYS[this.kind] || [];
+  this.display = shown.indexOf(spec.display) >= 0 ? spec.display : (shown[0] || "");
+  this.snapping = false;  // set by the panel for each gesture
   this.tall = false;
   this.grab = null;
 }
+
+/** The ways this value can be shown (empty: only one). */
+Element.prototype.displays = function () {
+  return DISPLAYS[this.kind] || [];
+};
+
+/** Show the value the next way; false if there is no other way. */
+Element.prototype.nextDisplay = function () {
+  var shown = this.displays();
+  if (shown.length < 2) return false;
+  this.display = shown[(shown.indexOf(this.display) + 1) % shown.length];
+  return true;
+};
+
+/** One number as this element shows it, without the unit. */
+Element.prototype.fmt = function (x) {
+  if (this.display === "name") return centsToName(x);
+  if (this.display === "midi" || this.display === "semitones") {
+    var t = formatNumber(x / 100, this.step / 100);
+    return this.display === "semitones" && x > 0 ? "+" + t : t;
+  }
+  if (this.kind === "interval" && x > 0) return "+" + formatNumber(x, this.step);
+  return formatNumber(x, this.step);
+};
+
+/** What follows the numbers: the unit, or what the display is. */
+Element.prototype.suffix = function () {
+  if (this.display === "name") return "";
+  if (this.display === "midi") return " midi";
+  if (this.display === "semitones") return " st";
+  return this.unit ? " " + this.unit : "";
+};
+
+/** A value from a gesture: on the grid while snapping (the ends of the range stay reachable). */
+Element.prototype.gesture = function (x) {
+  var lo = this.range[0], hi = this.range[1];
+  if (!this.snapping || !(this.grid > 0) || x <= lo || x >= hi) return snap(this, x);
+  return snap(this, Math.round(x / this.grid) * this.grid);
+};
 
 Element.prototype.atoms = function () {
   return [].concat(this.value);
@@ -157,7 +225,7 @@ Element.prototype.accept = function (atoms) {
 };
 
 Element.prototype.text = function () {
-  return formatNumber(this.value, this.step) + (this.unit ? " " + this.unit : "");
+  return this.fmt(this.value) + this.suffix();
 };
 
 // The longest value text this element can show, to size the value column.
@@ -215,7 +283,7 @@ Slider.prototype.drag = function (r, x, y, mods) {
     ? this.grab.value + ((x - this.grab.x) / r.w) * (this.range[1] - this.range[0]) / 10
     : this.at(r, x);
   var old = this.value;
-  this.value = snap(this, v);
+  this.value = this.gesture(v);
   return this.value !== old;
 };
 
@@ -239,8 +307,7 @@ Range.prototype.accept = function (atoms) {
 };
 
 Range.prototype.text = function () {
-  return formatNumber(this.value[0], this.step) + "–" + formatNumber(this.value[1], this.step) +
-    (this.unit ? " " + this.unit : "");
+  return this.fmt(this.value[0]) + "–" + this.fmt(this.value[1]) + this.suffix();
 };
 
 Range.prototype.down = function (r, x) {
@@ -258,10 +325,11 @@ Range.prototype.drag = function (r, x) {
   if (this.grab.which === "both") {
     var span = this.range[1] - this.range[0];
     var d = ((x - this.grab.x) / r.w) * span;
+    if (this.snapping && this.grid > 0) d = Math.round(d / this.grid) * this.grid;
     d = clamp(d, this.range[0] - this.grab.value[0], this.range[1] - this.grab.value[1]);
     this.value = [snap(this, this.grab.value[0] + d), snap(this, this.grab.value[1] + d)];
   } else {
-    var v = snap(this, this.at(r, x));
+    var v = this.gesture(this.at(r, x));
     if (this.grab.which === 0) this.value = [Math.min(v, this.value[1]), this.value[1]];
     else this.value = [this.value[0], Math.max(v, this.value[0])];
   }
@@ -448,7 +516,7 @@ Curve.prototype.toPixel = function (r, p) {
 
 Curve.prototype.fromPixel = function (r, x, y) {
   var fy = clamp((r.y + r.h - y) / r.h, 0, 1);
-  return [tidy(clamp((x - r.x) / r.w, 0, 1)), snap(this, this.range[0] + fy * (this.range[1] - this.range[0]))];
+  return [tidy(clamp((x - r.x) / r.w, 0, 1)), this.gesture(this.range[0] + fy * (this.range[1] - this.range[0]))];
 };
 
 Curve.prototype.down = function (r, x, y, mods) {
@@ -519,8 +587,8 @@ Curve.prototype.paint = function (g, r) {
     p = this.toPixel(r, this.value[i]);
     dot(g, p[0], p[1], 3.5, THEME.knob);
   }
-  label(g, formatNumber(this.range[1], this.step), { x: r.x + 3, y: r.y, w: 60, h: 12 }, "left", THEME.dim, 9);
-  label(g, formatNumber(this.range[0], this.step), { x: r.x + 3, y: r.y + r.h - 12, w: 60, h: 12 }, "left", THEME.dim, 9);
+  label(g, this.fmt(this.range[1]), { x: r.x + 3, y: r.y, w: 60, h: 12 }, "left", THEME.dim, 9);
+  label(g, this.fmt(this.range[0]), { x: r.x + 3, y: r.y + r.h - 12, w: 60, h: 12 }, "left", THEME.dim, 9);
 };
 
 // list: several numbers, drawn as bars; drag across them to draw
@@ -544,8 +612,8 @@ List.prototype.accept = function (atoms) {
 
 List.prototype.text = function () {
   var shown = [];
-  for (var i = 0; i < this.value.length && i < 6; i++) shown.push(formatNumber(this.value[i], this.step));
-  return shown.join(" ") + (this.value.length > 6 ? " …" : "");
+  for (var i = 0; i < this.value.length && i < 6; i++) shown.push(this.fmt(this.value[i]));
+  return shown.join(" ") + (this.value.length > 6 ? " …" : "") + this.suffix();
 };
 
 List.prototype.indexAt = function (r, x) {
@@ -553,7 +621,7 @@ List.prototype.indexAt = function (r, x) {
 };
 
 List.prototype.valueAt = function (r, y) {
-  return snap(this, this.range[0] + clamp((r.y + r.h - y) / r.h, 0, 1) * (this.range[1] - this.range[0]));
+  return this.gesture(this.range[0] + clamp((r.y + r.h - y) / r.h, 0, 1) * (this.range[1] - this.range[0]));
 };
 
 List.prototype.down = function (r, x, y) {
@@ -605,11 +673,15 @@ function Panel() {
 Panel.prototype.clear = function () {
   this.title = "";
   this.path = "";
+  this.kind = "producer";
+  this.source = null;  // transformers: {notes, from}
   this.items = [];
   this.rows = [];
   this.state = { kind: "", text: "" };
   this.width = 0;
   this.active = null;
+  this.snap = true;  // drags snap to each element's grid; alt inverts it for one gesture
+  this.sourceMode = "keep";  // transformers: "keep" the original, or "follow" every input
 };
 
 /**
@@ -622,6 +694,8 @@ Panel.prototype.setSpec = function (spec) {
   for (i = 0; i < this.items.length; i++) old[this.items[i].name] = this.items[i];
   this.title = spec.title || "";
   this.path = spec.path || "";
+  this.kind = spec.kind || "producer";
+  this.source = spec.source || null;
   this.items = [];
   var messages = [];
   var params = spec.params || [];
@@ -629,6 +703,7 @@ Panel.prototype.setSpec = function (spec) {
     var item = makeElement(params[i]);
     var was = old[item.name];
     if (was && was.type === item.type) {
+      if (was.kind === item.kind && params[i].display === undefined) item.display = was.display;
       var before = item.atoms();
       if (item.accept(was.atoms()) && !same(before, item.atoms())) messages.push([item.name].concat(item.atoms()));
     }
@@ -636,7 +711,16 @@ Panel.prototype.setSpec = function (spec) {
   }
   this.active = null;
   this.width = 0;
+  // the runner starts in keep mode: tell it the mode this panel is in
+  if (this.kind === "transformer" && this.sourceMode !== "keep") messages.push(["sourcemode", this.sourceMode]);
   return messages;
+};
+
+/** The source mode set from outside (the runner's echo): shown, not sent back. */
+Panel.prototype.setSourceMode = function (mode) {
+  if (mode !== "keep" && mode !== "follow") return false;
+  this.sourceMode = mode;
+  return true;
 };
 
 Panel.prototype.find = function (name) {
@@ -652,6 +736,33 @@ Panel.prototype.setValue = function (name, atoms) {
 
 Panel.prototype.setStatus = function (kind, text) {
   this.state = { kind: String(kind || ""), text: String(text || "") };
+};
+
+/** A transformer's source score: how many notes, and where it was taken from. */
+Panel.prototype.setSource = function (notes, from) {
+  this.source = { notes: Number(notes) || 0, from: String(from || "") };
+};
+
+/** The button that takes the score in the roll as the transformer's new source. */
+Panel.prototype.captureRect = function (width) {
+  var right = this.hasGrid() ? this.snapRect(width).x - 4 : width - M.pad - 4;
+  return { x: right - 58, y: 3, w: 58, h: M.title - 6 };
+};
+
+/** The switch between keeping the original source and following every input. */
+Panel.prototype.modeRect = function (width) {
+  var c = this.captureRect(width);
+  return { x: c.x - 50, y: c.y, w: 46, h: c.h };
+};
+
+/** The switch that turns snapping to the grid on and off. */
+Panel.prototype.snapRect = function (width) {
+  return { x: width - M.pad - 46, y: 3, w: 42, h: M.title - 6 };
+};
+
+Panel.prototype.hasGrid = function () {
+  for (var i = 0; i < this.items.length; i++) if (this.items[i].grid > 0) return true;
+  return false;
 };
 
 Panel.prototype.labelWidth = function () {
@@ -700,7 +811,27 @@ Panel.prototype.layout = function (width) {
 Panel.prototype.paint = function (g, width, height) {
   if (width !== this.width) this.layout(width);
   box(g, 0, 0, width, height, THEME.bg);
-  label(g, this.title || "bach.mcp.params", { x: M.pad + 4, y: 0, w: width - 2 * M.pad - 8, h: M.title },
+  var titleWidth = width - 2 * M.pad - 8;
+  if (this.hasGrid()) {
+    var sw = this.snapRect(width);
+    rounded(g, sw.x, sw.y, sw.w, sw.h, 3, this.snap ? THEME.fill : THEME.track);
+    label(g, "snap", sw, "center", this.snap ? THEME.bg : THEME.dim, 10);
+    titleWidth = sw.x - M.pad - 10;
+  }
+  if (this.kind === "transformer") {
+    var b = this.captureRect(width);
+    rounded(g, b.x, b.y, b.w, b.h, 3, THEME.fill);
+    label(g, "capture", b, "center", THEME.bg, 10);
+    var mr = this.modeRect(width);
+    var follow = this.sourceMode === "follow";
+    rounded(g, mr.x, mr.y, mr.w, mr.h, 3, follow ? THEME.fill : THEME.track);
+    label(g, follow ? "follow" : "keep", mr, "center", follow ? THEME.bg : THEME.text, 10);
+    var src = this.source && this.source.notes ? "source: " + this.source.notes + " notes" : "no source";
+    var srcBox = { x: mr.x - 112, y: 0, w: 106, h: M.title };
+    label(g, src, srcBox, "right", this.source && this.source.notes ? THEME.dim : THEME.error, 10);
+    titleWidth = srcBox.x - M.pad - 10;
+  }
+  label(g, this.title || "bach.mcp.params", { x: M.pad + 4, y: 0, w: titleWidth, h: M.title },
     "left", this.title ? THEME.text : THEME.dim, THEME.titleSize);
   if (!this.items.length) {
     label(g, this.title ? "no parameters" : "waiting for bach.mcp.algo", { x: M.pad + 4, y: M.title, w: width - 2 * M.pad, h: M.row },
@@ -732,16 +863,41 @@ Panel.prototype.message = function (item) {
 };
 
 Panel.prototype.mouseDown = function (x, y, mods) {
+  if (this.kind === "transformer" && this.width && inside(this.captureRect(this.width), x, y)) {
+    this.active = null;
+    return [["capture"]];
+  }
+  if (this.kind === "transformer" && this.width && inside(this.modeRect(this.width), x, y)) {
+    this.active = null;
+    this.sourceMode = this.sourceMode === "keep" ? "follow" : "keep";
+    return [["sourcemode", this.sourceMode]];
+  }
+  if (this.hasGrid() && this.width && inside(this.snapRect(this.width), x, y)) {
+    this.active = null;
+    this.snap = !this.snap;
+    return [];
+  }
+  for (var i = 0; i < this.rows.length; i++) {
+    if (inside(this.rows[i].value, x, y) && this.rows[i].item.nextDisplay()) {
+      this.active = null;
+      if (this.width) this.layout(this.width);  // the value column may need another width
+      return [];
+    }
+  }
   var row = this.rowAt(x, y);
   this.active = row;
   if (!row) return [];
-  return row.item.down(row.control, x, y, mods || {}) ? [this.message(row.item)] : [];
+  mods = mods || {};
+  row.item.snapping = this.snap !== Boolean(mods.alt);
+  return row.item.down(row.control, x, y, mods) ? [this.message(row.item)] : [];
 };
 
 Panel.prototype.mouseDrag = function (x, y, mods) {
   var row = this.active;
   if (!row) return [];
-  return row.item.drag(row.control, x, y, mods || {}) ? [this.message(row.item)] : [];
+  mods = mods || {};
+  row.item.snapping = this.snap !== Boolean(mods.alt);
+  return row.item.drag(row.control, x, y, mods) ? [this.message(row.item)] : [];
 };
 
 Panel.prototype.mouseUp = function () {
@@ -781,14 +937,18 @@ Panel.prototype.snapshot = function () {
   for (var i = 0; i < this.items.length; i++) {
     var it = this.items[i];
     params.push({ name: it.name, type: it.type, range: it.range, step: it.step, unit: it.unit,
-      options: it.options, value: copy(it.value), "default": copy(it.def) });
+      options: it.options, value: copy(it.value), "default": copy(it.def),
+      kind: it.kind, grid: it.grid, display: it.display });
   }
-  return { title: this.title, path: this.path, params: params };
+  return { title: this.title, path: this.path, kind: this.kind, source: this.source, params: params, snap: this.snap,
+    sourceMode: this.sourceMode };
 };
 
 Panel.prototype.restore = function (snapshot) {
-  this.setSpec({ title: snapshot.title, path: snapshot.path, params: [] });
+  this.setSpec({ title: snapshot.title, path: snapshot.path, kind: snapshot.kind, params: [] });
+  this.sourceMode = snapshot.sourceMode === "follow" ? "follow" : "keep";
   this.setSpec(snapshot);
+  this.snap = snapshot.snap !== false;
 };
 
 /** Every value as one flat list of numbers, for pattr (menus as their index). */
@@ -833,6 +993,7 @@ var api = {
   Panel: Panel,
   makeElement: makeElement,
   formatNumber: formatNumber,
+  centsToName: centsToName,
   snap: snap
 };
 if (typeof module !== "undefined" && module.exports) {

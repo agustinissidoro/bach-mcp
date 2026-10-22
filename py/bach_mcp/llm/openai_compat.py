@@ -42,6 +42,7 @@ class OpenAICompatibleProvider:
         api_key: Optional[str] = None,
         temperature: float = 0.35,
         max_tokens: int = 2048,
+        sampling: Optional[Dict[str, float]] = None,
         request_timeout_seconds: float = 300.0,
     ) -> None:
         # base_url should already include the version segment (e.g. ".../v1").
@@ -50,6 +51,7 @@ class OpenAICompatibleProvider:
         self.api_key = api_key
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.sampling = dict(sampling or {})  # top_p, top_k, presence_penalty, ...
         self.request_timeout_seconds = request_timeout_seconds
 
     @property
@@ -77,6 +79,7 @@ class OpenAICompatibleProvider:
             "stream": False,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
+            **self.sampling,
         }
         if tools:
             payload["tools"] = self._tool_payload(tools)

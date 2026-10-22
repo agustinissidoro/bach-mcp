@@ -109,7 +109,7 @@ test("bad declarations are refused with a message the model can act on", () => {
   ];
   for (const [params, message] of bad) assert.throws(() => core.normalizeParams(params), message);
   assert.throws(() => core.compile("function generate() {}"), /const params = \{ \.\.\. \} is missing/);
-  assert.throws(() => core.compile("const params = {};"), /generate\(p, input\).*is missing/);
+  assert.throws(() => core.compile("const params = {};"), /produce\(p\).*transform\(source, p\).*is missing/);
 });
 
 test("values from Max are clamped, snapped and typed", () => {
@@ -217,4 +217,105 @@ test("procedures", () => {
   }
   assert.deepEqual(g.shuffle([1, 2, 3, 4]).sort(), [1, 2, 3, 4]);
   assert.equal(g.weighted(["a", "b"], [0, 1]), "b");
+});
+
+test("producers and transformers", () => {
+  const producer = core.compile(`const params = {};
+    function produce(p) { const s = score(); s.voice("A").note(0, 6000, 100); return s; }`);
+  assert.equal(producer.kind, "producer");
+  assert.equal(core.run(producer, {}).notes, 1);
+  const legacy = core.compile(`const params = {};
+    function generate(p, input) { const s = score(); s.voice("A").note(0, input ? 7000 : 6000, 100); return s; }`);
+  assert.equal(legacy.kind, "producer");
+  assert.equal(core.run(legacy, {}, { voices: [] }).score.voices[0].chords[0].notes[0].pitch, 7000);
+  assert.throws(() => core.compile("const params = {}; function produce(p) {} function transform(s, p) {}"), /not both/);
+});
+
+test("a transformer always starts again from the original source", () => {
+  const t = core.compile(`const params = { shift: { type: "slider", range: [-1200, 1200], value: 100 } };
+    function transform(source, p) { eachNote(source, (n) => { n.pitch += p.shift; }); return source; }`);
+  assert.equal(t.kind, "transformer");
+  const source = { voices: [{ chords: [{ onset: 0, notes: [{ pitch: 6000, dur: 100 }] }] }] };
+  const pitch = (r) => r.score.voices[0].chords[0].notes[0].pitch;
+  assert.equal(pitch(core.run(t, { shift: 100 }, source)), 6100);
+  assert.equal(pitch(core.run(t, { shift: 300 }, source)), 6300, "from the original, not from 6100");
+  assert.equal(source.voices[0].chords[0].notes[0].pitch, 6000, "the source itself is untouched");
+  assert.throws(() => core.run(t, { shift: 1 }, null), /no source score yet/);
+  assert.throws(() => core.run(core.compile("const params = {}; function transform(s, p) { return null; }"), {}, source),
+    /transform\(\) returned nothing/);
+});
+
+test("score helpers for transformers", () => {
+  const chords = [
+    { onset: 0, notes: [{ pitch: 6000, dur: 1000 }, { pitch: 6400, dur: 200 }] },
+    { onset: 1200, notes: [{ pitch: 6200, dur: 100 }] },   // 200 ms after the long note ends
+    { onset: 1800, notes: [{ pitch: 6500, dur: 100 }] },   // 500 ms of silence before it
+    { onset: 600, notes: [{ pitch: 6700, dur: 100 }] },    // out of order, inside the first note
+  ];
+  assert.equal(core.chordEnd(chords[0]), 1000);
+  assert.deepEqual(core.phrases(chords, 300).map((g) => g.map((c) => c.onset)), [[0, 600, 1200], [1800]]);
+  assert.deepEqual(core.phrases(chords, 150).map((g) => g.length), [2, 1, 1]);
+  const s = { voices: [{ chords }] };
+  const copied = core.copy(s);
+  core.eachNote(copied, (n) => { n.pitch += 1; });
+  assert.equal(copied.voices[0].chords[0].notes[1].pitch, 6401);
+  assert.equal(s.voices[0].chords[0].notes[1].pitch, 6400);
+});
+
+test("number parameters know what they are: pitch, interval, time or plain, each with its snap grid", () => {
+  const specs = core.normalizeParams({
+    target:   { type: "slider", range: [3600, 9600], value: 6000, unit: "mc" },
+    register: { type: "range", range: [3600, 9600], value: [4800, 8400], unit: "midicents" },
+    step:     { type: "slider", range: [-1200, 1200], value: 400, unit: "mc" },
+    width:    { type: "slider", range: [0, 1200], value: 700, unit: "cents" },
+    gap:      { type: "slider", range: [50, 2000], value: 300, unit: "ms" },
+    amount:   { type: "slider", range: [0, 1], value: 0.5 },
+    times:    { type: "slider", range: [1, 64], value: 16 },
+    quarter:  { type: "slider", range: [4800, 7200], value: 6050, step: 50, unit: "mc" },
+  });
+  const by = Object.fromEntries(specs.map((s) => [s.name, s]));
+  assert.deepEqual(specs.map((s) => [s.name, s.kind, s.grid]), [
+    ["target", "pitch", 100], ["register", "pitch", 100], ["step", "interval", 100], ["width", "interval", 100],
+    ["gap", "time", 20], ["amount", "", 0.01], ["times", "", 1], ["quarter", "pitch", 50],
+  ]);
+  assert.deepEqual(by.target.range, [1200, 12700], "a pitch spans all a score takes, C0 to G9");
+  assert.deepEqual(by.register.range, [1200, 12700]);
+  assert.deepEqual(by.register.value, [4800, 8400], "the declared value is kept");
+  assert.equal(by.register.unit, "mc");
+  assert.deepEqual(by.step.range, [-1200, 1200], "an interval keeps its range");
+});
+
+test("a time is never negative, and a step larger than the range is dropped", () => {
+  const [t, s] = core.normalizeParams({
+    t: { type: "slider", range: [-100, 1000], value: 200, unit: "ms" },
+    s: { type: "slider", range: [0, 10], value: 5, step: 50 },
+  });
+  assert.deepEqual(t.range, [0, 1000]);
+  assert.equal(s.step, 0);
+  assert.throws(() => core.normalizeParams({ t: { type: "slider", range: [-100, -10], value: -50, unit: "ms" } }),
+    /a time cannot be negative/);
+});
+
+test("a pitch parameter takes names at the inlet too", () => {
+  const [target, register, step] = core.normalizeParams({
+    target: { type: "slider", range: [3600, 9600], value: 6000, unit: "mc" },
+    register: { type: "range", range: [3600, 9600], value: [4800, 8400], unit: "mc" },
+    step: { type: "slider", range: [-1200, 1200], value: 400, unit: "mc" },
+  });
+  assert.equal(core.coerce(target, ["E4"]), 6400);
+  assert.equal(core.coerce(target, [6450]), 6450, "exact numbers stay exact");
+  assert.deepEqual(core.coerce(register, ["G6", "C2"]), [3600, 9100]);
+  assert.throws(() => core.coerce(target, ["H4"]), /cannot use/);
+  assert.throws(() => core.coerce(step, ["E4"]), /cannot use/, "an interval is a number");
+});
+
+test("pitches outside C0..G9 come back in by octaves; a MIDI number is still an error", () => {
+  const code = (pitch) => `
+const params = { base: { type: "slider", range: [3600, 9600], value: 6000, unit: "mc" } };
+function produce(p) { const s = score(); s.voice("Flute").note(0, ${pitch}, 500); return s; }`;
+  const at = (pitch) => core.run(core.compile(code(pitch)), {}).canonical.voices[0].chords[0].notes[0].pitch;
+  assert.equal(at("p.base - 4950"), 2250, "1050 folds up an octave");
+  assert.equal(at("p.base + 7000"), 11800, "13000 folds down an octave");
+  assert.equal(at("p.base"), 6000);
+  assert.throws(() => at("60"), /looks like a MIDI note number/);
 });

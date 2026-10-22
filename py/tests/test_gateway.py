@@ -117,5 +117,106 @@ class LlamaProxyTests(unittest.TestCase):
         self.assertEqual(self.received[-1], body)
 
 
+class OllamaLoopRetryTests(unittest.TestCase):
+    """The gateway against a fake Ollama whose first answer loops inside a tool call until the token limit."""
+
+    @classmethod
+    def setUpClass(cls):
+        import uvicorn
+        from starlette.applications import Starlette
+        from starlette.responses import StreamingResponse
+        from starlette.routing import Route
+
+        cls.requests = 0
+        cls.loops = 1  # how many answers loop before a good one
+
+        async def chat(request):
+            await request.json()
+            cls.requests += 1
+            looping = cls.requests <= cls.loops
+
+            async def ndjson():
+                if looping:  # tokens spent inside a tool call Ollama never closes: nothing to show
+                    yield json.dumps({"message": {"role": "assistant", "content": ""}, "done": False}).encode() + b"\n"
+                    yield json.dumps({"message": {"role": "assistant", "content": ""}, "done": True,
+                                      "done_reason": "length", "eval_count": 3000}).encode() + b"\n"
+                else:
+                    call = {"function": {"name": "write_score", "arguments": {"score": {"voices": []}}}}
+                    yield json.dumps({"message": {"role": "assistant", "content": "", "tool_calls": [call]},
+                                      "done": False}).encode() + b"\n"
+                    yield json.dumps({"message": {"role": "assistant", "content": ""}, "done": True,
+                                      "done_reason": "stop", "eval_count": 300}).encode() + b"\n"
+            return StreamingResponse(ndjson(), media_type="application/x-ndjson")
+
+        app = Starlette(routes=[Route("/api/chat", chat, methods=["POST"])])
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        cls.server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        threading.Thread(target=cls.server.run, daemon=True).start()
+        while not cls.server.started:
+            time.sleep(0.01)
+        cls.url = f"http://127.0.0.1:{port}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.should_exit = True
+
+    def post(self):
+        from starlette.testclient import TestClient
+        from bach_mcp.gateway import create_gateway_app
+        config = _config()
+        config.ollama.url = self.url
+        config.chat.docs = False
+        app = create_gateway_app(config, "http://127.0.0.1:9")
+        body = {"stream": True, "messages": [{"role": "user", "content": "a cadence"}]}
+        return TestClient(app).post("/v1/chat/completions", json=body).text
+
+    def test_a_loop_is_asked_again_once(self):
+        type(self).requests, type(self).loops = 0, 1
+        text = self.post()
+        self.assertEqual(self.requests, 2)
+        self.assertIn('"name": "write_score"', text)
+        self.assertIn('"finish_reason": "tool_calls"', text)
+
+    def test_a_second_loop_is_reported_as_it_is(self):
+        type(self).requests, type(self).loops = 0, 5
+        text = self.post()
+        self.assertEqual(self.requests, 2, "one retry only")
+        self.assertIn('"finish_reason": "length"', text)
+
+
+
+class KeepAliveTests(unittest.TestCase):
+    def test_a_silent_stream_gets_keepalives_and_keeps_its_items(self):
+        import asyncio
+        from bach_mcp.gateway import keep_alive
+
+        async def slow():
+            yield "a"
+            await asyncio.sleep(0.35)  # the model writing a long tool call
+            yield "b"
+
+        async def collect():
+            return [x async for x in keep_alive(slow(), every=0.1)]
+
+        got = asyncio.run(collect())
+        self.assertEqual([x for x in got if x is not None], ["a", "b"])
+        self.assertGreaterEqual(got.count(None), 2)
+
+    def test_errors_of_the_stream_come_through(self):
+        import asyncio
+        from bach_mcp.gateway import keep_alive
+
+        async def broken():
+            yield "a"
+            raise RuntimeError("upstream")
+
+        async def collect():
+            return [x async for x in keep_alive(broken(), every=0.1)]
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(collect())
+
 if __name__ == "__main__":
     unittest.main()

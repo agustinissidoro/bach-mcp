@@ -90,6 +90,7 @@ class ProviderConfig:
     temperature: float = 0.35
     max_tokens: int = 2048
     request_timeout_seconds: float = 300.0
+    sampling: Dict[str, float] = field(default_factory=dict)  # top_p, top_k, presence_penalty, ...
 
     @classmethod
     def from_env(cls) -> "ProviderConfig":
@@ -129,6 +130,7 @@ def build_provider(config: ProviderConfig) -> LLMProvider:
             temperature=config.temperature,
             max_tokens=config.max_tokens,
             request_timeout_seconds=config.request_timeout_seconds,
+            sampling=config.sampling,
         )
 
     if kind == "anthropic":

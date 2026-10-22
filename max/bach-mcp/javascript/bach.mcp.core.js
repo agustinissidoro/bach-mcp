@@ -6,7 +6,12 @@ loader that turns a file into parameters plus a generate function. The same
 module runs in Max (v8) and in Node (the check that runs before a file reaches
 Max), so an algorithm behaves identically in both.
 
-An algorithm file has two parts:
+An algorithm is one of two kinds:
+
+    a producer makes a score from nothing       function produce(p) { ... return s; }
+    a transformer changes a score it is given   function transform(source, p) { ... return out; }
+
+and declares its parameters first:
 
     const params = {
       times:    { type: "slider", range: [1, 64], value: 16 },
@@ -14,15 +19,10 @@ An algorithm file has two parts:
       seed:     { type: "seed",   value: 1 },
     };
 
-    function generate(p, input) {
-      const s = score();
-      const v = s.voice("Flute");
-      ...
-      return s;
-    }
-
-`p` holds the current value of every parameter; `input` is the score arriving
-at the runner's right inlet (or null). generate returns a JSON score.
+`p` holds the current value of every parameter. `source` is the original score
+(JSON) a transformer works on: the runner keeps it, so every run starts again
+from it, never from the transformer's own output. Both return a JSON score.
+(An older file with `function generate(p, input)` is a producer.)
 
 Everything in LIBRARY below is in scope inside the file, without imports.
 */
@@ -336,6 +336,63 @@ function euclid(hits, steps, rotate = 0) {
   return seq(steps).map((i) => ((((i + rotate) * hits) % steps + steps) % steps < hits ? 1 : 0));
 }
 
+// ── Pitch names ─────────────────────────────────────────────────────────── //
+
+/** Midicents of a pitch name: pitch("Db4") = 6100, pitch("E4-14") = 6386 (C4 = middle C = 6000). */
+function pitch(text) {
+  const cents = S.nameToCents(text);
+  if (cents === null) throw new AlgoError(`pitch(${JSON.stringify(text)}): a name is a letter, # or b, an octave, e.g. "Db4"; cents after it: "E4-14"`);
+  return cents;
+}
+
+/** The name of a pitch in midicents: name(6100) = "C#4", name(6050) = "C4+50". */
+function name(cents) {
+  return S.centsToName(cents);
+}
+
+// ── Working on a given score (transformers) ─────────────────────────────── //
+
+/** A deep copy of a score, a voice, a chord or any JSON value. */
+function copy(x) {
+  return x === undefined ? undefined : JSON.parse(JSON.stringify(x));
+}
+
+/** When a chord stops sounding: its onset plus its longest note. */
+function chordEnd(chord) {
+  return chord.onset + Math.max(0, ...chord.notes.map((n) => n.dur));
+}
+
+/**
+ * Split chords (in time order) into phrases: a new phrase starts wherever the silence
+ * since everything before has stopped sounding is longer than `gap` milliseconds.
+ */
+function phrases(chords, gap) {
+  const sorted = chords.slice().sort((a, b) => a.onset - b.onset);
+  const out = [];
+  let current = [];
+  let sounding = -Infinity;
+  for (const chord of sorted) {
+    if (current.length && chord.onset - sounding > gap) {
+      out.push(current);
+      current = [];
+    }
+    current.push(chord);
+    sounding = Math.max(sounding, chordEnd(chord));
+  }
+  if (current.length) out.push(current);
+  return out;
+}
+
+/** Call fn(note, chord, voice) for every note of a score. */
+function eachNote(target, fn) {
+  for (const voice of target.voices || []) {
+    for (const chord of voice.chords || []) {
+      for (const note of chord.notes || []) fn(note, chord, voice);
+    }
+  }
+  return target;
+}
+
 // ── Parameters ──────────────────────────────────────────────────────────── //
 
 const TYPES = ["slider", "range", "toggle", "menu", "seed", "curve", "list"];
@@ -355,7 +412,7 @@ const RESERVED = [
   "load", "reload", "run", "bang", "auto", "watch", "setname", "remote", "input", "values",
   "getstate", "open", "edit", "dictionary", "list", "int", "float", "anything", "loadbang",
   "save", "notifydeleted", "compile", "autowatch", "wclose", "setprop", "getprop", "delprop",
-  "msg_int", "msg_float", "set", "spec", "status", "clear", "done",
+  "msg_int", "msg_float", "set", "spec", "status", "clear", "done", "capture", "sourcemode", "roll", "source",
   "post", "cpost", "error", "outlet", "messnamed", "arrayfromargs", "embedmessage", "assist",
 ];
 const MAX_LIST = 256;
@@ -381,6 +438,52 @@ function rangeOf(raw, name, fallback) {
 
 function autoStep(numbers, range) {
   return numbers.every(Number.isInteger) && range[1] - range[0] > 1 ? 1 : 0;
+}
+
+// What a number parameter is, read from its unit and range, so that the panel can show
+// and snap it well without the algorithm saying more: a pitch (midicents, always the
+// whole MIDI range), an interval (midicents with a sign, or a small span), a time, or a
+// plain number. `grid` is where a drag snaps to; `step` stays the finest resolution.
+const PITCH_UNITS = ["mc", "midicent", "midicents", "cent", "cents", "pitch"];
+const TIME_UNITS = { ms: "ms", msec: "ms", millisecond: "ms", milliseconds: "ms", s: "s", sec: "s", seconds: "s" };
+const MIDI_RANGE = [1200, 12700];  // C0 to G9: all a score takes (below C0 it reads as a mistake)
+const NUMBER_TYPES = ["slider", "range", "list", "curve"];
+
+function kindOf(type, unit, range) {
+  if (!NUMBER_TYPES.includes(type)) return "";
+  const u = String(unit || "").toLowerCase();
+  if (PITCH_UNITS.includes(u)) {
+    const [lo, hi] = range;
+    if (lo < 0 || (lo < 1200 && hi <= 4800)) return "interval";
+    return "pitch";
+  }
+  return TIME_UNITS[u] ? "time" : "";
+}
+
+/** 1, 2 or 5 times a power of ten, near a hundredth of the span. */
+function niceGrid(span) {
+  const raw = span / 100;
+  const ten = Math.pow(10, Math.floor(Math.log10(raw)));
+  const m = raw / ten;
+  return decimals((m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * ten);
+}
+
+function gridOf(spec, declaredStep) {
+  if (!spec.range) return 0;
+  if (declaredStep > 0) return declaredStep;
+  if (spec.kind === "pitch" || spec.kind === "interval") return 100;
+  const grid = niceGrid(spec.range[1] - spec.range[0]);
+  return spec.step > 0 ? Math.max(spec.step, Math.round(grid / spec.step) * spec.step) : grid;
+}
+
+/** Ranges that make sense for their kind: a pitch spans all of MIDI, a time is never negative. */
+function capRange(type, kind, range, name) {
+  if (kind === "pitch") return MIDI_RANGE.slice();
+  if (kind === "time" && range[0] < 0) {
+    if (range[1] <= 0) throw new AlgoError(`params.${name}: a time cannot be negative; "range" must end above 0`);
+    return [0, range[1]];
+  }
+  return range;
 }
 
 function normalizeSpec(name, raw) {
@@ -413,6 +516,12 @@ function normalizeSpec(name, raw) {
   if (s.unit !== undefined) spec.unit = String(s.unit).slice(0, 12);
   if (s.step !== undefined && !(isNumber(s.step) && s.step >= 0)) {
     throw new AlgoError(`params.${name}: "step" must be a number >= 0`);
+  }
+  if (NUMBER_TYPES.includes(type) && s.range !== undefined) {
+    const declared = rangeOf(s.range, name);
+    spec.kind = kindOf(type, spec.unit, declared);
+    if (PITCH_UNITS.includes(String(spec.unit || "").toLowerCase())) spec.unit = "mc";
+    s.range = capRange(type, spec.kind, declared, name);
   }
 
   if (type === "slider") {
@@ -459,6 +568,8 @@ function normalizeSpec(name, raw) {
     spec.step = s.step !== undefined ? s.step : autoStep(spec.range.concat(v), spec.range);
     spec.value = v.map((x) => snapTo(spec, x));
   }
+  if (spec.range && spec.step > spec.range[1] - spec.range[0]) spec.step = 0;
+  if (spec.kind !== undefined) spec.grid = gridOf(spec, s.step);
   spec.default = clone(spec.value);
   return spec;
 }
@@ -495,7 +606,9 @@ function defaults(specs) {
 
 /** A value arriving as Max atoms (from the panel or a message box) -> the parameter's value. */
 function coerce(spec, atoms) {
-  const nums = atoms.map(Number);
+  // a pitch parameter also takes names: "target E4", "register C2 G6"
+  const nums = atoms.map((a) => (spec.kind === "pitch" && typeof a === "string" && isNaN(Number(a))
+    ? (S.nameToCents(a) === null ? NaN : S.nameToCents(a)) : Number(a)));
   const bad = () => new AlgoError(`${spec.name}: cannot use ${JSON.stringify(atoms)} as a ${spec.type} value`);
   switch (spec.type) {
     case "slider":
@@ -572,6 +685,7 @@ function makeLibrary(state) {
     score, rng, Math: seededMath,
     lerp, clamp, rescale, wrap, fold, snap, seq, linspace, sum, accumulate, env, warp,
     iterate, walk, markov, rewrite, automaton, euclid,
+    copy, chordEnd, phrases, eachNote, pitch, name,
   };
 }
 
@@ -580,6 +694,8 @@ const LIBRARY = Object.keys(makeLibrary({ seed: 0, streams: new Map() }));
 function wrapSource(code) {
   return '"use strict";\nreturn (function () {\n' + code +
     '\n;return { params: typeof params === "undefined" ? undefined : params,' +
+    ' produce: typeof produce === "undefined" ? undefined : produce,' +
+    ' transform: typeof transform === "undefined" ? undefined : transform,' +
     ' generate: typeof generate === "undefined" ? undefined : generate };\n})();';
 }
 
@@ -599,7 +715,7 @@ function lineOf(error) {
   return m && LINE_OFFSET !== null ? Number(m[1]) - LINE_OFFSET : null;
 }
 
-/** Algorithm source text -> {specs, generate, state}. Throws AlgoError. */
+/** Algorithm source text -> {specs, kind, fn, state}. Throws AlgoError. */
 function compile(code) {
   const state = { seed: 0, streams: new Map() };
   const lib = makeLibrary(state);
@@ -615,11 +731,18 @@ function compile(code) {
   } catch (e) {
     throw new AlgoError(`error while loading: ${e.message}`, lineOf(e));
   }
-  if (typeof parts.generate !== "function") {
-    throw new AlgoError("function generate(p, input) { ... return s; } is missing");
+  const produce = typeof parts.produce === "function" ? parts.produce : null;
+  const transform = typeof parts.transform === "function" ? parts.transform : null;
+  const generate = typeof parts.generate === "function" ? parts.generate : null;
+  if (produce && transform) {
+    throw new AlgoError("define produce or transform, not both: a producer makes a score, a transformer changes its source");
+  }
+  if (!produce && !transform && !generate) {
+    throw new AlgoError("function produce(p) { ... } (a producer) or function transform(source, p) { ... } (a transformer) is missing");
   }
   const specs = normalizeParams(parts.params);
-  return { specs, generate: parts.generate, state };
+  const kind = transform ? "transformer" : "producer";
+  return { specs, kind, fn: transform || produce || generate, legacy: !produce && !transform, state };
 }
 
 /** The values generate() sees: a copy of each value; a curve becomes a function of 0..1. */
@@ -633,24 +756,33 @@ function prepare(specs, values) {
 }
 
 /**
- * Run a compiled algorithm. Returns {score, canonical, notes, ms}: the JSON score as
- * generate returned it, its canonical form (validated) and the note count.
+ * Run a compiled algorithm. A transformer works on `source` (a JSON score), which
+ * stays untouched. Returns {score, canonical, notes, ms}: the JSON score as the
+ * algorithm returned it, its canonical form (validated) and the note count.
  */
-function run(compiled, values, input) {
+function run(compiled, values, source) {
   const start = Date.now();
   const seedSpec = compiled.specs.find((s) => s.type === "seed");
   compiled.state.seed = seedSpec ? (values[seedSpec.name] !== undefined ? values[seedSpec.name] : seedSpec.default) : 0;
   compiled.state.streams = new Map();
+  const name = compiled.kind === "transformer" ? "transform" : (compiled.legacy ? "generate" : "produce");
+  if (compiled.kind === "transformer" && !source) {
+    throw new AlgoError("this transformer has no source score yet: put a score in the roll and capture it");
+  }
   let result;
   try {
-    result = compiled.generate(prepare(compiled.specs, values), input ? clone(input) : null);
+    const p = prepare(compiled.specs, values);
+    if (compiled.kind === "transformer") result = compiled.fn(clone(source), p);
+    else if (compiled.legacy) result = compiled.fn(p, source ? clone(source) : null);
+    else result = compiled.fn(p);
   } catch (e) {
     if (e instanceof AlgoError || e instanceof S.ScoreError) throw e;
-    throw new AlgoError(`error in generate: ${e.message}`, lineOf(e));
+    throw new AlgoError(`error in ${name}: ${e.message}`, lineOf(e));
   }
   if (result === undefined || result === null) {
-    throw new AlgoError("generate() returned nothing: it must end with return s; (the score)");
+    throw new AlgoError(`${name}() returned nothing: it must end by returning the score`);
   }
+  foldPitches(result);
   let canonical;
   try {
     canonical = S.normalizeScore(result);
@@ -661,6 +793,33 @@ function run(compiled, values, input) {
   return { score: clone(result), canonical, notes: S.countNotes(canonical), ms: Date.now() - start };
 }
 
+/**
+ * Every pitch of a result brought into C0..G9 by whole octaves, so that a parameter at
+ * its extreme (a base at the bottom, a step at the top) still makes a playable score.
+ * 0..127 is left alone: that is a MIDI number written by mistake, and the check says so.
+ */
+function foldPitch(p) {
+  if (!isNumber(p) || (p >= 0 && p <= 127)) return p;
+  while (p < MIDI_RANGE[0]) p += OCTAVE;
+  while (p > MIDI_RANGE[1]) p -= OCTAVE;
+  return p;
+}
+
+function foldPitches(result) {
+  for (const v of (result && Array.isArray(result.voices) ? result.voices : [])) {
+    for (const c of (v && Array.isArray(v.chords) ? v.chords : [])) {
+      if (isObject(c) && Array.isArray(c.notes)) {
+        for (const n of c.notes) {
+          if (isObject(n)) n.pitch = foldPitch(n.pitch);
+          else if (Array.isArray(n)) n[0] = foldPitch(n[0]);
+        }
+      } else if (Array.isArray(c)) {
+        for (let i = 1; i < c.length; i++) if (Array.isArray(c[i])) c[i][0] = foldPitch(c[i][0]);
+      }
+    }
+  }
+}
+
 module.exports = {
   AlgoError, LIBRARY, TYPES, RESERVED,
   // the library, also usable directly from Node
@@ -668,6 +827,7 @@ module.exports = {
   score, Score, Voice, makeRandom,
   lerp, clamp, rescale, wrap, fold, snap, seq, linspace, sum, accumulate, env, warp,
   iterate, walk, markov, rewrite, automaton, euclid,
+  copy, chordEnd, phrases, eachNote, pitch, name,
   // the loader
   compile, run, prepare, normalizeParams, defaults, coerce, valueAtoms, describe, clone,
 };

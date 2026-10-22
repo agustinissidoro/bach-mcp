@@ -46,6 +46,7 @@ class GenerationConfig:
     temperature: float = 0.4
     top_p: float = 0.9
     top_k: int = 40
+    presence_penalty: float = 0.0
     reasoning: str = "auto"
     reasoning_budget: int = 2048
 
@@ -53,7 +54,7 @@ class GenerationConfig:
 @dataclass
 class ChatConfig:
     skill_file: str = ""
-    max_tool_rounds: int = 4
+    max_tool_rounds: int = 8
     tool_timeout_seconds: int = 60
     show_thinking: bool = True
     open_browser: bool = True
@@ -89,11 +90,12 @@ class OllamaConfig:
 class MaxConfig:
     send_port: int = 3000
     receive_port: int = 3001
+    buffer: str = "max/bach-mcp/buffer.txt"
 
 
 @dataclass
 class AlgoConfig:
-    dir: str = "algorithms"
+    dir: str = "max/bach-mcp/algorithms"
     node: str = "node"
 
 
@@ -140,6 +142,7 @@ class BachConfig:
         os.environ["BACH_TOOLSET"] = self.mcp.toolset
         os.environ["BACH_VERIFY"] = "1" if self.mcp.verify_writes else "0"
         os.environ["BACH_TOOL_LOG"] = "1" if self.mcp.tool_log else "0"
+        os.environ["BACH_BUFFER"] = self.max.buffer
         os.environ["BACH_ALGO_DIR"] = self.algo.dir
         os.environ["BACH_NODE"] = self.algo.node
 
@@ -187,6 +190,7 @@ class BachConfig:
             "--temp", str(g.temperature),
             "--top-p", str(g.top_p),
             "--top-k", str(g.top_k),
+            "--presence-penalty", str(g.presence_penalty),
             "--reasoning", g.reasoning if g.reasoning in ("off", "auto") else "on",
             "--reasoning-budget", str(g.reasoning_budget),
             "--jinja",
@@ -218,6 +222,7 @@ class BachConfig:
             "temperature": g.temperature,
             "top_p": g.top_p,
             "top_k": g.top_k,
+            "presence_penalty": g.presence_penalty,
             "showSystemMessage": False,  # the skill is long; keep it out of the conversation view
             "showThoughtInProgress": c.show_thinking,
             "showToolCallInProgress": True,

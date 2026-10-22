@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const vm = require("vm");
 const { load, readDict } = require("./maxmock.js");
 
 const ALGO = `// one line
@@ -205,4 +206,122 @@ test("very long scores are sent in slices", () => {
   for (const m of messages.slice(1)) total += (m.match(/\[\d+ \[/g) || []).length;
   assert.equal(total, 3010);
   assert.deepEqual(S.scoreMessagesChunked(canonical, false), S.scoreMessages(canonical, false));
+});
+
+const TRANSFORMER = `const params = { shift: { type: "slider", range: [-1200, 1200], value: 100 } };
+function transform(source, p) { const out = copy(source); eachNote(out, (n) => { n.pitch += p.shift; }); return out; }`;
+const ROLL = "roll [ clefs G ] [ [ 0 [ 6000 500 100 0 ] 0 ] [ 1000 [ 6200 500 100 0 ] 0 ] 0 ]";
+
+// bach.roll behind [r to_bach]: writetxt writes `text` to the file.
+function rollWriting(text) {
+  return { to_bach: (cmd, file) => { if (cmd === "writetxt") fs.writeFileSync(file, text); } };
+}
+
+function scorePitches(m) {
+  return scoreOut(m).voices.map((v) => v.chords.map((c) => c.notes[0].pitch));
+}
+
+test("a transformer takes the roll as its source when it is first loaded, and keeps it", () => {
+  const file = tempFile(TRANSFORMER);
+  const sourceFile = file.replace(/\.js$/, ".source.txt");
+  const m = load("bach.mcp.algo.js", { receivers: rollWriting(ROLL) });
+  m.send("load", file);
+  assert.deepEqual(m.named[0], ["to_bach", "writetxt", sourceFile]);
+  assert.equal(JSON.parse(last(m.out, 1, "spec")[2]).kind, "transformer");
+  m.flush(true); // the runner notices the file bach.roll wrote
+  assert.deepEqual(scorePitches(m), [[6100, 6300]]);
+  assert.equal(last(m.out, 2)[1], "loaded");
+  assert.deepEqual(last(m.out, 1, "source"), [1, "source", 2, "file"]);
+  m.send("shift", 200);
+  m.flush();
+  assert.deepEqual(scorePitches(m), [[6200, 6400]], "from the original again");
+  m.send("reload");
+  assert.equal(m.named.length, 1, "a reload keeps the source: no new capture");
+});
+
+test("a saved source is used without asking the roll; capture takes the roll again", () => {
+  const file = tempFile(TRANSFORMER);
+  fs.writeFileSync(file.replace(/\.js$/, ".source.txt"), "roll [ [ 0 [ 4800 500 100 0 ] 0 ] 0 ]");
+  const m = load("bach.mcp.algo.js", { receivers: rollWriting(ROLL) });
+  m.send("load", file);
+  assert.equal(m.named.length, 0);
+  assert.deepEqual(scorePitches(m), [[4900]]);
+  m.send("capture");
+  m.flush(true);
+  assert.deepEqual(scorePitches(m), [[6100, 6300]]);
+});
+
+test("a capture that bach.roll never answers is reported", () => {
+  const m = load("bach.mcp.algo.js", { receivers: {} });
+  m.send("roll", "my_roll");
+  m.send("load", tempFile(TRANSFORMER));
+  assert.equal(m.named[0][0], "my_roll");
+  vm.runInContext("Date.now = ((real) => () => real() + 60000)(Date.now);", m.ctx); // a minute later
+  m.flush(true);
+  assert.match(last(m.out, 2)[3], /bach.roll did not write the score \(is it fed by \[r my_roll\]\?\)/);
+});
+
+test("a score at the right inlet is a source too; a producer needs none", () => {
+  const m = load("bach.mcp.algo.js", { receivers: {} });
+  m.send("load", tempFile(TRANSFORMER));
+  const translate = load("bach.mcp.translate.js");
+  translate.send("in", "bach");
+  translate.send("out", "json");
+  translate.send("roll", "[", "[", 0, "[", 3600, 1000, 100, "]", "]", "]");
+  m.send("input", "dictionary", last(translate.out, 0, "dictionary")[2]);
+  m.flush();
+  assert.deepEqual(scorePitches(m), [[3700]]);
+  assert.deepEqual(last(m.out, 1, "source"), [1, "source", 1, "inlet"]);
+  const p = load("bach.mcp.algo.js");
+  p.send("load", tempFile(ALGO));
+  assert.equal(JSON.parse(last(p.out, 1, "spec")[2]).kind, "producer");
+  assert.equal(p.named.length, 0);
+});
+
+function inputFrom(m, llll) {
+  const translate = load("bach.mcp.translate.js");
+  translate.send("in", "bach");
+  translate.send("out", "json");
+  translate.send(...llll.split(" ").filter(Boolean).map((t) => (/^-?\d+(\.\d+)?$/.test(t) ? Number(t) : t)));
+  m.send("input", "dictionary", last(translate.out, 0, "dictionary")[2]);
+}
+
+test("keep: the first score at the inlet becomes the source and is saved; later ones are ignored", () => {
+  const file = tempFile(TRANSFORMER);
+  const sourceFile = file.replace(/\.js$/, ".source.txt");
+  const m = load("bach.mcp.algo.js", { receivers: {} });
+  m.send("load", file);
+  inputFrom(m, "roll [ [ 0 [ 3600 1000 100 ] ] ]");
+  m.flush();
+  assert.deepEqual(scorePitches(m), [[3700]]);
+  assert.match(fs.readFileSync(sourceFile, "utf8"), /^roll /, "saved next to the algorithm");
+  inputFrom(m, "roll [ [ 0 [ 4800 1000 100 ] ] ]");
+  m.flush();
+  m.send("shift", 200);
+  m.flush();
+  assert.deepEqual(scorePitches(m), [[3800]], "still the original");
+  const again = load("bach.mcp.algo.js", { receivers: {} });
+  again.send("load", file);
+  assert.equal(again.named.length, 0, "reopened: the saved source, no capture");
+  assert.deepEqual(scorePitches(again), [[3700]]);
+});
+
+test("follow: every score at the inlet becomes the source; only the first one runs by itself", () => {
+  const m = load("bach.mcp.algo.js", { receivers: {} });
+  m.send("sourcemode", "follow");
+  assert.deepEqual(last(m.out, 1, "sourcemode"), [1, "sourcemode", "follow"]);
+  m.send("load", tempFile(TRANSFORMER));
+  inputFrom(m, "roll [ [ 0 [ 3600 1000 100 ] ] ]");
+  m.flush();
+  assert.deepEqual(scorePitches(m), [[3700]]);
+  const runs = m.out.filter((o) => o[0] === 0).length;
+  inputFrom(m, "roll [ [ 0 [ 3700 1000 100 ] ] ]");  // the result, back from the roll
+  m.flush();
+  assert.equal(m.out.filter((o) => o[0] === 0).length, runs, "no run: no loop through the roll");
+  assert.deepEqual(last(m.out, 1, "source"), [1, "source", 1, "inlet"]);
+  m.send("shift", 100);
+  m.flush();
+  assert.deepEqual(scorePitches(m), [[3800]], "the next change transforms the latest score");
+  m.send("sourcemode", "maybe");
+  assert.match(last(m.out, 2)[3], /sourcemode is keep or follow/);
 });

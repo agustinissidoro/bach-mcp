@@ -2,8 +2,8 @@
 
 Two tool sets, selected by `toolset` (or the BACH_TOOLSET env var):
 
-    lean (default)  the three JSON tools of score_tools.py and send_algorithm of
-                    algo_tools.py. Built for local models: bach's hierarchy and
+    lean (default)  the three JSON tools of score_tools.py, the pitch tools of
+                    pitch_tools.py and send_algorithm of algo_tools.py. Built for local models: bach's hierarchy and
                     units as JSON, no llll. Skill: BACH_SKILL.md.
     full            the lean tools plus every raw bach.roll command below, which
                     take llll strings. Skill: BACH_SKILL_LLLL.md.
@@ -18,6 +18,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .algo_tools import register_algo_tools
 from .modes import skill_for
+from .pitch_tools import register_pitch_tools
 from .score_tools import register_score_tools
 from .server import BachMCPServer
 
@@ -102,6 +103,7 @@ def create_mcp_app(
 
         mcp.tool = _logging_tool  # type: ignore[method-assign]
 
+    register_pitch_tools(mcp)
     if toolset == "lean":
         register_score_tools(mcp, bach)
         register_algo_tools(mcp, bach)

@@ -10,6 +10,10 @@ runs the algorithm again.
 Before a file reaches Max it is run here in Node, with the same core library: at
 its declared values and at the edges of every parameter. Only a file that passes
 replaces the previous version (kept in algorithms/.history) and is loaded.
+
+A transformer is checked on the music it will work on: its saved source
+(algorithms/<name>.source.txt) if it has one, else the score now in bach.roll
+(fetched through the buffer file), else a small built-in score.
 """
 
 from __future__ import annotations
@@ -20,12 +24,13 @@ import re
 import shutil
 import subprocess
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from mcp.server.fastmcp import FastMCP
 
+from .buffer import RollBuffer
 from .server import BachMCPServer
-from .translate import ScoreError, normalize_score, summarize
+from .translate import ScoreError, count_notes, llll_to_score, normalize_score, summarize
 
 ALGO_TOOLS = ("send_algorithm",)
 
@@ -33,22 +38,24 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 _CHECK_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "algo_check.js")
 _NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,47}$")
 _CHECK_TIMEOUT_SECONDS = 20.0
-_CONFIRM_SECONDS = 4.0
+_CONFIRM_SECONDS = 6.0  # a transformer first captures its source from the roll
+_TRANSFORMER = re.compile(r"\bfunction\s+transform\s*\(")
 
 
 def algorithms_dir() -> str:
     """Where algorithm files are written: [algo] dir in bach.toml (relative to the repo)."""
-    folder = os.path.expanduser(os.getenv("BACH_ALGO_DIR") or "algorithms")
+    folder = os.path.expanduser(os.getenv("BACH_ALGO_DIR") or os.path.join("max", "bach-mcp", "algorithms"))
     return folder if os.path.isabs(folder) else os.path.join(_REPO_ROOT, folder)
 
 
-def check_algorithm(path: str, timeout: Optional[float] = None) -> Dict[str, Any]:
-    """Run algo_check.js on a file. Returns its JSON answer, or {"ok": False, "error": ...}."""
+def check_algorithm(path: str, timeout: Optional[float] = None, source: Optional[str] = None) -> Dict[str, Any]:
+    """Run algo_check.js on a file (a transformer on the `source` score file). Returns its JSON answer,
+    or {"ok": False, "error": ...}."""
     timeout = timeout or _CHECK_TIMEOUT_SECONDS
     node = os.getenv("BACH_NODE") or "node"
     try:
         done = subprocess.run(
-            [node, _CHECK_SCRIPT, path],
+            [node, _CHECK_SCRIPT, path] + (["--source", source] if source else []),
             capture_output=True, text=True, timeout=timeout,
         )
     except FileNotFoundError:
@@ -78,6 +85,24 @@ def _error_text(name: str, result: Dict[str, Any]) -> str:
 
 def register_algo_tools(mcp: FastMCP, bach: BachMCPServer) -> None:
     """Register send_algorithm on `mcp`."""
+    buffer = RollBuffer(bach)
+
+    def _source_for(name: str, folder: str) -> Tuple[Optional[str], str, Optional[str]]:
+        """The score a transformer is checked on: (file, where it comes from, temporary file to delete)."""
+        saved = os.path.join(folder, f"{name}.source.txt")
+        if os.path.exists(saved):
+            return saved, f"its saved source ({name}.source.txt)", None
+        text = buffer.fetch(timeout_seconds=3.0)
+        try:
+            notes = count_notes(llll_to_score(text)) if text else 0
+        except ValueError:
+            notes = 0
+        if not notes:
+            return None, "a built-in test score: the roll is empty or Max did not hand it over", None
+        temp = os.path.join(folder, ".history", f".{name}.roll.txt")
+        with open(temp, "w", encoding="utf-8") as f:
+            f.write(text)
+        return temp, "the score in the roll", temp
 
     def _wait_for_max(runner: str) -> Optional[str]:
         """The runner's answer to a load: "loaded <runner> <file> <notes> <ms>" or "error <runner> <message>"."""
@@ -101,7 +126,8 @@ def register_algo_tools(mcp: FastMCP, bach: BachMCPServer) -> None:
         panel the user plays with; every change runs it again.
 
         name: the file name, letters, digits, _ or - (e.g. "walkers"). The same name replaces it.
-        code: the whole file: const params = {...}; function generate(p, input) {... return s; }
+        code: the whole file: const params = {...}; then function produce(p) {...} (a producer)
+          or function transform(source, p) {...} (a transformer of the score in the roll).
         runner: which bach.mcp.algo loads it (default "algo").
         The result lists the parameters and the score at the declared values; the file
         has also been run at every slider's minimum and maximum. Do not call it again to check.
@@ -109,7 +135,7 @@ def register_algo_tools(mcp: FastMCP, bach: BachMCPServer) -> None:
         if not _NAME.match(name or ""):
             return "ERROR: name must start with a letter and use only letters, digits, _ or - (e.g. \"walkers\")."
         if not (code or "").strip():
-            return "ERROR: code is empty. Send the whole file: const params = {...}; function generate(p, input) {...}"
+            return "ERROR: code is empty. Send the whole file: const params = {...}; function produce(p) {...}"
         runner = (runner or "algo").strip() or "algo"
 
         folder = algorithms_dir()
@@ -119,7 +145,10 @@ def register_algo_tools(mcp: FastMCP, bach: BachMCPServer) -> None:
         with open(draft, "w", encoding="utf-8") as f:
             f.write(code.rstrip() + "\n")
 
-        result = check_algorithm(draft)
+        source, origin, temp = _source_for(name, folder) if _TRANSFORMER.search(code) else (None, "", None)
+        result = check_algorithm(draft, source=source)
+        if temp:
+            os.remove(temp)
         if not result.get("ok"):
             os.remove(draft)
             return _error_text(name, result)
@@ -140,7 +169,7 @@ def register_algo_tools(mcp: FastMCP, bach: BachMCPServer) -> None:
         bach.flush_incoming()
         sent = bach.send_info(f'algo {runner} load "{final}"')
         if not sent:
-            status = "but Max could not be reached (is the patch open and the script started?)"
+            status = "but Max could not be reached (is the patch open?)"
         else:
             answer = _wait_for_max(runner)
             if answer is None:
@@ -152,8 +181,12 @@ def register_algo_tools(mcp: FastMCP, bach: BachMCPServer) -> None:
 
         relative = os.path.relpath(final, _REPO_ROOT) if final.startswith(_REPO_ROOT) else final
         params = "\n".join(f"  {line}" for line in result["describe"]) or "  (none)"
+        kind = ""
+        if result.get("kind") == "transformer":
+            kind = (f"Transformer, checked on {origin} ({result['source']['notes']} notes). In Max it keeps "
+                    f"its source in {name}.source.txt; every run starts again from it.\n")
         return (
-            f"OK. Algorithm \"{name}\" saved as {relative} {status}.\n"
+            f"OK. Algorithm \"{name}\" saved as {relative} {status}.\n{kind}"
             f"Parameters (now a panel in Max):\n{params}\n"
             f"Checked in {result['runs']} runs (every slider at its minimum and maximum, every option).\n"
             f"Score at the declared values ({result['notes']} notes, {result['ms']} ms):\n{summarize(canonical)}"
