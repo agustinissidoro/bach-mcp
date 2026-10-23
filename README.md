@@ -8,7 +8,7 @@ After the first-time installation (below):
 
 1. Set your model in `bach.toml`: an Ollama model (`backend = "ollama"`, the way
    to run MLX models on Apple Silicon) or a GGUF file for llama.cpp (`backend = "llama"`).
-2. In Max, open `bach-mcp.maxpat` (the UDP bridge needs no starting).
+2. In Max, open `bach-mcp-udp.maxpat` (the UDP bridge needs no starting).
 3. Double-click `run.command` (or run `./run.command` in a terminal).
 
 `run.command` starts the MCP server and the model server, and opens the
@@ -58,7 +58,7 @@ One file configures the model, generation, chat, tools and ports:
 | `[model]` | backend, Ollama model name or GGUF path / Hugging Face repo, context size, GPU layers |
 | `[generation]` | reply token limit, temperature, top-p/top-k, presence penalty, reasoning (off / on / auto / a level) and its token budget |
 | `[chat]` | system prompt file, tool calls allowed per answer, tool timeout, show thinking, open browser |
-| `[mcp]` | host/port, tool set (`lean`/`full`), write verification, tool logging |
+| `[mcp]` | host/port, write verification, tool logging |
 | `[llama]` | `llama-server` binary, host/port of the chat, slots, extra flags |
 | `[ollama]` | Ollama address, how long the model stays loaded |
 | `[max]` | UDP ports of the bridge to Max, the buffer file scores travel through |
@@ -98,13 +98,16 @@ model never decides what to leave out. The translators still accept the earlier
 object form (`{"onset": 0, "notes": [{"pitch": 6000, "dur": 500}]}`), and reject
 pitches below 1200 (C0), which catches pitch and duration swapped.
 
-Four tools make up the `lean` tool set:
+The tools:
 
 - `send_algorithm(name, code, runner)` — the algorithm that generates the score
   (below).
 - `write_score(score, add)` — the score itself as JSON.
 - `read_score(voice, from_ms, to_ms)` — the current score as JSON.
 - `clear_score`.
+- the pitch tools (`p2mc`, `mc2p`, `get_midicents`, `transpose`, `reverse`,
+  `mirror`, `force_scale`, `get_chord`, `get_scale`): exact pitch arithmetic in
+  midicents, whose answers the model copies into the score.
 
 ### Modes: `/score` and `/algo`
 
@@ -128,7 +131,7 @@ The gateway applies the mode to every request of the web chat, and
 has already read as long as the conversation only grows, so the skill costs
 time once per conversation; switching mode, or editing an earlier message,
 makes it read everything again once. Claude Desktop does not go through
-either, and gets all four tools and the whole skill.
+either, and gets all the tools and the whole skill.
 
 Every write is checked against bach.roll in code and answered with a compact
 summary, so the model does not need to dump the score to verify it.
@@ -246,7 +249,7 @@ Three objects in the Max package do the rest:
 | `bach.mcp.params` | The panel: a `jsui` with `bach.mcp.params.js`. Built from the parameters the runner sends; one element per parameter, placed automatically (slider, range, toggle, menu, seed, curve, list). Moving one sends `<param> <value>` to the runner, which runs again. Double-click: back to the declared value. A pitch shows as a name, midicents or MIDI (click its value), drags snap to round values (the **snap** switch; alt inverts it). A transformer's panel shows its source, its source mode (**keep**/**follow**) and a **capture** button. Saved with the patch, and works with `pattr`/`pattrstorage` for presets. |
 | `bach.mcp.translate @in json\|bach @out bach\|json` | JSON score ↔ bach.roll (v8), the same translation as `translate.py`. `@in bach` reads a bach.roll llll in text form (through `[bach.portal @out t]`). `@add 1` adds instead of replacing. |
 
-In `bach-mcp.maxpat` they are already connected: algo → translate → bach.roll,
+In `bach-mcp-udp.maxpat` they are already connected: algo → translate → bach.roll,
 algo ↔ panel. Several runners can live in one patch under different names
 (`send_algorithm(..., runner="strings")`).
 
@@ -313,60 +316,8 @@ to over the pipe.
 
 Then fully restart Claude Desktop.
 
-## File map (what each file is for)
+## File map
 
-### Root files
-
-- `README.md`: setup and usage.
-- `bach.toml`: the configuration file (model, generation, chat, tools, ports).
-- `max/bach-mcp/algorithms/`: algorithm files written by `send_algorithm` (examples: the producers `drift.js` and `cells.js`, the transformer `transpose-phrases.js`), and each transformer's source, `<name>.source.txt`.
-- `max/bach-mcp/buffer.txt`: the score exchange file between the MCP server and bach.roll (not in git).
-- `run.command`: starts the MCP server, `llama-server` and the web chat.
-- `environment.yml`: Conda env definition (Python 3.11).
-- `requirements.in`: direct Python dependencies (`mcp`, `requests`).
-- `requirements.txt`: pinned, compiled dependency lock for pip install.
-- `claude_desktop_config.json`: example Claude Desktop MCP server config for the **stdio** transport (edit absolute paths).
-- `.gitignore` / `.gitattributes`: ignore rules and Git text normalization.
-
-### Python package (`py/`)
-
-- `py/main.py`: single entrypoint — `run` (MCP server + `llama-server` + web chat), `serve` (default; MCP server only, HTTP or `--stdio`) and `agent` (terminal chat against any OpenAI-compatible endpoint).
-- `py/bach_mcp/config.py`: loads `bach.toml` and derives the `llama-server` command line and the web chat's default settings.
-- `py/bach_mcp/gateway.py`: sits on the chat's port in front of the model: a pass-through proxy to llama-server (llama backend) or a translator to Ollama (ollama backend); with both it applies the mode and adds the instrument docs to the messages.
-- `py/bach_mcp/docs.py`: finds the instruments named in a message (keyword matching on each file's aliases) and builds the reference block from their files.
-- `py/bach_mcp/__init__.py`: public exports.
-- `py/bach_mcp/server.py`: high-level bridge server (message queue, send/wait helpers, lifecycle).
-- `py/bach_mcp/udp.py`: the UDP bridge to Max, plain text (`3001` inbound, `3000` outbound).
-- `py/bach_mcp/tcp.py`: the former TCP bridge; no longer used.
-- `py/bach_mcp/mcp_app.py`: FastMCP app factory; selects the tool set and holds the raw llll tools of the `full` set.
-- `py/bach_mcp/translate.py`: deterministic JSON ↔ llll translator (voices > chords > notes in milliseconds and midicents, slots, dump parsing).
-- `py/bach_mcp/compose.py`: restricted Python runner for generating scores from code. Currently not exposed as a tool.
-- `py/bach_mcp/score_tools.py`: the lean JSON tool set (`write_score`, `read_score`, `clear_score`).
-- `py/bach_mcp/buffer.py`: the buffer file: writing it for bach.roll to read (`mcp_buffer_written`), having bach.roll write it (`write_buffer`), adding chords to bach's own text.
-- `py/bach_mcp/modes.py`: the `/score` and `/algo` modes: the prefixes, each mode's part of the skill and its tools.
-- `py/bach_mcp/algo_tools.py`: `send_algorithm`: checks an algorithm file in Node, saves it in `algorithms/` and loads it in Max.
-- `py/bach_mcp/algo_check.js`: the Node check `send_algorithm` runs (declared values, then the edges of every parameter).
-- `py/bach_mcp/mcp_tools.py`: in-process bridge exposing the MCP tools to the local agent (`list_tools` / `call_tool`).
-- `py/bach_mcp/agent.py`: provider-agnostic tool-calling loop (`Agent`, `AgentConfig`).
-- `py/bach_mcp/BACH_SKILL.md`: system prompt / skill for the lean tool set (principle first, then notation; note table; JSON format). Also sent as the MCP server instructions.
-- `py/bach_mcp/BACH_SKILL_LLLL.md`: the previous llll skill, used with `toolset = "full"`.
-- `py/bach_mcp/bach_score_schema.json`: earlier JSON schema draft; not used by the code.
-- `py/bach_mcp/docs/`: instrument reference for the model (strings, woodwinds, piano): ranges, techniques and harmonics in midicents, one file per instrument plus one per family. Added to the messages by the gateway (`docs.py`); the format is in `docs/README.md`.
-- `py/tests/test_translate.py`: tests for the translator and the compose runner.
-- `py/tests/test_docs.py`: checks the instrument docs (fields, ranges, clefs, JSON spellings the translator accepts).
-- `py/tests/test_buffer.py`: the buffer file and the score tools against a stand-in bach.roll that reads and writes it.
-- `py/tests/test_modes.py`: the modes: prefixes, skill parts, tools, and what the gateway sends.
-- `py/tests/test_algo.py`: `send_algorithm`, the example algorithms, and the JS translator against `translate.py` on the same scores and dumps.
-- `py/tests/js/`: tests of the Max objects, run with Node on a stand-in for Max (`maxmock.js`).
-- `py/bach_mcp/llm/provider.py`: `LLMProvider` interface, neutral types (`ToolSpec`/`ToolCall`/`AssistantTurn`), `ProviderConfig`, and `build_provider()` factory.
-- `py/bach_mcp/llm/openai_compat.py`: `OpenAICompatibleProvider` — covers Ollama, llama.cpp, vLLM, OpenAI, etc.
-
-### Max package (`max/bach-mcp`)
-
-- `max/bach-mcp/patchers/bach-mcp.maxpat`: patcher containing `bach.roll`, `bach.portal`, `node.script`, and an algorithm runner with its panel and translator.
-- `max/bach-mcp/patchers/bach.mcp.algo.maxpat`, `bach.mcp.translate.maxpat`: the runner and translator abstractions.
-- `max/bach-mcp/javascript/bach.mcp.core.js`: the library in scope in every algorithm file, and the loader (also used by the Node check).
-- `max/bach-mcp/javascript/bach.mcp.score.js`: JSON ↔ llll in JavaScript, a port of `translate.py`.
-- `max/bach-mcp/javascript/bach.mcp.algo.js`, `bach.mcp.translate.js`: the v8 scripts of the two abstractions.
-- `max/bach-mcp/javascript/bach.mcp.params.js`, `bach.mcp.gui.js`: the panel (jsui) and its library of elements (ECMAScript 5, for jsui's engine).
-- `max/bach-mcp/javascript/bachTCP.js`: the former Node for Max TCP bridge; no longer connected in the patch.
+What each file does, and a diagram of how they connect, is in
+[`filemap.md`](filemap.md). Files no longer used are in
+[`deprecated/`](deprecated/README.md).

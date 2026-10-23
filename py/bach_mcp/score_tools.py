@@ -1,7 +1,7 @@
 """
 score_tools.py
 --------------
-The lean, JSON-facing tool set: write_score, read_score, clear_score.
+The JSON score tools: write_score, read_score, clear_score.
 
 These are the only tools a local model needs. They speak the JSON score of
 `translate.py`: bach.roll's own hierarchy (voices > chords > notes) and units
@@ -11,7 +11,7 @@ reported back in one compact summary — so the model has no reason to dump the
 score to see whether its write worked.
 
 The scores themselves travel through the buffer file (buffer.py), never as
-TCP messages.
+messages.
 """
 
 from __future__ import annotations

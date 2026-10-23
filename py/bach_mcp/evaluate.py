@@ -284,13 +284,13 @@ def pitch_tool_checks(score: Dict[str, Any], pitch_calls: List[Dict[str, Any]]) 
 
 # ── Running ─────────────────────────────────────────────────────────────── #
 
-def _tools(toolset: str) -> List[Dict[str, Any]]:
+def _tools() -> List[Dict[str, Any]]:
     from .mcp_app import create_mcp_app
 
     class _Offline:  # the tools are only listed, never called
         pass
 
-    app = create_mcp_app(_Offline(), toolset=toolset)
+    app = create_mcp_app(_Offline())
     return [{"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.inputSchema}}
             for t in asyncio.run(app.list_tools())]
 
@@ -377,7 +377,7 @@ def run_once(case: Case, config: BachConfig, tools: List[Dict[str, Any]], librar
 def run_suite(config: BachConfig, runs: int = 5, only: Optional[List[str]] = None) -> Dict[str, Any]:
     if not config.uses_ollama:
         raise SystemExit("eval talks to Ollama: set [model] backend = \"ollama\" in bach.toml")
-    tools = _tools(config.mcp.toolset)
+    tools = _tools()
     library = DocLibrary() if config.chat.docs else None
     cases = [c for c in CASES if not only or c.name in only]
     report: Dict[str, Any] = {"when": time.strftime("%Y-%m-%d %H:%M"), "model": config.model.ollama_model,

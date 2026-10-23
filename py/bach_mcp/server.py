@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import signal
 import sys
 import threading
 import time
@@ -33,7 +32,6 @@ class MCPConfig:
     incoming_port: int = 3001
     outgoing_host: str = "127.0.0.1"
     outgoing_port: int = 3000
-    idle_sleep_seconds: float = 0.2
 
 
 @dataclass
@@ -96,23 +94,6 @@ class BachMCPServer:
             self.server.stop()
         _log("BACH MCP - Stopped")
 
-    def run_forever(self) -> None:
-        """Run server loop until interrupted."""
-        self.start()
-        self._install_signal_handlers()
-
-        try:
-            while self.running:
-                time.sleep(self.config.idle_sleep_seconds)
-        except KeyboardInterrupt:
-            self.running = False
-        finally:
-            self.stop()
-
-    def send_score(self, score_llll: str) -> bool:
-        """Send raw llll score to Max."""
-        return self.sender.send(score_llll)
-
     def send_info(self, message: str) -> bool:
         """Send plain process message to Max."""
         return self.sender.send(message)
@@ -139,18 +120,6 @@ class BachMCPServer:
                 return selected.to_dict()
             return None
 
-    def get_latest_incoming(self, message_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Return latest incoming message without consuming it."""
-        with self._incoming_lock:
-            if not self._incoming_messages:
-                return None
-            if message_type is None:
-                return self._incoming_messages[-1].to_dict()
-            for message in reversed(self._incoming_messages):
-                if message.type == message_type:
-                    return message.to_dict()
-            return None
-
     def wait_for_incoming(
         self,
         timeout_seconds: float = 10.0,
@@ -171,11 +140,6 @@ class BachMCPServer:
             if not has_data and remaining <= 0:
                 return None
 
-    def incoming_queue_size(self) -> int:
-        """Return number of queued incoming Max messages."""
-        with self._incoming_lock:
-            return len(self._incoming_messages)
-
     def flush_incoming(self) -> int:
         """Discard all queued incoming messages and return how many were dropped.
 
@@ -188,14 +152,6 @@ class BachMCPServer:
             self._incoming_messages.clear()
             self._incoming_event.clear()
             return count
-
-    def _install_signal_handlers(self) -> None:
-        def _handle_signal(signum, frame):  # noqa: ARG001
-            self.running = False
-
-        signal.signal(signal.SIGINT, _handle_signal)
-        if hasattr(signal, "SIGTERM"):
-            signal.signal(signal.SIGTERM, _handle_signal)
 
     def _handle_incoming_message(self, raw_message: str) -> None:
         text = raw_message.strip()

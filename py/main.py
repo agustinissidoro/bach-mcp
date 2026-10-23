@@ -75,7 +75,7 @@ def _serve_http(bach: BachMCPServer, config: BachConfig) -> None:
     import uvicorn
     from starlette.middleware.cors import CORSMiddleware
 
-    mcp = create_mcp_app(bach, config.mcp.toolset, instructions=config.system_prompt())
+    mcp = create_mcp_app(bach, instructions=config.system_prompt())
 
     @mcp.resource("bach://skill")
     def bach_skill() -> str:
@@ -100,7 +100,7 @@ def run_serve(config: BachConfig, stdio: bool = False) -> None:
     bach = _start_bach(config)
     try:
         if stdio:
-            mcp = create_mcp_app(bach, config.mcp.toolset, instructions=config.system_prompt())
+            mcp = create_mcp_app(bach, instructions=config.system_prompt())
             mcp.run(transport="stdio")
         else:
             print(f"Bach MCP server listening at {config.mcp_url}", flush=True)
@@ -223,7 +223,7 @@ def _run_stack(config: BachConfig, capabilities: list) -> None:
               "            Set path or hf_repo in bach.toml; context and reasoning settings need it.")
     print(f"  context   {config.model.context_size} tokens, reply limit {config.generation.max_tokens}, "
           f"reasoning {config.generation.reasoning}")
-    print(f"  tools     {config.mcp.toolset} set at {config.mcp_url}")
+    print(f"  tools     {config.mcp_url}")
 
     ui_file = tempfile.NamedTemporaryFile("w", suffix=".json", prefix="bach-webui-", delete=False, encoding="utf-8")
     json.dump(config.webui_settings(), ui_file)
@@ -317,7 +317,7 @@ def run_agent(config: BachConfig) -> None:
     provider = build_provider(provider_cfg)
 
     bach = _start_bach(config)
-    mcp = create_mcp_app(bach, config.mcp.toolset)
+    mcp = create_mcp_app(bach)
     tools = McpToolBridge(mcp)
     agent = Agent(provider, tools, AgentConfig(
         system_prompt=config.system_prompt(DEFAULT_MODE),

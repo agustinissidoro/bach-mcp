@@ -20,6 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 SCORE_JS = os.path.join(REPO, "max", "bach-mcp", "javascript", "bach.mcp.score.js")
 SKILL = os.path.join(REPO, "py", "bach_mcp", "BACH_SKILL.md")
+EXAMPLES = os.path.join(REPO, "max", "bach-mcp", "algorithms", "examples")
 NODE = shutil.which(os.getenv("BACH_NODE") or "node")
 
 needs_node = unittest.skipUnless(NODE, "Node.js is not installed")
@@ -327,7 +328,7 @@ class TransformerTests(unittest.TestCase):
 @needs_node
 class LibraryTests(unittest.TestCase):
     def test_example_algorithms_pass_the_check(self):
-        folder = os.path.join(REPO, "max", "bach-mcp", "algorithms")
+        folder = EXAMPLES
         files = sorted(f for f in os.listdir(folder) if f.endswith(".js"))
         self.assertGreaterEqual(len(files), 2)
         for name in files:
@@ -339,7 +340,7 @@ class LibraryTests(unittest.TestCase):
         with open(SKILL, encoding="utf-8") as f:
             blocks = re.findall(r"```js\n(.*?)```", f.read(), re.S)
         for block, name in zip(blocks, ("drift.js", "transpose-phrases.js")):
-            with open(os.path.join(REPO, "max", "bach-mcp", "algorithms", name), encoding="utf-8") as f:
+            with open(os.path.join(EXAMPLES, name), encoding="utf-8") as f:
                 self.assertEqual(f.read(), block, name)
 
     def test_the_skill_names_every_library_function(self):

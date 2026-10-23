@@ -195,7 +195,7 @@ logs/
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
 # Previous versions of algorithm files, kept by send_algorithm
-algorithms/.history/
+max/bach-mcp/algorithms/.history/
 
 # The score exchange file between the MCP server and bach.roll
 buffer.txt

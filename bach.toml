@@ -24,7 +24,7 @@ reasoning = "off"         # "off", "on", "auto" (model default), or a level: "lo
 reasoning_budget = 2048   # llama backend only: tokens the model may spend thinking; -1 = unlimited
 
 [chat]
-skill_file = ""           # system prompt. Empty = the built-in skill for the tool set (py/bach_mcp/BACH_SKILL.md)
+skill_file = ""           # system prompt. Empty = the built-in skill (py/bach_mcp/BACH_SKILL.md)
 max_tool_rounds = 8       # tool calls the model may chain in one answer before it is stopped (pitch tools, then the score)
 tool_timeout_seconds = 60 # how long the chat waits for one tool call
 show_thinking = true      # show the model's reasoning while it is being written
@@ -34,7 +34,6 @@ docs = true               # add the instrument docs (py/bach_mcp/docs) to each m
 [mcp]
 host = "127.0.0.1"
 port = 8000
-toolset = "lean"          # "lean" = JSON tools only; "full" = also the raw bach.roll llll commands
 verify_writes = true      # check every write against bach.roll and report the result to the model
 tool_log = true           # print each tool call in the terminal
 

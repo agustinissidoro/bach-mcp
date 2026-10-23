@@ -65,7 +65,6 @@ class ChatConfig:
 class McpConfig:
     host: str = "127.0.0.1"
     port: int = 8000
-    toolset: str = "lean"
     verify_writes: bool = True
     tool_log: bool = True
 
@@ -139,7 +138,6 @@ class BachConfig:
 
     def apply_env(self) -> None:
         """Publish the settings that other modules read from the environment."""
-        os.environ["BACH_TOOLSET"] = self.mcp.toolset
         os.environ["BACH_VERIFY"] = "1" if self.mcp.verify_writes else "0"
         os.environ["BACH_TOOL_LOG"] = "1" if self.mcp.tool_log else "0"
         os.environ["BACH_BUFFER"] = self.max.buffer
@@ -158,7 +156,7 @@ class BachConfig:
             except OSError as exc:
                 raise ConfigError(f"[chat] skill_file: cannot read {path} ({exc.strerror})") from None
         from .mcp_app import load_skill
-        return load_skill(self.mcp.toolset, raw=True)
+        return load_skill(raw=True)
 
     def system_prompt(self, mode: Optional[str] = None) -> str:
         """The skill text for a mode ("score" or "algo", see modes.py), or all of it."""
@@ -283,8 +281,6 @@ def load_config(path: str = "") -> BachConfig:
     if config.uses_ollama and not config.model.ollama_model:
         raise ConfigError("[model] backend is \"ollama\" but ollama_model is empty (e.g. \"qwen3.8:27b-mlx\")")
     config.ollama.url = config.ollama.url.rstrip("/")
-    if config.mcp.toolset not in ("lean", "full"):
-        raise ConfigError(f"[mcp] toolset must be \"lean\" or \"full\", got {config.mcp.toolset!r}")
     if config.model.path and config.model.hf_repo:
         raise ConfigError("[model] give either path or hf_repo, not both")
     if config.model.path and not os.path.isfile(os.path.expanduser(config.model.path)):
