@@ -192,6 +192,11 @@ cython_debug/
 # Runtime logs written by `main.py run`
 logs/
 
+# Local models (python py/main.py download); only the README and the catalogue are kept
+models/*
+!models/README.md
+!models/catalog.toml
+
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
 # Previous versions of algorithm files, kept by send_algorithm
@@ -202,3 +207,6 @@ buffer.txt
 .buffer.txt.tmp
 max/bach-mcp/buffer.txt
 max/bach-mcp/.buffer.txt.tmp
+
+# bachmcp externals: the build folder (the .mxo is kept)
+max/bach-mcp/externals/build/

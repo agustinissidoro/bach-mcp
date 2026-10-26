@@ -1,77 +1,150 @@
 # bach-mcp
 
-`bach-mcp` bridges `bach.roll` in Max with an LLM.
+`bach-mcp` bridges `bach.roll` in Max with a model. Two ways in, both reaching
+the same 13 tools:
 
-## Quickstart
+- **Claude** (Claude Desktop, Claude Code) calls Bach's tools over MCP. Claude
+  is its own model; nothing else runs.
+- **A local model** runs on your Mac, through Bach's own chat page.
+
+## Quickstart: the local model
 
 After the first-time installation (below):
 
-1. Set your model in `bach.toml`: an Ollama model (`backend = "ollama"`, the way
-   to run MLX models on Apple Silicon) or a GGUF file for llama.cpp (`backend = "llama"`).
+1. Get a model into `models/` and set it in `bach.toml` (below), e.g.
+   `python py/main.py download mlx-community/Qwen3.8-27B-4bit --use`.
 2. In Max, open `bach-mcp-udp.maxpat` (the UDP bridge needs no starting).
 3. Double-click `run.command` (or run `./run.command` in a terminal).
 
-`run.command` starts the MCP server and the model server, and opens the
-llama.cpp web chat already configured: the skill as system prompt, the Bach
-tools connected and switched on, and the token limits from `bach.toml`. Ctrl-C
-in that terminal stops everything. The first time the model calls a tool, the
-chat asks for permission; choose "Always allow" from the button's menu.
+`run.command` starts the model server, the bridge to Max and the chat page,
+and opens the page once the model is ready (the first start of a repo also
+downloads it). Ctrl-C in that terminal stops everything. The page works in a
+browser, and in a Max patch inside `[jweb]`: there it also takes `send <text>`
+and `new` at its inlet, and reports `mode`, `tool <name>` and `done` at its
+outlet.
+
+Start a message with `/algo` or `/score` to switch modes (below), or use the
+buttons. **Stop** ends the answer being written; **New chat** forgets the
+conversation.
 
 ### Model backends
 
-- **`ollama`** — the model is served by Ollama, which is opened automatically
-  if it is not running. This is how MLX models are used. The web chat is still llama.cpp's: a small
-  gateway (`py/bach_mcp/gateway.py`) takes llama-server's place and translates
-  between the chat and Ollama, so `llama-server` must be installed too (it
-  provides the chat's page, without loading a model).
-- **`llama`** — `llama-server` loads a GGUF file itself. It runs on an
-  internal port behind the same gateway, which passes everything through
-  unchanged except for adding the instrument docs (below).
+Bach picks one from the model's files: `.safetensors` → mlx, `.gguf` → gguf.
+Both run a server that speaks the OpenAI chat API, on an internal port; Bach
+starts and stops it, and `py/bach_mcp/model/client.py` is the one client.
 
-With both backends the chat's port belongs to the gateway, and `llama-server`
-runs behind it.
+- **`mlx`**: `mlx_lm.server`, Apple's MLX on the Mac's GPU (the `mlx-lm` package,
+  installed with the Python requirements). Models: `mlx-community/...` repos or
+  a folder.
+- **`gguf`**: `llama-server` from llama.cpp (`brew install llama.cpp`). Models: a
+  `.gguf` file, or a repo `user/repo:Q4_K_M`.
 
-With the Ollama backend the gateway also catches one failure of the model: a
-reply that runs out of tokens inside a tool call it never finishes (a
-repetition loop) is asked once more, without showing anything twice. The
-sampling in `bach.toml` follows Qwen's recommendation for answers without
-reasoning (temperature 0.7, top_p 0.8, top_k 20, presence penalty 1.5): with
-the earlier settings 5 of 12 test replies looped, with these none.
+Sampling, the reply limit and the reasoning switch travel with every request.
+A reply that runs out of tokens inside a tool call it never finishes (a
+repetition loop) is asked once more. The sampling in `bach.toml` follows
+Qwen's recommendation for answers without reasoning (temperature 0.7, top_p
+0.8, top_k 20, presence penalty 1.5): with the earlier settings 5 of 12 test
+replies looped, with these none. Everything the model server prints goes to
+`logs/model-server.log`.
+
+### Models: the `models/` folder
+
+Local models live in `models/` at the root of the repository, one folder per
+model (git ignores them; they are many gigabytes).
+
+```bash
+python py/main.py download qwen3.8-27b --use                      # by its name in models/catalog.toml
+python py/main.py download mlx-community/Qwen3.8-27B-4bit --use   # an MLX repo: the whole repo (16 GB)
+python py/main.py download <user>/<model>-GGUF:Q4_K_M --use      # a GGUF repo: that quantization only
+python py/main.py download https://huggingface.co/<user>/<repo>   # a link: a repo, one file in it, or any .gguf
+python py/main.py models                                          # what is there, and what the catalogue knows
+```
+
+`models/catalog.toml` names a few models (your Qwen 3.8 27B as MLX and as
+GGUF, a fast 8B, a tiny 0.6B to check that everything runs), each with its
+repo, format, size and a note; add your own.
+
+`--use` sets `[model] model` in `bach.toml`, keeping its comments. The
+runtime follows from the model, never set by hand: `.safetensors` weights run
+on `mlx_lm.server`, a `.gguf` file on `llama-server` (for a repo not yet
+downloaded: a name with GGUF or a `:QUANT` means gguf). `model` can then be just the folder's name; it can also be any path,
+or a Hugging Face repo that the model server downloads itself. A stopped
+download goes on where it was when started again. Without a model, `run` still
+starts: the page and Max say what is missing, and Claude Code can use the
+tools.
+
+### Max can ask Bach
+
+Over the same UDP bridge, the patch can ask Bach about itself with one line,
+and Bach answers with `mcp_info` lines (`py/bach_mcp/utilities/status.py`):
+
+| Max sends (to `[udpsend 127.0.0.1 3001]`) | Bach answers (at `[udpreceive 3000]`) |
+|---|---|
+| `bach_ask status` | `mcp_info status <state> <model> <message>` |
+| `bach_ask settings` | `mcp_info setting <section.key> <value>` for each, then `mcp_info end settings <n>` |
+| `bach_ask models` | `mcp_info model <name> <format> <GB> <in use 1/0>` for each, then `mcp_info end models <n>` |
+| `bach_ask catalog` | `mcp_info catalog <name> <format> <GB> <downloaded 1/0> <repo> <note>` for each, then `mcp_info end catalog <n>` |
+| `bach_ask download_model <name\|repo\|link> [use]` | `mcp_info download start <name> <GB> <folder>`, then `mcp_info download progress <name> <percent> <GB done> <GB total>` every 2 s, then `mcp_info download done <name> <format> <GB>` (or `error <name> <message>`). With `use`, `bach.toml` then names the model; restart Bach to load it. |
+| `bach_ask download_stop` | `mcp_info download stopped <name>`; what was fetched stays, and the next start goes on from there |
+| `bach_ask help` / `bach_ask ping` | `mcp_info help ...` / `mcp_info pong` |
+
+`<state>` is `starting`, `no_model`, `loading`, `ready`, `stopped` (the model
+server ended), `claude` (Bach serves Claude) or `off` (Bach quit). Bach also
+sends `mcp_info status ...` by itself whenever the state changes, and
+`mcp_info notice <text>` for anything else worth knowing (for example another
+Bach holding the port).
+
+In the patch, two changes make this visible: add `mcp_info` to
+`[route algo mcp_buffer_written write_buffer]` after `[udpreceive 3000]` and
+connect its new outlet to `[print bach]` (or to `[route status setting model
+end notice]`); and send requests with a message box such as `[bach_ask status(`
+into `[s bach.mcp.udp]`, which feeds `[udpsend 127.0.0.1 3001]`.
 
 ### Instrument docs
 
-`py/bach_mcp/docs/` holds a reference file per instrument (strings, woodwinds,
-piano): ranges, techniques and harmonics in midicents. When a message names an
-instrument ("a duet for cello and alto flute"), the gateway appends that
-instrument's whole file, and its family's, to the message before the model sees
-it; no tool call is involved. Each file is added once per conversation, at its
-first mention. The terminal names the files it added (`docs  strings/cello, ...`).
-`python py/main.py agent` does the same itself. Set `docs = false` in `[chat]`
-to switch it off.
+`py/bach_mcp/prompt/docs/` holds a reference file per instrument (strings,
+woodwinds, piano): ranges, techniques and harmonics in midicents. When a
+message names an instrument ("a duet for cello and alto flute"), that
+instrument's whole file, and its family's, is appended to the message before
+the model sees it; no tool call is involved. Each file is added once per
+conversation, at its first mention, and the chat shows which. Set `docs =
+false` in `[chat]` to switch it off. Claude gets the same files as MCP
+resources (`bach://docs/strings/cello`, ...).
+
+## Quickstart: Claude
+
+```bash
+python py/main.py claude
+```
+
+adds Bach to Claude Desktop (restart it afterwards) and prints the line that
+adds it to Claude Code. Claude then starts Bach itself. It gets the 13 tools,
+the whole skill as the server's instructions, `/score` and `/algo` as prompts,
+and the instrument docs as resources.
+
+Only one Bach can talk to the patch at a time (it holds UDP port 3001), and
+Claude Desktop starts one when it opens. To use Claude Code beside
+`run.command`, add the second line `main.py claude` prints: it joins the
+running Bach at `http://127.0.0.1:8080/mcp` instead of starting another.
 
 ## Configuration (`bach.toml`)
 
-One file configures the model, generation, chat, tools and ports:
+One file configures everything; Claude only uses `[server]`, `[max]` and
+`[algo]`:
 
 | Section | What it sets |
 |---|---|
-| `[model]` | backend, Ollama model name or GGUF path / Hugging Face repo, context size, GPU layers |
-| `[generation]` | reply token limit, temperature, top-p/top-k, presence penalty, reasoning (off / on / auto / a level) and its token budget |
-| `[chat]` | system prompt file, tool calls allowed per answer, tool timeout, show thinking, open browser |
-| `[mcp]` | host/port, write verification, tool logging |
-| `[llama]` | `llama-server` binary, host/port of the chat, slots, extra flags |
-| `[ollama]` | Ollama address, how long the model stays loaded |
+| `[model]` | the model (its runtime follows from it), context size (gguf), extra server flags |
+| `[generation]` | reply token limit, temperature, top-p, top-k, presence penalty, reasoning (off / on) |
+| `[chat]` | the skill file, tool calls allowed per answer, instrument docs, open the browser |
+| `[server]` | Bach's address (the chat page, and `/mcp` for Claude Code), tool logging |
 | `[max]` | UDP ports of the bridge to Max, the buffer file scores travel through |
 | `[algo]` | folder of the algorithm files, the Node.js used to check them |
-
-The web chat treats these values as defaults: a setting you change by hand in
-the browser wins from then on. To go back to `bach.toml`, use the reset button
-next to that setting in the chat's settings.
 
 ## How the model writes music
 
 The model never writes bach's llll syntax. A deterministic layer
-(`py/bach_mcp/translate.py`, no LLM involved) converts between a JSON score and
+(`py/bach_mcp/music/translate.py`, no LLM involved) converts between a JSON score and
 llll in both directions. The JSON is bach.roll's gathered syntax in JSON
 brackets: the same hierarchy (voices > chords > notes), the same order and the
 same units, always with the same parts.
@@ -123,15 +196,14 @@ Each mode reads only what applies to it: about 3,200 tokens in `/algo` and
 4,700 in `/score`, against 7,200 for everything (measured with Qwen's
 tokenizer). The instrument docs come on top, 330–920 tokens per instrument.
 The skill file marks its parts with `<!-- algo -->`, `<!-- score -->` and
-`<!-- both -->` lines (`py/bach_mcp/modes.py`).
+`<!-- both -->` lines (`py/bach_mcp/prompt/skill.py`).
 
-The gateway applies the mode to every request of the web chat, and
-`python py/main.py agent` does the same (a message that is only `/algo` or
-`/score` switches without sending anything). The model server reuses what it
-has already read as long as the conversation only grows, so the skill costs
-time once per conversation; switching mode, or editing an earlier message,
-makes it read everything again once. Claude Desktop does not go through
-either, and gets all the tools and the whole skill.
+The local chat applies the mode to every request (`py/bach_mcp/chat/engine.py`);
+a message that is only `/algo` or `/score` switches without asking the model.
+The model server reuses what it has already read as long as the conversation
+only grows, so the skill costs time once per conversation; switching mode
+makes it read everything again once. Claude gets the whole skill and every
+tool, and the modes as two prompts.
 
 Every write is checked against bach.roll in code and answered with a compact
 summary, so the model does not need to dump the score to verify it.
@@ -141,7 +213,7 @@ summary, so the model does not need to dump the score to verify it.
 Max and the MCP server talk over UDP with short plain-text messages, such as
 `mcp_buffer_written q3 "/path/buffer.txt"`. In the patch, `[udpreceive 3000]`
 feeds the router and replies go into `[udpsend 127.0.0.1 3001]`. `udpreceive`
-only reads OSC packets, so the Python side (`py/bach_mcp/udp.py`) packs each
+only reads OSC packets, so the Python side (`py/bach_mcp/bridge/udp.py`) packs each
 line into one and unpacks the replies: in Max every message is plain text.
 Nothing needs to be started in Max.
 
@@ -162,7 +234,7 @@ fetches the score, inserts the new chords into bach's own text and loads the
 result, so whatever the JSON does not model (other slots such as sample paths,
 slotinfo, commands) stays as it was. Checking each load in Max (Max answering
 with the note count) is switched off for now; the code is kept, commented out,
-in `buffer.py`.
+in `py/bach_mcp/bridge/buffer.py`.
 
 ## Algorithms
 
@@ -247,7 +319,7 @@ Three objects in the Max package do the rest:
 |---|---|
 | `bach.mcp.algo [name] [file] [@roll to_bach]` | Runs an algorithm file (v8). Left inlet: `load <path>`, `run`, `capture`, `<param> <value...>`. Right inlet: a score (`dictionary`) to use as a transformer's source, following `sourcemode keep|follow`. Outlets: the score as a `dictionary`, the panel, and `loaded`/`done`/`error`. It reloads the file when it changes on disk. `name` (default `algo`) is the runner `send_algorithm` addresses; `@roll` names the `[receive]` that feeds bach.roll (default `to_bach`), used to capture sources. |
 | `bach.mcp.params` | The panel: a `jsui` with `bach.mcp.params.js`. Built from the parameters the runner sends; one element per parameter, placed automatically (slider, range, toggle, menu, seed, curve, list). Moving one sends `<param> <value>` to the runner, which runs again. Double-click: back to the declared value. A pitch shows as a name, midicents or MIDI (click its value), drags snap to round values (the **snap** switch; alt inverts it). A transformer's panel shows its source, its source mode (**keep**/**follow**) and a **capture** button. Saved with the patch, and works with `pattr`/`pattrstorage` for presets. |
-| `bach.mcp.translate @in json\|bach @out bach\|json` | JSON score ↔ bach.roll (v8), the same translation as `translate.py`. `@in bach` reads a bach.roll llll in text form (through `[bach.portal @out t]`). `@add 1` adds instead of replacing. |
+| `bach.mcp.translate @in json\|bach @out bach\|json` | JSON score ↔ bach.roll (v8), the same translation as `music/translate.py`. `@in bach` reads a bach.roll llll in text form (through `[bach.portal @out t]`). `@add 1` adds instead of replacing. |
 
 In `bach-mcp-udp.maxpat` they are already connected: algo → translate → bach.roll,
 algo ↔ panel. Several runners can live in one patch under different names
@@ -256,9 +328,9 @@ algo ↔ panel. Several runners can live in one patch under different names
 When the model revises an algorithm under the same name, parameters that keep
 their name and type keep the value you set.
 
-## Installation instructions (llama.cpp)
+## Installation
 
-**1. Install** (Python 3.11):
+**1. Python** (3.11), with the MCP server and MLX:
 
 ```bash
 git clone https://github.com/dzluke/bach-mcp.git
@@ -268,53 +340,26 @@ conda activate bach-mcp
 python -m pip install -r requirements.txt
 ```
 
-**2. Install llama.cpp** so that `llama-server` is available (e.g. `brew install llama.cpp`),
-and Node.js (`brew install node`), which checks each algorithm before it reaches Max.
+**2. Node.js** (`brew install node`), which checks each algorithm before it
+reaches Max. For GGUF models also **llama.cpp** (`brew install llama.cpp`).
 
-**3. Set up Max** — copy the `max/bach-mcp` folder into your Max Packages folder:
+**3. Max**: open the patch from `max/bach-mcp/patchers`, with the repository
+on Max's search path, or copy the `max/bach-mcp` folder into your Max Packages
+folder (`~/Documents/Max 9/Packages/`).
 
-- macOS: `~/Documents/Max 9/Packages/`
-- Windows: `%USERPROFILE%\Documents\Max 9\Packages\`
+**4. Edit `bach.toml`** and follow a Quickstart above.
 
-**4. Edit `bach.toml`** and follow the Quickstart above.
+### Commands
 
-The pieces can also be started separately: `python py/main.py serve` runs only
-the MCP server (at the `[mcp]` address), and `python py/main.py agent` is a
-terminal chat against the running `llama-server`.
-
-## Installation instructions (Claude Desktop)
-
-Here the host launches the process for you, so you do **not** start it by hand —
-you just register it in the host's config.
-
-1. Install Claude Desktop: `https://claude.ai/download`
-2. Point Claude Desktop to this MCP server.
-
-Claude config file locations:
-
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-Example (`claude_desktop_config.json` in this repo is a copy of this — edit the
-absolute paths to match your machine):
-
-```json
-{
-  "mcpServers": {
-    "bach-mcp": {
-      "command": "/absolute/path/to/conda/envs/bach-mcp/bin/python",
-      "args": ["/absolute/path/to/bach-mcp/py/main.py", "serve", "--stdio"],
-      "cwd": "/absolute/path/to/bach-mcp"
-    }
-  }
-}
 ```
-
-The `--stdio` flag is **required** here: the default transport is HTTP, so
-without it the launched process would start an HTTP listener the host can't talk
-to over the pipe.
-
-Then fully restart Claude Desktop.
+python py/main.py run       the local model in the chat page (what run.command does)
+python py/main.py serve     the tools for an MCP host: --stdio when the host starts Bach
+python py/main.py agent     the local model in the terminal, same engine as the page
+python py/main.py eval      the evaluation suite against the local model (no Max needed)
+python py/main.py claude    add Bach to Claude Desktop; print the line for Claude Code
+python py/main.py download  a model into models/: a catalogue name, a repo or a link (--use: set it in bach.toml)
+python py/main.py models    the models in models/, and the catalogue
+```
 
 ## File map
 

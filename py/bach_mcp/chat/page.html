@@ -1,0 +1,457 @@
+<!doctype html>
+<!--
+  The Bach chat page, served by chat/web.py at the [server] address.
+  It runs in a browser, or inside a Max patch in [jweb]. Everything is in this file.
+
+  It holds nothing: it shows what the hub (chat/hub.py) says, and says what the
+  user does as the same lines Max sends over UDP:
+
+    POST /api/line     set_active_instance <name>     a click on an instance
+                       <name> prompt "<text>"         a message to the active instance
+                       <name> stop                    Stop
+                       <name> new                     New chat
+    GET /api/events    every line the hub sends, the present first (instances, the
+                       active one, the saved conversations)
+
+  A prompt is drawn when the hub echoes it, so Max's prompts and the page's look
+  the same. In [jweb] it also tells the patch: outlet "off" when Bach went off.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bach</title>
+<style>
+  :root {
+    --bg: #fafaf9; --panel: #ffffff; --text: #1c1917; --muted: #78716c; --line: #e7e5e4;
+    --accent: #2563eb; --accent-text: #ffffff; --user: #eef2ff; --code: #f5f5f4;
+    --tool: #fffbeb; --tool-line: #fcd34d; --error: #b91c1c; --ok: #15803d; --busy: #d97706;
+    --select: #e0e7ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161514; --panel: #1f1d1c; --text: #f5f5f4; --muted: #a8a29e; --line: #34302d;
+      --accent: #60a5fa; --accent-text: #0b1220; --user: #1e2540; --code: #27241f;
+      --tool: #2a2414; --tool-line: #a16207; --error: #f87171; --ok: #4ade80; --busy: #fbbf24;
+      --select: #1e2a4a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+         display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line);
+           background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; }
+  #model, #playground { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  #model span, #playground { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #playground { max-width: 40ch; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ready { background: var(--ok); }
+  .dot.problem { background: var(--error); }
+  .spacer { flex: 1; }
+  button { font: inherit; font-size: 13px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px;
+           background: var(--panel); color: var(--text); cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  .body { flex: 1; display: flex; min-height: 0; }
+  aside { width: 210px; flex: none; border-right: 1px solid var(--line); background: var(--panel); overflow-y: auto;
+          padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; }
+  aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 8px 6px; font-weight: 600; }
+  .instance { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; border-radius: 8px;
+              background: transparent; padding: 7px 8px; font-size: 14px; }
+  .instance:hover { background: var(--bg); }
+  .instance.on { background: var(--select); }
+  .instance .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+  .instance .kind { font-size: 11px; color: var(--muted); }
+  .instance .dot { visibility: hidden; }
+  .instance .dot.busy { visibility: visible; background: var(--busy); }
+  .instance .dot.unread { visibility: visible; background: var(--accent); }
+  .empty { color: var(--muted); font-size: 13px; padding: 4px 8px; }
+  .column { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #banner { display: none; padding: 8px 16px; font-size: 13px; color: var(--error); border-bottom: 1px solid var(--line); background: var(--panel); }
+  main { flex: 1; overflow-y: auto; padding: 16px; }
+  .log { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .placeholder { max-width: 860px; margin: 40px auto; color: var(--muted); text-align: center; }
+  .user { align-self: flex-end; background: var(--user); padding: 8px 12px; border-radius: 12px; max-width: 85%;
+          white-space: pre-wrap; overflow-wrap: anywhere; }
+  .bach { display: flex; flex-direction: column; gap: 8px; }
+  .note { color: var(--muted); font-size: 12px; }
+  .error { color: var(--error); font-size: 13px; }
+  .text p { margin: 0 0 .6em; } .text p:last-child { margin-bottom: 0; }
+  .text h1, .text h2, .text h3 { font-size: 15px; margin: .8em 0 .3em; }
+  .text ul, .text ol { margin: 0 0 .6em; padding-left: 1.4em; }
+  code { background: var(--code); padding: 1px 4px; border-radius: 4px; font: 13px/1.45 ui-monospace, Menlo, monospace; }
+  pre { background: var(--code); padding: 10px; border-radius: 8px; overflow-x: auto; margin: 0;
+        font: 12.5px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre code { background: none; padding: 0; }
+  details { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+  details > summary { cursor: pointer; padding: 6px 10px; font-size: 13px; color: var(--muted); list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: "▸ "; } details[open] > summary::before { content: "▾ "; }
+  details > div { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+  details.tool { background: var(--tool); border-color: var(--tool-line); }
+  details.tool summary b { color: var(--text); font-weight: 600; }
+  footer { border-top: 1px solid var(--line); background: var(--panel); padding: 10px 16px; }
+  form { max-width: 860px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
+  textarea { flex: 1; min-width: 0; resize: none; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+             background: var(--bg); color: var(--text); max-height: 40vh; }
+  #send { background: var(--accent); color: var(--accent-text); border-color: var(--accent); padding: 8px 16px; }
+  @media (max-width: 700px) {
+    .body { flex-direction: column; }
+    aside { width: auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid var(--line); padding: 6px 8px; }
+    aside h2 { display: none; }
+    .instance { width: auto; flex: none; }
+    #playground { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bach</h1>
+  <div id="model"><i class="dot" id="dot"></i><span id="label">connecting…</span></div>
+  <div id="playground" title=""></div>
+  <div class="spacer"></div>
+  <button type="button" id="new">New chat</button>
+</header>
+<div class="body">
+  <aside id="instances" aria-label="Instances"></aside>
+  <div class="column">
+    <div id="banner"></div>
+    <main id="scroll"><div class="placeholder" id="placeholder"></div></main>
+    <footer>
+      <form id="form">
+        <textarea id="input" rows="2" placeholder=""></textarea>
+        <button type="submit" id="send">Send</button>
+      </form>
+    </footer>
+  </div>
+</div>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const input = $("input"), sendButton = $("send"), scroller = $("scroll");
+const max = window.max;  // present inside a Max [jweb]
+
+const model = { state: "", model: "", message: "" };
+const instances = new Map();  // name -> type, in the patch's order
+const logs = new Map();       // name -> { el, answer, unread }
+const busy = new Set();       // instances being answered or waiting
+let active = "";
+let playground = "";
+
+// ── Lines: the same form as protocol.py ─────────────────────────────── //
+function word(text) {
+  text = String(text);
+  return text && !/[\s"\\']/.test(text) ? text : `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+function line(...words) { return words.map((w) => typeof w === "number" ? String(w) : word(w)).join(" "); }
+function words(text) {
+  const out = [];
+  let i = 0;
+  while (i < text.length) {
+    if (/\s/.test(text[i])) { i++; continue; }
+    if (text[i] === '"') {
+      let w = ""; i++;
+      while (i < text.length && text[i] !== '"') {
+        if (text[i] === "\\" && i + 1 < text.length && (text[i + 1] === '"' || text[i + 1] === "\\")) i++;
+        w += text[i++];
+      }
+      i++; out.push(w);
+    } else {
+      const start = i;
+      while (i < text.length && !/\s/.test(text[i])) i++;
+      out.push(text.slice(start, i));
+    }
+  }
+  return out;
+}
+
+async function say(...words) {
+  try {
+    const response = await fetch("/api/line", { method: "POST", body: line(...words) });
+    if (!response.ok) banner((await response.json().catch(() => ({}))).error || `error ${response.status}`);
+  } catch (err) {
+    banner(`the connection to Bach was lost (${err.message})`);
+  }
+}
+
+// ── Markdown, the little the model uses ─────────────────────────────── //
+function escape(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function inline(s) {
+  return escape(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+                  .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>");
+}
+function markdown(text) {
+  const out = [];
+  const parts = text.split(/```[^\n]*\n?/);
+  parts.forEach((part, i) => {
+    if (i % 2) { out.push(`<pre><code>${escape(part.replace(/\n$/, ""))}</code></pre>`); return; }
+    let list = null, para = [];
+    const flush = () => {
+      if (para.length) { out.push(`<p>${para.map(inline).join("<br>")}</p>`); para = []; }
+      if (list) { out.push(`<${list.tag}>${list.items.map((x) => `<li>${inline(x)}</li>`).join("")}</${list.tag}>`); list = null; }
+    };
+    for (const row of part.split("\n")) {
+      const heading = row.match(/^(#{1,3})\s+(.*)/), bullet = row.match(/^\s*[-*]\s+(.*)/), number = row.match(/^\s*\d+[.)]\s+(.*)/);
+      if (!row.trim()) { flush(); continue; }
+      if (heading) { flush(); out.push(`<h3>${inline(heading[2])}</h3>`); continue; }
+      const item = bullet || number;
+      if (item) {
+        const tag = bullet ? "ul" : "ol";
+        if (para.length || (list && list.tag !== tag)) flush();
+        list = list || { tag, items: [] };
+        list.items.push(item[1]);
+        continue;
+      }
+      if (list) flush();
+      para.push(row);
+    }
+    flush();
+  });
+  return out.join("");
+}
+
+// JSON with every short list on one line: a chord reads as the model wrote it.
+function compact(value, pad = "") {
+  const flat = JSON.stringify(value);
+  if (flat === undefined || flat.length <= 72 || value === null || typeof value !== "object") return flat;
+  const inner = pad + "  ";
+  if (Array.isArray(value)) return `[\n${value.map((v) => inner + compact(v, inner)).join(",\n")}\n${pad}]`;
+  return `{\n${Object.entries(value).map(([k, v]) => `${inner}${JSON.stringify(k)}: ${compact(v, inner)}`).join(",\n")}\n${pad}}`;
+}
+
+// ── One conversation on screen ──────────────────────────────────────── //
+function add(tag, cls, html) {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (html !== undefined) el.innerHTML = html;
+  return el;
+}
+function atBottom() { return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80; }
+function follow(wasAtBottom) { if (wasAtBottom) scroller.scrollTop = scroller.scrollHeight; }
+
+class Answer {
+  constructor(log) {
+    this.el = add("div", "bach");
+    log.appendChild(this.el);
+    this.text = null; this.thinking = null; this.calls = [];
+  }
+  block(cls) { const el = add("div", cls); this.el.appendChild(el); return el; }
+  note(text, cls = "note") { this.block(cls).textContent = text; this.text = null; this.thinking = null; }
+  onThinking(piece) {
+    if (!this.thinking) {
+      const d = add("details", "thinking", "<summary>Thinking</summary><div><pre></pre></div>");
+      this.el.appendChild(d);
+      this.thinking = { pre: d.querySelector("pre"), raw: "" };
+      this.text = null;
+    }
+    this.thinking.raw += piece;
+    this.thinking.pre.textContent = this.thinking.raw;
+  }
+  onText(piece) {
+    if (!this.text) { this.text = { el: this.block("text"), raw: "" }; this.thinking = null; }
+    this.text.raw += piece;
+    this.text.el.innerHTML = markdown(this.text.raw);
+  }
+  hasText() { return !!this.el.querySelector(".text"); }
+  onToolCall(name, args) {
+    const d = add("details", "tool", `<summary><b>${escape(name)}</b> <span>running…</span></summary><div></div>`);
+    d.querySelector("div").appendChild(add("pre", "", escape(compact(args))));
+    this.el.appendChild(d);
+    this.calls.push({ name, el: d });
+    this.text = null; this.thinking = null;
+  }
+  onToolResult(name, result) {
+    const call = this.calls.find((c) => c.name === name && !c.done);
+    if (!call) return;
+    call.done = true;
+    call.el.querySelector("summary span").textContent = "— " + (result.split("\n")[0] || "").slice(0, 120);
+    call.el.querySelector("div").appendChild(add("pre", "", escape(result)));
+  }
+}
+
+function logOf(name) {
+  if (!logs.has(name)) logs.set(name, { el: add("div", "log"), answer: null, unread: false });
+  return logs.get(name);
+}
+function answerOf(name) {
+  const log = logOf(name);
+  if (!log.answer) log.answer = new Answer(log.el);
+  return log.answer;
+}
+
+// A saved conversation (prompts/<name>.jsonl) drawn again: user, assistant and tool messages.
+function replay(name, messages) {
+  const log = logOf(name);
+  log.el.innerHTML = ""; log.answer = null;
+  for (const m of messages) {
+    if (m.role === "user") {
+      log.el.appendChild(add("div", "user")).textContent = m.prompt !== undefined ? m.prompt : m.content;
+      log.answer = null;
+    } else if (m.role === "assistant") {
+      const answer = answerOf(name);
+      if (m.content) answer.onText(m.content);
+      for (const call of m.tool_calls || []) {
+        let args = {};
+        try { args = JSON.parse(call.function.arguments); } catch (err) { args = call.function.arguments; }
+        answer.onToolCall(call.function.name, args);
+      }
+    } else if (m.role === "tool" && log.answer) {
+      const call = log.answer.calls.find((c) => !c.done);
+      if (call) log.answer.onToolResult(call.name, String(m.content || ""));
+    }
+  }
+  log.answer = null;
+}
+
+// ── What the hub says ───────────────────────────────────────────────── //
+function hear(text) {
+  const w = words(text);
+  if (!w.length) return;
+  const wasAtBottom = atBottom();
+  switch (w[0]) {
+    case "state": [model.state, model.model, model.message] = [w[1] || "", w[2] || "", w[3] || ""]; break;
+    case "set_playground": playground = w[1] || ""; break;
+    case "clear_instance_names_map": instances.clear(); break;
+    case "add_instance_names_map": instances.set(w[1], w[2]); break;
+    case "set_active_instance": active = w[1] || ""; if (logs.has(active)) logs.get(active).unread = false; break;
+    case "mcp_info": if (w[1] === "warning") banner(w.slice(2).join(" ")); break;
+    default: if (w.length >= 2) instanceLine(w[0], w[1], w.slice(2));
+  }
+  render();
+  follow(wasAtBottom || w[0] === "set_active_instance");
+}
+
+function instanceLine(name, what, args) {
+  const log = logOf(name);
+  switch (what) {
+    case "prompt":
+      log.el.appendChild(add("div", "user")).textContent = args.join(" ");
+      log.answer = null; busy.add(name);
+      break;
+    case "queued": answerOf(name).note("waiting for another instance's answer…"); busy.add(name); break;
+    case "thinking": answerOf(name); busy.add(name); break;
+    case "delta": answerOf(name).onText(args[0] || ""); break;
+    case "reasoning": answerOf(name).onThinking(args[0] || ""); break;
+    case "note": answerOf(name).note(args[0] || ""); break;
+    case "tool_call": {
+      let parsed = {};
+      try { parsed = JSON.parse(args[1] || "{}"); } catch (err) { parsed = args[1]; }
+      answerOf(name).onToolCall(args[0], parsed);
+      break;
+    }
+    case "tool_result": answerOf(name).onToolResult(args[0], args[1] || ""); break;
+    case "answer": if (!answerOf(name).hasText()) answerOf(name).onText(args[0] || ""); break;
+    case "error": answerOf(name).note(args.join(" "), "error"); break;
+    case "stopped": answerOf(name).note("stopped"); busy.delete(name); log.answer = null; break;
+    case "done": {
+      const [tokens, ms] = [Number(args[0]) || 0, Number(args[1]) || 0];
+      if (tokens) answerOf(name).note(`${tokens} tokens · ${(ms / 1000).toFixed(1)} s`);
+      busy.delete(name); log.answer = null;
+      break;
+    }
+    case "new": log.el.innerHTML = ""; log.answer = null; break;
+    case "history": try { replay(name, JSON.parse(args[0] || "[]")); } catch (err) { /* a broken file: nothing shown */ } break;
+    default: return;  // for Max: tool, load_algo, load_roll ...
+  }
+  if (name !== active && what !== "history") log.unread = true;
+}
+
+// ── Screen ──────────────────────────────────────────────────────────── //
+function banner(text) {
+  const b = $("banner");
+  b.textContent = text; b.style.display = text ? "block" : "none";
+  clearTimeout(banner.timer);
+  if (text) banner.timer = setTimeout(() => banner(""), 8000);
+}
+
+function render() {
+  const ready = model.state === "ready";
+  $("dot").classList.toggle("ready", ready);
+  $("dot").classList.toggle("problem", model.state === "no_model" || model.state === "stopped");
+  const labels = { ready: model.model, loading: `${model.model} — loading…`, starting: "starting…",
+                   no_model: model.message, stopped: `the model stopped: ${model.message}`,
+                   claude: "serving Claude (no local model)" };
+  $("label").textContent = labels[model.state] || model.state || "connecting…";
+  $("label").title = model.message || model.model || "";
+  $("playground").textContent = playground ? `playground: ${playground}` : "no playground";
+  $("playground").title = playground;
+
+  const aside = $("instances");
+  aside.innerHTML = "<h2>Instances</h2>";
+  if (!instances.size) aside.appendChild(add("div", "empty", "none yet: the patch sends them"));
+  for (const [name, kind] of instances) {
+    const b = add("button", "instance" + (name === active ? " on" : ""));
+    b.type = "button";
+    const log = logs.get(name);
+    const mark = busy.has(name) ? " busy" : (log && log.unread ? " unread" : "");
+    b.innerHTML = `<i class="dot${mark}"></i><span class="name"></span><span class="kind"></span>`;
+    b.querySelector(".name").textContent = name;
+    b.querySelector(".kind").textContent = kind;
+    b.addEventListener("click", () => { if (name !== active) say("set_active_instance", name); });
+    aside.appendChild(b);
+  }
+
+  const shown = active && instances.has(active);
+  const main = $("scroll"), placeholder = $("placeholder");
+  const log = shown ? logOf(active).el : null;
+  if (log && log.parentNode !== main) { main.innerHTML = ""; main.appendChild(log); }
+  if (!log) {
+    main.innerHTML = ""; main.appendChild(placeholder);
+    placeholder.textContent = !instances.size ? "No instances yet: the patch sends them (add_instance_names_map)."
+                                              : "Select an instance.";
+  }
+  const answering = shown && busy.has(active);
+  input.disabled = !shown || !ready;
+  input.placeholder = shown ? `A prompt for ${active} (${instances.get(active)})` : "Select an instance first";
+  sendButton.textContent = answering ? "Stop" : "Send";
+  sendButton.disabled = !shown || (!ready && !answering);
+  $("new").disabled = !shown || answering;
+}
+
+$("form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  if (!active) return;
+  if (busy.has(active)) { say(active, "stop"); return; }
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  say(active, "prompt", text);
+});
+input.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); $("form").requestSubmit(); }
+});
+$("new").addEventListener("click", () => { if (active) say(active, "new"); });
+
+// ── Connection ──────────────────────────────────────────────────────── //
+// The stream starts with the present; when it comes back after a break, the present is sent again.
+const events = new EventSource("/api/events");
+events.onmessage = (e) => hear(e.data);
+events.onopen = () => { busy.clear(); };
+
+// When Bach goes off, the page goes too: it closes if the browser lets it (Bach also asks
+// Chrome and Safari to close it), else it says so.
+let connected = false, misses = 0;
+async function heartbeat() {
+  try {
+    await fetch("/api/state", { cache: "no-store" });
+    connected = true; misses = 0;
+  } catch (err) {
+    if (connected && ++misses >= 2) { bachOff(); return; }
+  }
+  setTimeout(heartbeat, 2000);
+}
+function bachOff() {
+  events.close();
+  if (max) max.outlet("off");
+  window.close();
+  document.body.innerHTML = '<main style="display:grid;place-items:center;height:100%;color:var(--muted)">' +
+                            "Bach is off. You can close this page.</main>";
+}
+
+render();
+heartbeat();
+input.focus();
+</script>
+</body>
+</html>

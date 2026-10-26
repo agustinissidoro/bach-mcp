@@ -11,6 +11,16 @@ const vm = require("vm");
 
 const JS_DIR = path.join(__dirname, "..", "..", "..", "max", "bach-mcp", "javascript");
 
+/** A file found by its name, as Max's search path finds it: in the javascript folder or a folder inside it. */
+function onSearchPath(name) {
+  const base = path.basename(name);
+  const folders = [JS_DIR, ...fs.readdirSync(JS_DIR, { withFileTypes: true })
+    .filter((d) => d.isDirectory()).map((d) => path.join(JS_DIR, d.name))];
+  const found = folders.map((f) => path.join(f, base)).find((f) => fs.existsSync(f));
+  if (!found) throw new Error(`Max cannot find ${base}`);
+  return found;
+}
+
 const dicts = new Map();
 let dictCounter = 0;
 
@@ -98,12 +108,12 @@ function makeMgraphics(width, height) {
 
 /**
  * require() as jsui's legacy engine does it: the module sees `exports` but no `module`.
- * Scripts for jsui (bach.mcp.params.js) are loaded with this one.
+ * Scripts for jsui (GUI_parameters/) are loaded with this one; a module may require others.
  */
 function legacyRequire(name) {
-  const file = path.join(JS_DIR, path.basename(name));
+  const file = onSearchPath(name);
   const exports = {};
-  const ctx = { exports, post() {} };
+  const ctx = { exports, post() {}, require: legacyRequire };
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(file, "utf8"), ctx, { filename: path.basename(name) });
   return exports;
@@ -154,12 +164,12 @@ function load(script, options = {}) {
         this.state = "idle";
       }
     },
-    require: options.legacy ? legacyRequire : (name) => require(path.join(JS_DIR, path.basename(name))),
+    require: options.legacy ? legacyRequire : (name) => require(onSearchPath(name)),
     mgraphics: makeMgraphics(options.width || 300, options.height || 100),
   };
   ctx.globalThis = ctx;
   vm.createContext(ctx);
-  vm.runInContext(fs.readFileSync(path.join(JS_DIR, script), "utf8"), ctx, { filename: script });
+  vm.runInContext(fs.readFileSync(onSearchPath(script), "utf8"), ctx, { filename: script });
 
   function send(selector, ...args) {
     ctx.messagename = selector;

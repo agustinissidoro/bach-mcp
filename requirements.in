@@ -1,11 +1,16 @@
-# Direct runtime dependencies (scanned from imports under `py/`)
+# Direct runtime dependencies (from the imports under py/)
 # Python version target from environment.yml: 3.11
 
-# FastMCP API used by py/bach_mcp/mcp_app.py
+# The MCP app and its HTTP transport (tools/registry.py, claude.py, chat/web.py)
 mcp~=1.26.0
 
-# HTTP client used by the OpenAI-compatible provider (py/bach_mcp/llm/openai_compat.py)
-requests~=2.32.0
-
-# HTTP client used by the Ollama gateway (py/bach_mcp/gateway.py); also a dependency of mcp
+# The client that talks to the model server (model/client.py)
 httpx~=0.28.0
+
+# The mlx backend: Apple's MLX and its model server (model/backends.py). Apple Silicon only.
+mlx-lm~=0.32.0; sys_platform == "darwin" and platform_machine == "arm64"
+
+# Downloading models into models/ (model/download.py); also comes with mlx-lm
+huggingface-hub>=1.0
+
+# The gguf backend needs llama.cpp's llama-server, installed apart: brew install llama.cpp

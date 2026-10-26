@@ -1,4 +1,4 @@
-"""Tests for the algorithm layer: the JS translator against translate.py, send_algorithm, and the
+"""Tests for the algorithm layer: pitch names in Max and Python, send_algorithm, and the
 JavaScript tests of the Max objects (py/tests/js, run with Node). Run: python -m unittest discover -s py/tests"""
 
 import json
@@ -12,140 +12,40 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from bach_mcp import algo_tools  # noqa: E402
-from bach_mcp.algo_tools import check_algorithm, register_algo_tools  # noqa: E402
-from bach_mcp.translate import ScoreError, llll_to_score, normalize_score, score_messages, summarize  # noqa: E402
+from bach_mcp.tools import algo_tools  # noqa: E402
+from bach_mcp.bridge.protocol import words as split  # noqa: E402
+from bach_mcp.tools.algo_tools import check_algorithm, register_algo_tools  # noqa: E402
+from bach_mcp.tools.playground import prepare  # noqa: E402
+from bach_mcp.tools.session import Target, serve_targets  # noqa: E402
+from bach_mcp.music.pitch import cents_to_name, name_to_cents  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-SCORE_JS = os.path.join(REPO, "max", "bach-mcp", "javascript", "bach.mcp.score.js")
-SKILL = os.path.join(REPO, "py", "bach_mcp", "BACH_SKILL.md")
+UNITS_JS = os.path.join(REPO, "max", "bach-mcp", "javascript", "algorithmic_core_library", "bachmcp.lib.units.js")
+SKILL = os.path.join(REPO, "py", "bach_mcp", "prompt", "BACH_SKILL.md")
 EXAMPLES = os.path.join(REPO, "max", "bach-mcp", "algorithms", "examples")
 NODE = shutil.which(os.getenv("BACH_NODE") or "node")
 
 needs_node = unittest.skipUnless(NODE, "Node.js is not installed")
 
 
-def run_js_translator(scores, dumps):
-    """What bach.mcp.score.js makes of the same scores and dumps."""
-    program = """
-      const S = require(process.argv[1]);
-      const input = JSON.parse(require("fs").readFileSync(0, "utf8"));
-      const out = { scores: [], dumps: [] };
-      for (const score of input.scores) {
-        try {
-          const c = S.normalizeScore(score);
-          out.scores.push({ replace: S.scoreMessages(c), add: S.scoreMessages(c, true), summary: S.summarize(c) });
-        } catch (e) {
-          out.scores.push({ error: e.message });
-        }
-      }
-      for (const dump of input.dumps) out.dumps.push(S.llllToScore(dump));
-      process.stdout.write(JSON.stringify(out));
-    """
-    done = subprocess.run([NODE, "-e", program, SCORE_JS], input=json.dumps({"scores": scores, "dumps": dumps}),
-                          capture_output=True, text=True, check=True)
-    return json.loads(done.stdout)
-
-
-def skill_scores():
-    with open(SKILL, encoding="utf-8") as f:
-        text = f.read()
-    out = []
-    for block in re.findall(r"```json\n(.*?)```", text, re.S):
-        data = json.loads(block)
-        out.append(data if "voices" in data else {"voices": [{"chords": [data]}]})
-    return out
-
-
-EDGE_SCORES = [
-    {"voices": [{"name": "Violin 1", "chords": [
-        {"onset": 0, "dyn": "p<f>p", "text": "sul pont. (molto)", "notes": [{"pitch": 6933.33, "dur": 1000.5}]},
-        {"onset": 500, "art": "stacc, ten", "lyric": "ah", "notes": [{"pitch": "6050", "dur": 250, "vel": 300}]},
-        {"t": 2000, "dynamic": "sfz", "notes": [{"cents": 3600, "duration": 4000, "glissando": [[1, -1200], [0.5, 200, 2]]}]},
-    ]}, {"name": "Cello", "clef": "bass", "chords": []}],
-     "markers": [{"onset": 5000, "name": "B section"}, {"onset": 0, "label": "A"}]},
-    {"voices": [{"name": "Piano", "chords": [
-        {"onset": 3000, "notes": [{"pitch": 2100, "dur": 10}, {"pitch": 10800, "dur": 20, "head": "x"}]},
-        {"onset": 0, "dyn": "ffmp", "notes": [{"pitch": 6012.5, "dur": 10}]}]}]},
-    {"voices": [{"chords": [{"onset": 0, "notes": [{"pitch": 60, "dur": 500}]}]}]},
-    {"voices": [{"chords": [{"onset": 0, "notes": [{"dur": 500}]}]}]},
-    {"voices": [{"chords": [{"onset": 0, "dur": 500, "notes": [{"pitch": 6000, "dur": 500}]}]}]},
-    {"voices": [{"chords": [{"onset": 0, "notes": [{"pitch": 6000, "dur": 500, "onset": 3}]}]}]},
-    {"voices": [{"chords": [{"onset": 0, "colour": "red", "notes": [{"pitch": 6000, "dur": 500}]}]}]},
-    {"voices": [{"chords": [{"onset": 0, "dyn": "loud!", "notes": [{"pitch": 6000, "dur": 500}]}]}]},
-    {"voices": [{"chords": [{"onset": 0, "art": "foo", "notes": [{"pitch": 6000, "dur": 500}]}]}]},
-    {"voices": [{"chords": [{"onset": 0, "notes": [{"pitch": 6000, "dur": 500, "gliss": [[0.5, 100]]}]}]}]},
-    {"voices": [{"notes": []}]},
-    {"voices": []},
-    # the compact form: chords and notes as lists
-    {"voices": [{"name": "Piano", "chords": [[0, {"dyn": "p"}, [4800, 2000], [6400, 1000, 90]], [1000, [6700, 250]],
-                                             [1250, {"art": "staccato"}, [7200, 250, {"gliss": -200, "head": "x"}]]]}]},
-    {"voices": [{"chords": [[0, [500, 6000]]]}]},
-    {"voices": [{"chords": [[0, [6000]]]}]},
-    {"voices": [{"chords": [[0, {"onset": 3}, [6000, 500]]]}]},
-    {"voices": [{"chords": [[[6000, 500]]]}]},
-    {"voices": [{"chords": [{"onset": 0, "notes": [[6000, 500, 30], {"pitch": 6100, "dur": 500}]}]}]},
-    # pitches as names, with cent offsets
-    {"voices": [{"name": "Piano", "chords": [[0, {}, ["Db4", 500, 80], ["F4", 500, 80], ["Ab4", 500, 80]],
-                                             [500, {"dyn": "p"}, ["E4-14", 500, 55], ["C4+50", 500, 55], ["Bb3", 500, 55]],
-                                             [1000, {}, ["F##4", 250, 55], ["Gbb4", 250, 55], ["A4+12.5", 250, 55]]]}]},
-    {"voices": [{"chords": [[0, {}, ["H4", 500, 80]]]}]},
-    {"voices": [{"chords": [[0, {}, ["db4", 500, 80]]]}]},
-]
-
-DUMPS = [
-    ("roll [clefs G F] [voicenames Flute nil] "
-     "[ [ 0. [ 6000. 500. 100 [slots [20 mf] [22 staccato accent]] 0 ] 0 ] "
-     "[ 500. [ 6400. 250. 90 0 ] [ 7300. 125. 60 0 ] 0 ] 0 ] [ 0 ]"),
-    "roll [ [ 0. [ Db5 500. 100 0 ] [ Cq5 500. 100 0 ] [ 6050.5 500. 100 0 ] 0 ] 0 ]",
-    ("roll [ [ 0. [ 6000. 500. 100 [ slots [ 20 [ [ auto 0 0. ] f > ] [ [ breakpoint 1 0.306341 ] p < ] "
-     "[ [ auto 0 1. ] niente = ] ] ] 0 ] 0 ] 0 ]"),
-    ("roll [ markers [ 510. [ marker 1 ] none ] [ 2000. `A1 none ] ] "
-     "[ [ 688.571 [ 7600. 1276.57 126 [ breakpoints [ 0. 0. 0. 126 ] [ 0.183787 0. 0. 6 ] "
-     "[ 0.679181 -200. 0. 127 ] [ 1. 600. 0.5 60 ] ] 0 ] 0 ] "
-     "[ 2000. [ 7100. 1049. 100 [ slots [ 24 molto pont. ] [ notehead diam ] "
-     "[ articulations port mart trem3 ] [ 5 68 ] ] [ name pippo ] 2 ] 0 ] "
-     "[ 4000. [ 6200. 1000. 100 [ breakpoints [ 0. 0. 0. ] [ 1. -1200. 0. ] ] 0 ] 0 ] 0 ]"),
-    "roll [ [ 0. [ 6000. 500. 100 [ slots [ 20 [ auto pp < ] [ auto [ ] = ] ] ] 0 ] 0 ] 0 ]",
-]
-
-
 @needs_node
-class TranslatorParityTests(unittest.TestCase):
-    """bach.mcp.score.js (Max) must write and read exactly what translate.py does."""
+class PitchNameTests(unittest.TestCase):
+    """The library's pitch names (bachmcp.lib.units.js, in Max) are the pitch tools' (music/pitch.py)."""
 
-    def test_same_messages_summaries_and_errors(self):
-        scores = skill_scores() + EDGE_SCORES
-        js = run_js_translator(scores, [])["scores"]
-        for score, theirs in zip(scores, js):
-            try:
-                canonical = normalize_score(score)
-            except ScoreError as exc:
-                self.assertEqual(theirs.get("error"), str(exc), json.dumps(score))
-                continue
-            self.assertNotIn("error", theirs, json.dumps(score))
-            self.assertEqual(theirs["replace"], score_messages(canonical), json.dumps(score))
-            self.assertEqual(theirs["add"], score_messages(canonical, add=True))
-            self.assertEqual(theirs["summary"], summarize(canonical))
-
-    def test_same_pitch_names(self):
+    def test_same_names_both_ways(self):
+        cents = list(range(1200, 12701, 7)) + [6050, 6049, 5950, 5951, 6012.5, 6933]
+        names = ["Db4", "F#5", "E4-14", "C4+50", "Bb3", "F##4", "Gbb4", "A4+12.5", "H4", "db4"]
         program = """
-          const S = require(process.argv[1]);
-          const out = [];
-          for (let c = 1200; c <= 12700; c += 7) out.push(S.centsToName(c));
-          for (const c of [6050, 6049, 5950, 5951, 6012.5, 6933]) out.push(S.centsToName(c));
-          process.stdout.write(JSON.stringify(out));
+          const U = require(process.argv[1]);
+          const input = JSON.parse(require("fs").readFileSync(0, "utf8"));
+          process.stdout.write(JSON.stringify([input.cents.map(U.centsToName), input.names.map(U.nameToCents)]));
         """
-        js = json.loads(subprocess.run([NODE, "-e", program, SCORE_JS], capture_output=True, text=True, check=True).stdout)
-        from bach_mcp.translate import cents_to_name
-        python = [cents_to_name(c) for c in list(range(1200, 12701, 7)) + [6050, 6049, 5950, 5951, 6012.5, 6933]]
-        self.assertEqual(js, python)
-
-    def test_same_reading_of_bach_dumps(self):
-        js = run_js_translator([], DUMPS)["dumps"]
-        for dump, theirs in zip(DUMPS, js):
-            self.assertEqual(theirs, llll_to_score(dump), dump)
+        done = subprocess.run([NODE, "-e", program, UNITS_JS], input=json.dumps({"cents": cents, "names": names}),
+                              capture_output=True, text=True, check=True)
+        js_names, js_cents = json.loads(done.stdout)
+        self.assertEqual(js_names, [cents_to_name(c) for c in cents])
+        self.assertEqual(js_cents, [name_to_cents(n) for n in names])
 
 
 class FakeMCP:
@@ -160,33 +60,33 @@ class FakeMCP:
 
 
 class FakeBridge:
-    """Stands in for Max: answers a load the way the patch does (loaded / error), and writes the
-    roll to the buffer when asked (write_buffer), as bach.roll's writetxt does."""
+    """Stands in for Max: an instance answers a load the way the patch does (algo_loaded /
+    algo_error), and its roll writes its file when asked (write_roll), as bach.roll's writetxt does."""
 
-    def __init__(self, answer="loaded", roll=None):
+    def __init__(self, rolls="", answer="loaded", roll=None):
         self.sent = []
         self.queue = []
+        self.rolls = rolls
         self.answer = answer
         self.roll = roll
 
-    def send_info(self, message):
+    def send(self, message):
         self.sent.append(message)
-        words = message.split(" ", 3)
-        if words[0] == "write_buffer" and self.roll is not None:
-            with open(message.split(" ", 1)[1].strip('"'), "w", encoding="utf-8") as f:
+        name, command, *args = split(message)
+        if command == "write_roll" and self.roll is not None:
+            with open(os.path.join(self.rolls, args[0]), "w", encoding="utf-8") as f:
                 f.write(self.roll)
-            self.queue.append({"data": "bach_buffer_written"})
-        if self.answer and words[0] == "algo" and words[2] == "load":
-            name = os.path.basename(words[3].strip('"'))
-            reply = {"loaded": f"algo_status loaded {words[1]} {name} 12 1",
-                     "error": f"algo_status error {words[1]} something went wrong"}[self.answer]
-            self.queue += [{"data": "algo_status done other 1 1"}, {"data": reply}]
+            self.queue.append(f"{name} roll_written {args[0]}")
+        if self.answer and command == "load_algo":
+            reply = {"loaded": f"{name} algo_loaded {args[0]} 12 1",
+                     "error": f'{name} algo_error "something went wrong"'}[self.answer]
+            self.queue += ["other algo_loaded other.js 1 1", f"{name} algo_done 1 1", reply]
         return True
 
-    def flush_incoming(self):
+    def flush(self):
         self.queue.clear()
 
-    def wait_for_incoming(self, timeout_seconds=0.0):
+    def receive(self, timeout_seconds=0.0):
         return self.queue.pop(0) if self.queue else None
 
 
@@ -204,70 +104,89 @@ function generate(p) {
 """
 
 
-@needs_node
-class SendAlgorithmTests(unittest.TestCase):
+class PlaygroundTest(unittest.TestCase):
+    """The tools serve one instance of a playground, as the hub would have them."""
+
     def setUp(self):
-        self.folder = tempfile.mkdtemp()
+        self.folder = prepare(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.folder)
-        os.environ["BACH_ALGO_DIR"] = self.folder
-        self.addCleanup(os.environ.pop, "BACH_ALGO_DIR", None)
+        self.target = Target("turn", "generator", self.folder)
+        serve_targets(lambda: self.target)
+        self.addCleanup(serve_targets, None)
         timeout, algo_tools._CHECK_TIMEOUT_SECONDS = algo_tools._CHECK_TIMEOUT_SECONDS, 3.0
         self.addCleanup(setattr, algo_tools, "_CHECK_TIMEOUT_SECONDS", timeout)
-        self.bridge = FakeBridge()
+
+    def tool(self, bridge):
         mcp = FakeMCP()
-        register_algo_tools(mcp, self.bridge)
-        self.send = mcp.tools["send_algorithm"]
+        register_algo_tools(mcp, bridge, NODE)
+        return mcp.tools["send_algorithm"]
+
+
+@needs_node
+class SendAlgorithmTests(PlaygroundTest):
+    def setUp(self):
+        super().setUp()
+        self.bridge = FakeBridge(self.target.rolls)
+        self.send = self.tool(self.bridge)
+        self.history = os.path.join(self.folder, "algorithms", ".history")
 
     def test_a_good_file_is_saved_loaded_and_described(self):
-        reply = self.send(name="turn", code=GOOD)
-        path = os.path.join(self.folder, "turn.js")
-        self.assertTrue(reply.startswith(f'OK. Algorithm "turn" saved as {path} and loaded in Max'), reply)
+        reply = self.send(code=GOOD)
+        path = os.path.join(self.folder, "algorithms", "turn.js")
+        self.assertTrue(reply.startswith("OK. Algorithm saved as algorithms/turn.js and loaded in Max (turn)"), reply)
         self.assertIn("times: slider 2..40 = 8", reply)
         self.assertIn("step: slider 50..400 mc = 200", reply)
         self.assertIn("Checked in 5 runs", reply)
-        self.assertIn("voice 1 (Flute) clef G: 8 notes", reply)
-        self.assertEqual(self.bridge.sent, [f'algo algo load "{path}"'])
+        self.assertIn("voice 1 (Flute): 8 notes", reply)
+        self.assertEqual(self.bridge.sent, ["turn load_algo turn.js"])
         with open(path, encoding="utf-8") as f:
             self.assertEqual(f.read(), GOOD)
 
     def test_replacing_keeps_the_previous_version(self):
-        self.send(name="turn", code=GOOD)
-        self.send(name="turn", code=GOOD.replace("value: 8", "value: 9"))
-        history = os.listdir(os.path.join(self.folder, ".history"))
-        self.assertEqual(len([h for h in history if h.startswith("turn-")]), 1)
-        self.send(name="turn", code=GOOD.replace("value: 8", "value: 9"))
-        history = os.listdir(os.path.join(self.folder, ".history"))
-        self.assertEqual(len([h for h in history if h.startswith("turn-")]), 1, "an unchanged file is not kept twice")
+        self.send(code=GOOD)
+        self.send(code=GOOD.replace("value: 8", "value: 9"))
+        self.assertEqual(len([h for h in os.listdir(self.history) if h.startswith("turn-")]), 1)
+        self.send(code=GOOD.replace("value: 8", "value: 9"))
+        self.assertEqual(len([h for h in os.listdir(self.history) if h.startswith("turn-")]), 1,
+                         "an unchanged file is not kept twice")
 
     def test_errors_load_nothing_and_say_where(self):
         cases = [
             (GOOD.replace("const s = score();", "const s = score(;"), "ERROR in turn.js line 7: syntax error"),
             (GOOD.replace("6000 +", "missing +"), "missing is not defined"),
             (GOOD.replace("range: [2, 40]", "range: [2, 40000]"),
-             "more than 20000 notes (with times = 40000 (its maximum))"),
+             "more than 20000 notes (40000) (with times = 40000 (its maximum))"),
             (GOOD.replace('type: "slider", range: [50, 400]', 'type: "slider"'), '"range" must be [low, high]'),
-            (GOOD.replace("6000 + fold", "60 + fold"), "looks like a MIDI note number"),
             ("const params = {}; function generate() { while (true) {} }", "did not finish"),
         ]
         for code, expected in cases:
-            reply = self.send(name="turn", code=code)
+            reply = self.send(code=code)
             self.assertTrue(reply.startswith("ERROR"), reply)
             self.assertIn(expected, reply)
             self.assertIn("Nothing was loaded", reply)
         self.assertEqual(self.bridge.sent, [])
-        self.assertFalse(os.path.exists(os.path.join(self.folder, "turn.js")))
-        self.assertEqual(os.listdir(os.path.join(self.folder, ".history")), [], "no draft is left behind")
+        self.assertFalse(os.path.exists(os.path.join(self.folder, "algorithms", "turn.js")))
+        self.assertEqual(os.listdir(self.history), [], "no draft is left behind")
 
-    def test_bad_names_and_empty_code(self):
-        self.assertIn("name must start with a letter", self.send(name="../x", code=GOOD))
-        self.assertIn("code is empty", self.send(name="x", code="  "))
+    def test_empty_code(self):
+        self.assertIn("code is empty", self.send(code="  "))
+
+    def test_the_instance_type_decides_what_is_taken(self):
+        self.assertIn("turn is a generator: it makes music from nothing. Write function produce(p)",
+                      self.send(code=TRANSFORMER))
+        self.target = Target("turn", "writer", self.folder)
+        self.assertIn("turn is a writer: it takes notes (write_score)", self.send(code=GOOD))
+        self.target = Target("turn", "selector", self.folder)
+        self.assertIn("selector algorithms are not built yet", self.send(code=GOOD))
+        self.target = Target("turn", "transformer", self.folder)
+        self.assertIn("turn is a transformer: it changes the score in its roll", self.send(code=GOOD))
+        self.assertEqual(self.bridge.sent, [])
 
     def test_what_max_answers_is_reported(self):
         self.bridge.answer = "error"
-        self.assertIn("but Max reported an error: something went wrong", self.send(name="turn", code=GOOD))
+        self.assertIn("but Max reported an error: something went wrong", self.send(code=GOOD))
         self.bridge.answer = None
-        self.assertIn("which did not confirm (is there a bach.mcp.algo named \"strings\"?)",
-                      self.send(name="turn", code=GOOD, runner="strings"))
+        self.assertIn('which did not confirm (is the instance "turn" in the patch?)', self.send(code=GOOD))
 
 
 TRANSFORMER = """// move every note
@@ -278,50 +197,47 @@ function transform(source, p) {
   return out;
 }
 """
-ROLL = "roll [ clefs G ] [ [ 0 [ 6000 500 100 0 ] 0 ] [ 1000 [ 6200 500 100 0 ] 0 ] 0 ]"
+ROLL = json.dumps({"header": {"clefs": ["G"]}, "voices": [{"chords": [
+    {"onset": 0, "notes": [{"pitch": 6000, "dur": 500, "vel": 100, "flag": 0}], "flag": 0},
+    {"onset": 1000, "notes": [{"pitch": 6200, "dur": 500, "vel": 100, "flag": 0}], "flag": 0}], "flag": 0}]})
 
 
 @needs_node
-class TransformerTests(unittest.TestCase):
+class TransformerTests(PlaygroundTest):
     def setUp(self):
-        self.folder = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.folder)
-        os.environ["BACH_ALGO_DIR"] = self.folder
-        os.environ["BACH_BUFFER"] = os.path.join(self.folder, "buffer.txt")
-        self.addCleanup(os.environ.pop, "BACH_ALGO_DIR", None)
-        self.addCleanup(os.environ.pop, "BACH_BUFFER", None)
+        super().setUp()
+        self.target = Target("shift", "transformer", self.folder)
 
     def send(self, bridge, code=TRANSFORMER):
-        mcp = FakeMCP()
-        register_algo_tools(mcp, bridge)
-        return mcp.tools["send_algorithm"](name="shift", code=code)
+        return self.tool(bridge)(code=code)
 
     def test_checked_on_the_score_in_the_roll(self):
-        bridge = FakeBridge(roll=ROLL)
+        bridge = FakeBridge(self.target.rolls, roll=ROLL)
         reply = self.send(bridge)
         self.assertIn("Transformer, checked on the score in the roll (2 notes)", reply)
         self.assertIn("pitch 6100-6300", reply)
-        self.assertEqual([m.split()[0] for m in bridge.sent], ["write_buffer", "algo"])
-        self.assertEqual(os.listdir(os.path.join(self.folder, ".history")), [], "no temporary file is left")
+        self.assertEqual(bridge.sent, ["shift write_roll shift.json", "shift load_algo shift.js"])
+        self.assertEqual(os.listdir(os.path.join(self.folder, "algorithms", ".history")), [], "no draft is left")
 
     def test_checked_on_its_saved_source(self):
-        with open(os.path.join(self.folder, "shift.source.txt"), "w", encoding="utf-8") as f:
-            f.write("roll [ [ 0 [ 4800 500 100 0 ] 0 ] 0 ]")
-        bridge = FakeBridge(roll=ROLL)
+        with open(os.path.join(self.folder, "algorithms", "shift.source.json"), "w", encoding="utf-8") as f:
+            f.write('{"voices": [{"chords": [{"onset": 0, "notes": [{"pitch": 4800, "dur": 500, "vel": 100}]}]}]}')
+        bridge = FakeBridge(self.target.rolls, roll=ROLL)
         reply = self.send(bridge)
-        self.assertIn("checked on its saved source (shift.source.txt) (1 notes)", reply)
-        self.assertNotIn("write_buffer", " ".join(bridge.sent))
+        self.assertIn("checked on its saved source (shift.source.json) (1 notes)", reply)
+        self.assertNotIn("write_roll", " ".join(bridge.sent))
 
     def test_checked_on_the_built_in_score_without_a_roll(self):
-        from bach_mcp.buffer import RollBuffer
+        from bach_mcp.bridge.buffer import RollBuffer
         original = RollBuffer.fetch
         RollBuffer.fetch = lambda self, timeout_seconds=5.0: original(self, 0.1)
         self.addCleanup(setattr, RollBuffer, "fetch", original)
-        reply = self.send(FakeBridge(roll=None))
+        reply = self.send(FakeBridge(self.target.rolls, roll=None))
         self.assertIn("checked on a built-in test score: the roll is empty or Max did not hand it over (14 notes)", reply)
 
     def test_a_transformer_that_fails_on_the_source(self):
-        reply = self.send(FakeBridge(roll=ROLL), TRANSFORMER.replace("n.pitch += p.shift", "n.pitch = n.missing.x"))
+        reply = self.send(FakeBridge(self.target.rolls, roll=ROLL),
+                          TRANSFORMER.replace("n.pitch += p.shift", "n.pitch = n.missing.x"))
         self.assertTrue(reply.startswith("ERROR in shift.js line 5: error in transform"), reply)
 
 
@@ -332,21 +248,22 @@ class LibraryTests(unittest.TestCase):
         files = sorted(f for f in os.listdir(folder) if f.endswith(".js"))
         self.assertGreaterEqual(len(files), 2)
         for name in files:
-            result = check_algorithm(os.path.join(folder, name))
+            result = check_algorithm(os.path.join(folder, name), node=NODE)
             self.assertTrue(result.get("ok"), f"{name}: {result}")
             normalize_score(result["score"])
 
-    def test_the_skill_examples_are_the_drift_and_transpose_phrases_algorithms(self):
+    def test_the_skill_examples_are_the_example_algorithms(self):
         with open(SKILL, encoding="utf-8") as f:
             blocks = re.findall(r"```js\n(.*?)```", f.read(), re.S)
-        for block, name in zip(blocks, ("drift.js", "transpose-phrases.js")):
+        self.assertEqual(len(blocks), 3)
+        for block, name in zip(blocks, ("drift.js", "transpose-phrases.js", "answer-phrases.js")):
             with open(os.path.join(EXAMPLES, name), encoding="utf-8") as f:
                 self.assertEqual(f.read(), block, name)
 
     def test_the_skill_names_every_library_function(self):
         program = "process.stdout.write(JSON.stringify(require(process.argv[1]).LIBRARY))"
-        core = os.path.join(REPO, "max", "bach-mcp", "javascript", "bach.mcp.core.js")
-        names = json.loads(subprocess.run([NODE, "-e", program, core], capture_output=True, text=True, check=True).stdout)
+        index = os.path.join(REPO, "max", "bach-mcp", "javascript", "algorithmic_core_library", "bachmcp.lib.index.js")
+        names = json.loads(subprocess.run([NODE, "-e", program, index], capture_output=True, text=True, check=True).stdout)
         with open(SKILL, encoding="utf-8") as f:
             prose = re.sub(r"```.*?```", "", f.read(), flags=re.S)
         spans = " ".join(re.findall(r"`([^`\n]+)`", prose))

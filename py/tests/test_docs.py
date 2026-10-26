@@ -1,4 +1,4 @@
-"""Checks on the instrument docs (py/bach_mcp/docs). Run: python -m unittest discover -s py/tests"""
+"""Checks on the instrument docs (py/bach_mcp/prompt/docs). Run: python -m unittest discover -s py/tests"""
 
 import glob
 import os
@@ -8,10 +8,13 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from bach_mcp.docs import DocLibrary  # noqa: E402
-from bach_mcp.translate import CLEFS, MAX_CENTS, ScoreError, normalize_score  # noqa: E402
+from bach_mcp.prompt.docs import DocLibrary  # noqa: E402
+# bach.roll's clefs and its highest pitch (G9), which the instrument docs must stay within.
+CLEFS = ["G", "F", "FG", "FGG", "FFG", "FFGG", "G8va", "G15ma", "G8vb", "G15mb", "F8va", "F15ma", "F8vb", "F15mb",
+         "Soprano", "Mezzo", "Alto", "Tenor", "Barytone", "Percussion", "None"]
+MAX_CENTS = 12700
 
-DOCS = os.path.join(os.path.dirname(__file__), "..", "bach_mcp", "docs")
+DOCS = os.path.join(os.path.dirname(__file__), "..", "bach_mcp", "prompt", "docs")
 CORE_FIELDS = ("register", "expanded_register", "transposing", "clefs", "techniques")
 
 
@@ -78,22 +81,6 @@ class DocsTests(unittest.TestCase):
             self.assertRegex(field(core, "transposing"), r"^(no|yes: )", path)
             main = field(core, "clefs").split(";")[0].strip()
             self.assertIn(main, CLEFS, f"{path}: unknown main clef {main!r}")
-
-    def test_json_spellings_are_accepted(self):
-        for path in doc_files():
-            text = parse(path)[3]
-            for art in re.findall(r'"art":\s*"([^"]+)"', text):
-                chord = {"onset": 0, "art": art, "notes": [{"pitch": 6000, "dur": 100}]}
-                try:
-                    normalize_score({"voices": [{"name": "T", "chords": [chord]}]})
-                except ScoreError as exc:
-                    self.fail(f"{path}: \"art\": {art!r} rejected ({exc})")
-            for head in re.findall(r'"head":\s*"([^"]+)"', text):
-                chord = {"onset": 0, "notes": [{"pitch": 6000, "dur": 100, "head": head}]}
-                try:
-                    normalize_score({"voices": [{"name": "T", "chords": [chord]}]})
-                except ScoreError as exc:
-                    self.fail(f"{path}: \"head\": {head!r} rejected ({exc})")
 
 
 class LibraryTests(unittest.TestCase):

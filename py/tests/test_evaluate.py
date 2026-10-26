@@ -3,15 +3,28 @@
 import json
 import unittest
 
-from bach_mcp.evaluate import (CASES, check_algorithm_code, check_harmonics, check_jazz_chords, check_microtonal,
+from bach_mcp.chat.evaluate import (CASES, check_algorithm_code, check_harmonics, check_jazz_chords, check_microtonal,
                                check_neapolitan, check_row, check_scale, check_spiral, check_transposition, check_trio,
                                pitch_tool_checks, plan_accidentals, summary)
-from bach_mcp.pitch_tools import call_pitch_tool
-from bach_mcp.translate import normalize_score
+from bach_mcp.tools.pitch_tools import call_pitch_tool
+from bach_mcp.chat.evaluate import checked_view
+from bach_mcp.music.pitch import name_to_cents
 
 
 def score(*voices):
-    return normalize_score({"voices": [{"name": name, "chords": chords} for name, chords in voices]})
+    """Hand-written chords ([onset, {"art": ...}?, [pitch or name, dur], ...]) as the model would
+    write them in the compressed form, then read the way the evaluation reads the model's scores."""
+    def note(n, art):
+        pitch = name_to_cents(n[0]) if isinstance(n[0], str) else n[0]
+        out = [pitch, n[1], n[2] if len(n) > 2 else 80]
+        return out + ([{"articulations": art}] if art else [])
+
+    def chord(c):
+        art = next((x.get("art") for x in c[1:] if isinstance(x, dict)), None)
+        notes = [x for x in c[1:] if isinstance(x, list)]
+        return [c[0]] + [note(n, art if i == 0 else None) for i, n in enumerate(notes)]
+
+    return checked_view({"voices": [{"name": name, "chords": [chord(c) for c in chords]} for name, chords in voices]})
 
 
 def passed(checks):

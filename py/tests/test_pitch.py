@@ -1,13 +1,12 @@
 """The pitch functions and the answers of the pitch tools."""
 
 import json
-import os
 import re
 import unittest
 
-from bach_mcp import pitch
-from bach_mcp.pitch import CHORDS, SCALES, PitchError, tidy
-from bach_mcp.pitch_tools import FUNCTIONS, PITCH_TOOLS, call_pitch_tool
+from bach_mcp.music import pitch
+from bach_mcp.music.pitch import CHORDS, SCALES
+from bach_mcp.tools.pitch_tools import FUNCTIONS, PITCH_TOOLS, call_pitch_tool
 
 
 def call(name, **arguments):
@@ -54,7 +53,7 @@ class AnswerTests(unittest.TestCase):
         self.assertEqual(call("force_scale", pitches=[[6100], 6300], scale="major", root="C"), [[6000], 6200])
 
     def test_the_tools_are_the_pitch_tools_of_score_mode(self):
-        from bach_mcp.modes import MODE_TOOLS
+        from bach_mcp.prompt.modes import MODE_TOOLS
         self.assertEqual(set(FUNCTIONS), set(PITCH_TOOLS))
         self.assertTrue(set(PITCH_TOOLS) <= set(MODE_TOOLS["score"]))
         self.assertFalse(set(PITCH_TOOLS) & set(MODE_TOOLS["algo"]))
@@ -144,7 +143,7 @@ class LibraryTests(unittest.TestCase):
 
 class SkillTests(unittest.TestCase):
     def test_every_tool_example_in_the_skill_is_the_real_answer(self):
-        path = os.path.join(os.path.dirname(pitch.__file__), "BACH_SKILL.md")
+        from bach_mcp.prompt.skill import SKILL_PATH as path
         with open(path, encoding="utf-8") as f:
             text = re.sub(r"\s*\n\s*", " ", f.read())
         examples = re.findall(r"`(\w+)\(([^`]*)\)` → `([^`]*)`", text)

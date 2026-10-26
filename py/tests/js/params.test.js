@@ -1,4 +1,4 @@
-// bach.mcp.params (jsui) and its element library, run on a stand-in for Max.
+// The parameter panel (jsui: GUI_parameters/bachmcp.gui.params.*.js), run on a stand-in for Max.
 "use strict";
 
 const test = require("node:test");
@@ -26,7 +26,7 @@ const SPEC = {
 
 // jsui runs Max's legacy engine: its require gives a module `exports` but no `module`.
 function loadPanel(options) {
-  return load("bach.mcp.params.js", Object.assign({ legacy: true }, options));
+  return load("bachmcp.gui.params.jsui.js", Object.assign({ legacy: true }, options));
 }
 
 function panelWith(spec = SPEC) {
@@ -237,9 +237,10 @@ test("pattr: getvalueof and setvalueof round trip", () => {
 });
 
 // jsui runs Max's legacy engine (ECMAScript 5): no modern syntax or built-ins.
-for (const file of ["bach.mcp.gui.js", "bach.mcp.params.js"]) {
+const GUI_DIR = path.join(JS_DIR, "GUI_parameters");
+for (const file of fs.readdirSync(GUI_DIR).filter((f) => f.endsWith(".js"))) {
   test(`${file} is ECMAScript 5`, () => {
-    const code = fs.readFileSync(path.join(JS_DIR, file), "utf8")
+    const code = fs.readFileSync(path.join(GUI_DIR, file), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/\/\/.*$/gm, "")
       .replace(/"(?:[^"\\]|\\.)*"/g, '""');
@@ -249,10 +250,9 @@ for (const file of ["bach.mcp.gui.js", "bach.mcp.params.js"]) {
   });
 }
 
-test("the element library loads through jsui's require (exports only, no module)", () => {
-  const gui = legacyRequire("bach.mcp.gui.js");
-  assert.equal(typeof gui.Panel, "function");
-  assert.equal(typeof gui.makeElement, "function");
+test("the panel loads through jsui's require (exports only, no module), and loads its parts", () => {
+  assert.equal(typeof legacyRequire("bachmcp.gui.params.panel.js").Panel, "function");
+  assert.equal(typeof legacyRequire("bachmcp.gui.params.elements.js").makeElement, "function");
 });
 
 test("without the element library the panel says so once and keeps working", () => {
@@ -263,14 +263,13 @@ test("without the element library the panel says so once and keeps working", () 
   broken.ctx.save();
   broken.ctx.onclick(10, 10, 1, 0, 0, 0, 0, 0);
   const texts = broken.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
-  assert.ok(texts.some((t) => t.includes("bach.mcp.gui.js not found")));
+  assert.ok(texts.some((t) => t.includes("bachmcp.gui.params.panel.js not found")));
   assert.deepEqual(broken.out, []);
 });
 
-test("the element library uses no ES2015 built-ins", () => {
-  const ctx = { exports: {} };
-  vm.createContext(ctx);
-  vm.runInContext(`
+test("the panel uses no ES2015 built-ins", () => {
+  // Every part runs in a context without them, as jsui's legacy engine would.
+  const WITHOUT = `
     delete Object.assign; delete Object.entries; delete Object.values; delete Object.fromEntries;
     delete Array.from; delete Array.of; delete Array.prototype.find; delete Array.prototype.findIndex;
     delete Array.prototype.includes; delete Array.prototype.fill; delete Array.prototype.flat;
@@ -279,12 +278,18 @@ test("the element library uses no ES2015 built-ins", () => {
     delete String.prototype.repeat; delete String.prototype.padStart;
     delete Math.sign; delete Math.trunc; delete Math.log10; delete Math.hypot;
     delete globalThis.Map; delete globalThis.Set; delete globalThis.Symbol; delete globalThis.Promise;
-  `, ctx);
-  vm.runInContext(fs.readFileSync(path.join(JS_DIR, "bach.mcp.gui.js"), "utf8"), ctx);
-  const gui = ctx.exports;
+  `;
+  function strictRequire(name) {
+    const ctx = { exports: {}, require: strictRequire };
+    vm.createContext(ctx);
+    vm.runInContext(WITHOUT, ctx);
+    vm.runInContext(fs.readFileSync(path.join(GUI_DIR, path.basename(name)), "utf8"), ctx);
+    return ctx.exports;
+  }
+  const gui = strictRequire("bachmcp.gui.params.panel.js");
   const panel = new gui.Panel();
   panel.setSpec(JSON.parse(JSON.stringify(SPEC)));
-  const g = load("bach.mcp.params.js").ctx.mgraphics;
+  const g = load("bachmcp.gui.params.jsui.js").ctx.mgraphics;
   panel.paint(g, 320, panel.layout(320));
   const r = panel.rows;
   for (const row of r) {
