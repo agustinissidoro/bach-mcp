@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.translate" module="bachmcp" category="bachmcp">
+	<digest>Convert scores between bach and dictionaries</digest>
+	<description>Converts a <o>bach.roll</o> score to a dictionary (bachjson) and back, without losing anything. The dictionary has an optional <i>header</i> (clefs, keys, voicenames, markers, slotinfo...) and <i>voices</i> &gt; <i>chords</i> (<i>onset</i>, <i>notes</i>) &gt; <i>notes</i> (<i>pitch</i>, <i>dur</i>, <i>vel</i>, and optionally <i>breakpoints</i>, <i>slots</i>, <i>articulations</i>, <i>name</i>, <i>flag</i>). Times in ms, pitches in midicents (6000 = middle C). Full specification: <i>bachjson-syntax-specification.md</i>.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">convert</metadata>
+		<metadata name="tag">json</metadata>
+		<metadata name="tag">dictionary</metadata>
+		<metadata name="tag">llll</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>llll or dictionary</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>Score in the @out format</digest>
+		</outlet>
+	</outletlist>
+	<objarglist>
+	</objarglist>
+	<methodlist>
+		<method name="llll">
+			<arglist><arg name="score" optional="0" type="llll" /></arglist>
+			<digest>Score in (llll)</digest>
+			<description>A score in <o>bach.roll</o>'s gathered syntax, when <at>in</at> is <m>llll</m> or <m>t</m>.</description>
+		</method>
+		<method name="dictionary">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Score in (dictionary)</digest>
+			<description>A score as a dictionary, when <at>in</at> is <m>json</m>.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="in" get="1" set="1" type="symbol" size="1">
+			<digest>Input format</digest>
+			<description><m>llll</m>: native bach llll. <m>t</m>: text llll. <m>json</m>: a dictionary.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="llll" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Input Format" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="3">
+					<enum name="json" />
+					<enum name="llll" />
+					<enum name="t" />
+				</attribute>
+			</attributelist>
+		</attribute>
+		<attribute name="out" get="1" set="1" type="symbol" size="1">
+			<digest>Output format</digest>
+			<description><m>json</m>: a dictionary. <m>llll</m>: native bach llll. <m>t</m>: text llll.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="json" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Output Format" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="3">
+					<enum name="json" />
+					<enum name="llll" />
+					<enum name="t" />
+				</attribute>
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<seealsolist>
+		<seealso name="bach.roll" />
+		<seealso name="bachmcp.algo.transform" />
+		<seealso name="dict" />
+	</seealsolist>
+</c74object>

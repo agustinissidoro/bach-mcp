@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.server" module="bachmcp" category="bachmcp">
+	<digest>Run the bach-mcp server</digest>
+	<description>Starts and stops the bach-mcp server: a local model (<m>local</m>) or Claude (<m>claude</m>). One per patch, except one <m>local</m> and one <m>claude</m> together. Every <o>bachmcp.algo.transform</o> in Max talks to it. The attributes are written to <i>bachmcp.toml</i> when the object is created.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">server</metadata>
+		<metadata name="tag">model</metadata>
+		<metadata name="tag">MCP</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>start, stop, map_refresh, model_catalog, download</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="int">
+			<digest>Server state: 1 running, 0 stopped</digest>
+		</outlet>
+		<outlet id="1" type="">
+			<digest>Server console output</digest>
+		</outlet>
+	</outletlist>
+	<objarglist>
+		<objarg name="host" optional="0" type="symbol">
+			<digest>local or claude</digest>
+			<description><m>local</m>: a model running on this computer. <m>claude</m>: the tools served to Claude over MCP.</description>
+		</objarg>
+	</objarglist>
+	<methodlist>
+		<method name="start">
+			<arglist></arglist>
+			<digest>Start the server</digest>
+			<description>Starts the server. Same as <m>1</m>.</description>
+		</method>
+		<method name="int">
+			<arglist><arg name="state" optional="0" type="int" /></arglist>
+			<digest>Start (1) or stop (0)</digest>
+			<description><m>1</m> starts the server, <m>0</m> stops it.</description>
+		</method>
+		<method name="stop">
+			<arglist></arglist>
+			<digest>Stop the server</digest>
+			<description>Stops the server. Same as <m>0</m>.</description>
+		</method>
+		<method name="map_refresh">
+			<arglist></arglist>
+			<digest>Resend the instances</digest>
+			<description>Sends again the names and types of every bachmcp instance in Max.</description>
+		</method>
+		<method name="model_catalog">
+			<arglist></arglist>
+			<digest>List downloadable models</digest>
+			<description>Prints the models listed in <i>models/catalog.toml</i>.</description>
+		</method>
+		<method name="download">
+			<arglist><arg name="model" optional="0" type="symbol" /></arglist>
+			<digest>Download a model</digest>
+			<description>Downloads a model into <i>models/</i>: a catalog name, a Hugging Face repo, a Hugging Face link, or a direct link to a file.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="listen_port" get="1" set="1" type="int" size="1">
+			<digest>Port the server sends to Max</digest>
+			<description>UDP port Max listens on.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="3000" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Listen Port" />
+			</attributelist>
+		</attribute>
+		<attribute name="prompt_port" get="1" set="1" type="int" size="1">
+			<digest>Port Max sends to the server</digest>
+			<description>UDP port the server listens on.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="3001" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Prompt Port" />
+			</attributelist>
+		</attribute>
+		<attribute name="playground" get="1" set="1" type="symbol" size="1">
+			<digest>Folder for everything the model makes</digest>
+			<description>Algorithms, rolls and conversations are saved here. Default: <i>playground/</i> in the package.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Playground" />
+			</attributelist>
+		</attribute>
+		<attribute name="model" get="1" set="1" type="symbol" size="1">
+			<digest>Local model</digest>
+			<description>A folder name in <i>models/</i>, a path, or a Hugging Face repo. Only for <m>local</m>.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Model" />
+			</attributelist>
+		</attribute>
+		<attribute name="context_size" get="1" set="1" type="int" size="1">
+			<digest>Tokens of conversation</digest>
+			<description>GGUF models: tokens the model reserves memory for.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="65536" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Context Size" />
+			</attributelist>
+		</attribute>
+		<attribute name="extra_args" get="1" set="1" type="atom" size="0">
+			<digest>More flags for the model server</digest>
+			<description>Passed as they are to the model server.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Extra Arguments" />
+			</attributelist>
+		</attribute>
+		<attribute name="max_tokens" get="1" set="1" type="int" size="1">
+			<digest>Limit for one reply</digest>
+			<description>Includes the thinking.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="16384" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Max Tokens" />
+			</attributelist>
+		</attribute>
+		<attribute name="temperature" get="1" set="1" type="float" size="1">
+			<digest>Sampling temperature</digest>
+			<description>Sampling temperature.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0.7" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Temperature" />
+			</attributelist>
+		</attribute>
+		<attribute name="top_p" get="1" set="1" type="float" size="1">
+			<digest>Nucleus sampling</digest>
+			<description>Nucleus sampling.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0.8" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Top P" />
+			</attributelist>
+		</attribute>
+		<attribute name="top_k" get="1" set="1" type="int" size="1">
+			<digest>Top-k sampling</digest>
+			<description>Top-k sampling.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="20" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Top K" />
+			</attributelist>
+		</attribute>
+		<attribute name="presence_penalty" get="1" set="1" type="float" size="1">
+			<digest>Against repetition (0-2)</digest>
+			<description>0 is off.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="1.5" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Presence Penalty" />
+			</attributelist>
+		</attribute>
+		<attribute name="reasoning" get="1" set="1" type="symbol" size="1">
+			<digest>Let the model think first</digest>
+			<description><m>on</m> or <m>off</m>.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="off" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Reasoning" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="2">
+					<enum name="off" />
+					<enum name="on" />
+				</attribute>
+			</attributelist>
+		</attribute>
+		<attribute name="skill_file" get="1" set="1" type="symbol" size="1">
+			<digest>System prompt</digest>
+			<description>Empty: the built-in skill.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Skill File" />
+			</attributelist>
+		</attribute>
+		<attribute name="max_tool_rounds" get="1" set="1" type="int" size="1">
+			<digest>Tool calls in one answer</digest>
+			<description>Tool calls the model may chain in one answer.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="8" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Max Tool Rounds" />
+			</attributelist>
+		</attribute>
+		<attribute name="docs" get="1" set="1" type="symbol" size="1">
+			<digest>Add instrument docs</digest>
+			<description>Adds the instrument docs to each message that names an instrument.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="true" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Instrument Docs" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="2">
+					<enum name="true" />
+					<enum name="false" />
+				</attribute>
+			</attributelist>
+		</attribute>
+		<attribute name="open_browser" get="1" set="1" type="symbol" size="1">
+			<digest>Open the chat page</digest>
+			<description>Opens the chat page when the model is ready.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="true" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Open Browser" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="2">
+					<enum name="true" />
+					<enum name="false" />
+				</attribute>
+			</attributelist>
+		</attribute>
+		<attribute name="tool_log" get="1" set="1" type="symbol" size="1">
+			<digest>Print each tool call</digest>
+			<description>Prints each tool call in the console.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="true" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Tool Log" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="2">
+					<enum name="true" />
+					<enum name="false" />
+				</attribute>
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<seealsolist>
+		<seealso name="bachmcp.algo.transform" />
+		<seealso name="bachmcp.translate" />
+	</seealsolist>
+</c74object>

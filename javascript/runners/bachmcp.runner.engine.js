@@ -24,6 +24,8 @@ hooks (all optional), for what the kind adds:
     loaded()            after a file compiled; true if the hook starts the first run itself
     forget()            a different file is loaded: drop what belonged to the old one
     deleted()           the object is deleted: stop what the hook started
+    automatic()         false holds back an output a parameter change asked for (auto_dump)
+    ran(score)          after a run, with the score it made
 
 The runner's outlets:
     0  dictionary <name>                         the score (bachjson-complete)
@@ -57,7 +59,7 @@ const WATCH_MS = 1000;
 function createEngine(max, kind, hooks = {}) {
   const files = makeFiles(max.File);
   const state = {
-    name: "algo",        // the instance's name, from setname
+    name: "algo",        // the instance's name, from set_name
     path: "",            // the algorithm file
     text: "",
     compiled: null,
@@ -65,21 +67,27 @@ function createEngine(max, kind, hooks = {}) {
     autorun: true,
     watching: true,
     fresh: false,        // the next run is the first of a load: algo_loaded, not algo_done
+    loading: false,
+    verbose: false,      // verbose 1: say in the Max console what happens (errors are always said)      // inside load_algo: a file that does not compile is "impossible to load"
   };
   const scoreDict = new max.Dict();
-  const pending = new max.Task(runNow);
+  const pending = new max.Task(autoRun);
   const watcher = new max.Task(checkFile);
   watcher.interval = WATCH_MS;
 
   // ── Saying what happened ─────────────────────────────────────────────── //
 
-  function say(message) {
+  function post(message) {
     max.post(`${kind.name} ${state.name}: ${message}\n`);
+  }
+
+  function say(message) {
+    if (state.verbose) post(message);
   }
 
   function fail(e) {
     const message = typeof e === "string" ? e : (e.message || String(e)) + (e.line ? ` (line ${e.line})` : "");
-    say(`error: ${message}`);
+    post(`error: ${message}`);
     max.outlet(1, "status", "error", message);
     max.outlet(2, state.name, "algo_error", message);
   }
@@ -95,6 +103,36 @@ function createEngine(max, kind, hooks = {}) {
     if (path === undefined) return fail("load needs a file path");
     const text = files.read(String(path));
     if (text === null) return fail(`cannot read ${path}`);
+    take(path, text);
+  }
+
+  /** load, but a file that cannot be read or compiled is reported as "impossible to load". */
+  function loadAlgo(path) {
+    if (path === undefined) return fail("error: impossible to load: load_algo needs a file path");
+    const text = files.read(String(path));
+    if (text === null) return fail(`error: impossible to load ${path}: cannot read it`);
+    state.loading = true;
+    try {
+      take(path, text);
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  /** load, silently: a file that cannot be read, or is not a working file of this kind, is ignored. */
+  function tryLoadAlgo(path) {
+    if (path === undefined) return;
+    const text = files.read(String(path));
+    if (text === null) return;
+    try {
+      if (loader.compile(text).kind !== kind.accepts) return;
+    } catch (e) {
+      return;
+    }
+    take(path, text);
+  }
+
+  function take(path, text) {
     if (String(path) !== state.path && hooks.forget) hooks.forget();
     state.path = String(path);
     state.text = text;
@@ -108,7 +146,13 @@ function createEngine(max, kind, hooks = {}) {
     load(state.path);
   }
 
-  function auto(on) {
+  /** verbose 1: what happens is said in the Max console; 0 (default): only errors. */
+  function verbose(on) {
+    state.verbose = Boolean(Number(on));
+  }
+
+  /** auto_dump 1: a parameter change outputs a score; 0: only dump (or bang) does. */
+  function autoDump(on) {
     state.autorun = Boolean(Number(on));
   }
 
@@ -151,7 +195,7 @@ function createEngine(max, kind, hooks = {}) {
       }
     } catch (e) {
       state.fresh = false;
-      return fail(e);
+      return fail(state.loading ? `error: impossible to load ${basename(state.path)}: ${e.message || e}` : e);
     }
     state.values = keptValues(next);
     state.compiled = next;
@@ -186,6 +230,12 @@ function createEngine(max, kind, hooks = {}) {
     pending.schedule(DEBOUNCE_MS);
   }
 
+  /** The output a parameter change asked for, unless the runner's kind holds it back. */
+  function autoRun() {
+    if (hooks.automatic && !hooks.automatic()) return;
+    runNow();
+  }
+
   function runNow() {
     pending.cancel();
     if (!state.compiled) return;
@@ -202,6 +252,7 @@ function createEngine(max, kind, hooks = {}) {
     if (state.fresh) max.outlet(2, state.name, "algo_loaded", basename(state.path), result.notes, result.ms);
     else max.outlet(2, state.name, "algo_done", result.notes, result.ms);
     state.fresh = false;
+    if (hooks.ran) hooks.ran(result.score);  // before the score: it may come straight back
     max.outlet(0, "dictionary", scoreDict.name);
   }
 
@@ -217,7 +268,7 @@ function createEngine(max, kind, hooks = {}) {
 
   return {
     state, files, say, fail, schedule, runNow,
-    setname, load, reload, auto, watch, setParam, deleted,
+    setname, load, loadAlgo, tryLoadAlgo, reload, autoDump, verbose, watch, setParam, deleted,
   };
 }
 

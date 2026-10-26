@@ -1,4 +1,4 @@
-// The parameter panel (jsui: GUI_parameters/bachmcp.gui.params.*.js), run on a stand-in for Max.
+// The parameter panel (v8ui: GUI_parameters/bachmcp.gui.params.*.js), run on a stand-in for Max.
 "use strict";
 
 const test = require("node:test");
@@ -24,9 +24,9 @@ const SPEC = {
   ],
 };
 
-// jsui runs Max's legacy engine: its require gives a module `exports` but no `module`.
+// The parts keep to `exports` (no `module`), so they also load as the legacy engine would.
 function loadPanel(options) {
-  return load("bachmcp.gui.params.jsui.js", Object.assign({ legacy: true }, options));
+  return load("bachmcp.gui.params.v8ui.js", Object.assign({ legacy: true }, options));
 }
 
 function panelWith(spec = SPEC) {
@@ -59,8 +59,13 @@ function release(m) {
   m.ctx.ondrag(0, 0, 0, 0, 0, 0, 0, 0);
 }
 
+// What the panel sent, without the "param" in front of a parameter (checked here: a bare name fails).
 function sent(m) {
-  const out = m.out.map((o) => o.slice(1));
+  const names = new Set(m.ctx.panel.items.map((it) => it.name));
+  const out = m.out.map((o) => {
+    assert.ok(!names.has(o[1]), `"${o[1]}" was sent without "param"`);
+    return o[1] === "param" ? o.slice(2) : o.slice(1);
+  });
   m.out.length = 0;
   return out;
 }
@@ -236,9 +241,9 @@ test("pattr: getvalueof and setvalueof round trip", () => {
   assert.deepEqual(back[2], ["shape", 0, 0, 1, 1]);
 });
 
-// jsui runs Max's legacy engine (ECMAScript 5): no modern syntax or built-ins.
+// The parts (not the v8ui script) stay ECMAScript 5: no modern syntax or built-ins.
 const GUI_DIR = path.join(JS_DIR, "GUI_parameters");
-for (const file of fs.readdirSync(GUI_DIR).filter((f) => f.endsWith(".js"))) {
+for (const file of fs.readdirSync(GUI_DIR).filter((f) => f.endsWith(".js") && !f.endsWith(".v8ui.js"))) {
   test(`${file} is ECMAScript 5`, () => {
     const code = fs.readFileSync(path.join(GUI_DIR, file), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -289,7 +294,7 @@ test("the panel uses no ES2015 built-ins", () => {
   const gui = strictRequire("bachmcp.gui.params.panel.js");
   const panel = new gui.Panel();
   panel.setSpec(JSON.parse(JSON.stringify(SPEC)));
-  const g = load("bachmcp.gui.params.jsui.js").ctx.mgraphics;
+  const g = load("bachmcp.gui.params.v8ui.js").ctx.mgraphics;
   panel.paint(g, 320, panel.layout(320));
   const r = panel.rows;
   for (const row of r) {
@@ -308,10 +313,13 @@ test("a transformer's panel shows its source and a capture button", () => {
   m.ctx.paint();
   const texts = m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
   assert.ok(texts.includes("capture"));
-  assert.ok(texts.includes("source: 893 notes"));
+  assert.ok(texts.includes("source: 893 notes · file"));
   const b = m.ctx.panel.captureRect(320);
   m.ctx.onclick(b.x + 5, b.y + 5, 1, 0, 0, 0, 0, 0);
-  assert.deepEqual(sent(m), [["capture"]]);
+  assert.deepEqual(sent(m), [["capture_source"]]);
+  const w = m.ctx.panel.writeRect(320);
+  m.ctx.onclick(w.x + 5, w.y + 5, 1, 0, 0, 0, 0, 0);
+  assert.deepEqual(sent(m), [["write_to_playground"]]);
   m.send("source", 12, "inlet");
   assert.equal(m.ctx.panel.source.notes, 12);
   const producer = panelWith();
@@ -330,6 +338,8 @@ const KINDS = {
 };
 
 function texts(m) {
+  const rect = m.ctx.box.rect;
+  m.ctx.mgraphics.size = [rect[2] - rect[0], rect[3] - rect[1]];  // Max resizes the drawing with the box
   m.ctx.mgraphics.calls.length = 0;
   m.ctx.paint();
   return m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
@@ -344,7 +354,7 @@ function clickValue(m, name) {
 test("a pitch shows as a name; clicking its value text switches to midicents, MIDI and back, sending nothing", () => {
   const m = panelWith(KINDS);
   let t = texts(m);
-  for (const shown of ["E4", "+400 mc", "C3–C6", "300 ms", "snap"]) assert.ok(t.includes(shown), `draws ${shown}`);
+  for (const shown of ["E4", "+400 mc", "C3–C6", "300 ms", "snap on"]) assert.ok(t.includes(shown), `draws ${shown}`);
   clickValue(m, "target");
   assert.ok(texts(m).includes("6400 mc"));
   clickValue(m, "target");
@@ -401,19 +411,39 @@ test("a transformer's source mode: click to switch, sent to the runner, kept wit
   const spec = Object.assign({}, SPEC, { kind: "transformer", source: { notes: 4, from: "file" } });
   const m = panelWith(spec);
   const r = m.ctx.panel.modeRect(m.ctx.panel.width);
-  assert.ok(texts(m).includes("keep"));
+  assert.ok(texts(m).includes("non-destructive"));
   m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
   release(m);
-  assert.deepEqual(sent(m), [["sourcemode", "follow"]]);
-  assert.ok(texts(m).includes("follow"));
+  assert.deepEqual(sent(m), [], "clicking the mode already on sends nothing");
+  m.ctx.onclick(r.x + r.w - 2, r.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  assert.deepEqual(sent(m), [["source_mode", 0]]);
+  assert.ok(texts(m).includes("destructive"));
   m.send("spec", JSON.stringify(spec));
-  assert.deepEqual(sent(m).filter((x) => x[0] === "sourcemode"), [["sourcemode", "follow"]], "a reload tells the runner");
-  m.send("sourcemode", "keep");
-  assert.equal(m.ctx.panel.sourceMode, "keep");
+  assert.deepEqual(sent(m).filter((x) => x[0] === "source_mode"), [["source_mode", 0]], "a reload tells the runner");
+  m.send("source_mode", 1);
+  assert.equal(m.ctx.panel.sourceMode, "nondestructive");
   assert.deepEqual(sent(m), [], "the runner's echo is not sent back");
-  m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
+  m.ctx.onclick(r.x + r.w - 2, r.y + 2, 1, 0, 0, 0, 0, 0);
   release(m);
   const n = loadPanel({ width: 320, height: 100 });
   n.ctx.panel.restore(m.ctx.panel.snapshot());
-  assert.equal(n.ctx.panel.sourceMode, "follow");
+  assert.equal(n.ctx.panel.sourceMode, "destructive");
+});
+
+test("reset all in the options, and hovering a card redraws only when it changes", () => {
+  const m = panelWith();
+  click(m, "times", 1);
+  release(m);
+  sent(m);
+  const r = m.ctx.panel.resetRect(320);
+  m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
+  assert.deepEqual(sent(m), [["times", 16]]);
+  const before = m.ctx.mgraphics.redraws;
+  const [x, y] = at(m, "amount", 0.5);
+  m.ctx.onidle(x, y);
+  m.ctx.onidle(x, y);
+  assert.equal(m.ctx.mgraphics.redraws, before + 1);
+  m.ctx.onidleout();
+  assert.equal(m.ctx.mgraphics.redraws, before + 2);
 });

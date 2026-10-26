@@ -453,7 +453,7 @@ Curve.prototype.drag = function (r, x, y) {
 };
 
 Curve.prototype.paint = function (g, r) {
-  box(g, r.x, r.y, r.w, r.h, THEME.row);
+  rounded(g, r.x, r.y, r.w, r.h, 4, THEME.well);
   var i, p;
   color(g, THEME.fillDim);
   g.move_to(r.x, r.y + r.h);
@@ -535,7 +535,7 @@ List.prototype.drag = function (r, x, y) {
 };
 
 List.prototype.paint = function (g, r) {
-  box(g, r.x, r.y, r.w, r.h, THEME.row);
+  rounded(g, r.x, r.y, r.w, r.h, 4, THEME.well);
   var n = this.value.length, w = r.w / n;
   var base = clamp(this.fraction(0), 0, 1);
   var y0 = r.y + r.h - base * r.h;

@@ -40,10 +40,10 @@ const SPEC_ALIASES = { default: "value", values: "options", choices: "options", 
 const SPEC_IGNORED = ["label", "doc", "info", "description", "help"];
 // Messages the runners answer themselves; a parameter cannot take these names.
 const RESERVED = [
-  "load", "reload", "run", "bang", "auto", "watch", "setname", "remote", "input", "values",
+  "load", "reload", "run", "bang", "auto", "watch", "setname", "set_name", "remote", "input", "values",
   "getstate", "open", "edit", "dictionary", "list", "int", "float", "anything", "loadbang",
   "save", "notifydeleted", "compile", "autowatch", "wclose", "setprop", "getprop", "delprop",
-  "msg_int", "msg_float", "set", "spec", "status", "clear", "done", "capture", "sourcemode", "roll", "source",
+  "msg_int", "msg_float", "set", "spec", "status", "clear", "done", "capture", "capture_source", "sourcemode", "source_mode", "auto_dump", "processing", "verbose", "load_algo", "try_load_algo", "write_to_playground", "dump", "roll", "source",
   "post", "cpost", "error", "outlet", "messnamed", "arrayfromargs", "embedmessage", "assist",
 ];
 const MAX_LIST = 256;

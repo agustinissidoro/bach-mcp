@@ -21,8 +21,9 @@ replaces the previous version (kept in algorithms/.history) and is loaded:
     <name> algo_loaded <file> <notes> <ms>           from Max, or
     <name> algo_error <message>
 
-A transformer is checked on the music it will work on: its saved source
-(algorithms/<name>.source.json) if it has one, else the score now in its roll
+A transformer is checked on the music it will work on: the source written by
+its write_to_playground (algorithms/<name>.source.json) if there is one, else
+the score now in its roll
 (fetched through rolls/<name>.txt, see buffer.py), else a small built-in score.
 """
 
@@ -188,8 +189,8 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
         params = "\n".join(f"  {p}" for p in result["describe"]) or "  (none)"
         kind = ""
         if result.get("kind") == "transformer":
-            kind = (f"Transformer, checked on {origin} ({result['source']['notes']} notes). In Max it keeps "
-                    f"its source in {name}.source.json; every run starts again from it.\n")
+            kind = (f"Transformer, checked on {origin} ({result['source']['notes']} notes). In Max its source "
+                    f"lives in memory (non-destructive: every run starts again from it).\n")
         return (
             f"OK. Algorithm saved as algorithms/{file} {status}.\n{kind}"
             f"Parameters (now a panel in Max):\n{params}\n"

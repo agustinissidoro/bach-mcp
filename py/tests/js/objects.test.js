@@ -50,7 +50,7 @@ function scoreOut(m) {
 
 test("load: spec to the panel, score out, loaded to the status outlet", () => {
   const m = load("bachmcp.runner.generator.js");
-  m.send("setname", "algo");
+  m.send("set_name", "algo");
   m.send("load", tempFile(ALGO));
   const spec = JSON.parse(last(m.out, 1, "spec")[2]);
   assert.equal(spec.title, "test_algo");
@@ -116,7 +116,7 @@ test("a broken file keeps the last good score and names the line", () => {
 
 test("a runner refuses an algorithm of the other kind", () => {
   const g = load("bachmcp.runner.generator.js");
-  g.send("setname", "scales1");
+  g.send("set_name", "scales1");
   g.send("load", tempFile(TRANSFORMER));
   assert.deepEqual(last(g.out, 2), [2, "scales1", "algo_error", "this is a generator: the file must define function produce(p) { ... }"]);
   const t = load("bachmcp.runner.transformer.js");
@@ -127,7 +127,7 @@ test("a runner refuses an algorithm of the other kind", () => {
 
 test("the setname message can carry a file to load", () => {
   const m = load("bachmcp.runner.generator.js");
-  m.send("setname", "algo", tempFile(ALGO));
+  m.send("set_name", "algo", tempFile(ALGO));
   assert.equal(last(m.out, 2)[2], "algo_loaded");
 });
 
@@ -159,31 +159,68 @@ function inputFrom(m, pitch) {
   m.send("input", "dictionary", d.name);
 }
 
-test("keep: the first score at the inlet becomes the source and is saved; later ones are ignored", () => {
+test("nondestructive: the first score at the inlet is held in memory; later ones are ignored until capture_source", () => {
   const file = tempFile(TRANSFORMER);
-  const sourceFile = file.replace(/\.js$/, ".source.json");
   const m = load("bachmcp.runner.transformer.js");
   m.send("load", file);
   inputFrom(m, 3600);
   m.flush();
   assert.deepEqual(scorePitches(m), [[3700]]);
-  assert.equal(JSON.parse(fs.readFileSync(sourceFile, "utf8")).voices[0].chords[0].notes[0].pitch, 3600, "saved next to the algorithm");
+  assert.ok(!fs.existsSync(file.replace(/\.js$/, ".source.json")), "nothing written to disk");
   inputFrom(m, 4800);
   m.flush();
   m.send("shift", 200);
   m.flush();
   assert.deepEqual(scorePitches(m), [[3800]], "still the original");
-  const again = load("bachmcp.runner.transformer.js");
-  again.send("load", file);
-  assert.deepEqual(scorePitches(again), [[3700]], "reopened: the saved source");
-  m.send("capture");
+  m.send("capture_source");
+  assert.deepEqual(last(m.out, 1, "dump"), [1, "dump"], "asks the roll for its score");
   inputFrom(m, 4800);
   m.flush();
-  assert.deepEqual(scorePitches(m), [[5000]], "capture: the next input is the new source");
+  assert.deepEqual(scorePitches(m), [[5000]], "capture_source: the next input is the new source");
+});
+
+test("write_to_playground writes the source next to the algorithm, only when asked", () => {
+  const file = tempFile(TRANSFORMER);
+  const m = load("bachmcp.runner.transformer.js");
+  m.send("set_name", "t1");
+  m.send("write_to_playground");
+  assert.match(last(m.out, 2)[3], /no source yet/);
+  m.send("load", file);
+  inputFrom(m, 3600);
+  m.send("write_to_playground");
+  const written = path.join(path.dirname(file), "t1.source.json");
+  assert.equal(JSON.parse(fs.readFileSync(written, "utf8")).voices[0].chords[0].notes[0].pitch, 3600);
+});
+
+test("verbose 0 (default): only errors reach the Max console", () => {
+  const m = load("bachmcp.runner.transformer.js");
+  m.send("load", tempFile(TRANSFORMER));
+  assert.equal(m.posts.length, 0, "nothing said");
+  m.send("load", "/nowhere/x.js");
+  assert.ok(m.posts.some((t) => /error: cannot read/.test(t)), "errors are always said");
+});
+
+test("load_algo reports a file it cannot load; try_load_algo stays silent", () => {
+  const m = load("bachmcp.runner.transformer.js");
+  m.send("set_name", "t1");
+  m.send("load_algo", "/nowhere/x.js");
+  assert.deepEqual(last(m.out, 2).slice(1, 3), ["t1", "algo_error"]);
+  assert.match(last(m.out, 2)[3], /^error: impossible to load \/nowhere\/x\.js/);
+  m.send("load_algo", tempFile("const params = {}; function transform(source, p) { return ; "));
+  assert.match(last(m.out, 2)[3], /^error: impossible to load test_algo\.js/);
+  const before = m.out.length;
+  m.send("try_load_algo", "/nowhere/x.js");
+  m.send("try_load_algo", tempFile(ALGO));  // a producer: not for a transformer
+  assert.equal(m.out.length, before, "silent");
+  m.send("try_load_algo", tempFile(TRANSFORMER));
+  inputFrom(m, 3600);
+  m.flush();
+  assert.deepEqual(scorePitches(m), [[3700]]);
 });
 
 test("without a source a transformer waits for one", () => {
   const m = load("bachmcp.runner.transformer.js");
+  m.send("verbose", 1);
   m.send("load", tempFile(TRANSFORMER));
   assert.equal(scoreOut(m), null);
   assert.ok(m.posts.some((t) => /waiting for a source/.test(t)));
@@ -193,22 +230,54 @@ test("without a source a transformer waits for one", () => {
   assert.equal(last(m.out, 2)[2], "algo_loaded");
 });
 
-test("follow: every score at the inlet becomes the source; only the first one runs by itself", () => {
+test("destructive: every input is the source, never transformed by itself; processing until it comes back", () => {
   const m = load("bachmcp.runner.transformer.js");
-  m.send("sourcemode", "follow");
-  assert.deepEqual(last(m.out, 1, "sourcemode"), [1, "sourcemode", "follow"]);
+  m.send("set_name", "t1");
+  m.send("source_mode", 0);
+  assert.deepEqual(last(m.out, 1, "source_mode"), [1, "source_mode", 0]);
   m.send("load", tempFile(TRANSFORMER));
   inputFrom(m, 3600);
   m.flush();
-  assert.deepEqual(scorePitches(m), [[3700]]);
-  const runs = m.out.filter((o) => o[0] === 0).length;
-  inputFrom(m, 3700);  // the result, back from the roll
+  assert.equal(scoreOut(m), null, "an input does not run");
+  m.send("shift", 200);
   m.flush();
-  assert.equal(m.out.filter((o) => o[0] === 0).length, runs, "no run: no loop through the roll");
-  assert.deepEqual(last(m.out, 1, "source"), [1, "source", 1, "inlet"]);
+  assert.deepEqual(scorePitches(m), [[3800]]);
+  assert.deepEqual(last(m.out, 2), [2, "t1", "processing", 1]);
+  const outs = () => m.out.filter((o) => o[0] === 0).length;
+  const runs = outs();
+  m.send("shift", 300);
+  m.flush();
+  assert.equal(outs(), runs, "processing: the change is kept, nothing goes out");
+  inputFrom(m, 5000);  // back from outside, edited
+  m.flush();
+  assert.deepEqual(last(m.out, 2), [2, "t1", "processing", 0]);
+  assert.equal(outs(), runs, "the returning score is not transformed: no loop");
+  m.send("dump");
+  assert.deepEqual(scorePitches(m), [[5300]], "dump transforms the score that came back, with the kept value");
+  m.send("bang");
+  assert.deepEqual(scorePitches(m), [[5300]], "dump always outputs, from the last input, never from its own result");
+  m.wait(2999);
+  assert.equal(last(m.out, 2, "t1") && m.out.some((o) => o[2] === "timeout"), false, "still waiting");
+  m.wait(3000);
+  assert.deepEqual(m.out.slice(-2), [[2, "t1", "timeout", 1], [2, "t1", "processing", 0]], "nothing came back");
   m.send("shift", 100);
   m.flush();
-  assert.deepEqual(scorePitches(m), [[3800]], "the next change transforms the latest score");
-  m.send("sourcemode", "maybe");
-  assert.match(last(m.out, 2)[3], /sourcemode is keep or follow/);
+  assert.deepEqual(scorePitches(m), [[5100]], "changes output again");
+  m.send("source_mode", 2);
+  assert.match(last(m.out, 2)[3], /source_mode is 0 \(destructive\) or 1/);
+});
+
+test("auto_dump 0: a parameter change outputs nothing until dump", () => {
+  const m = load("bachmcp.runner.transformer.js");
+  m.send("load", tempFile(TRANSFORMER));
+  m.send("auto_dump", 0);
+  inputFrom(m, 3600);
+  m.flush();
+  const outs = () => m.out.filter((o) => o[0] === 0).length;
+  const runs = outs();
+  m.send("shift", 500);
+  m.flush();
+  assert.equal(outs(), runs);
+  m.send("dump");
+  assert.deepEqual(scorePitches(m), [[4100]]);
 });

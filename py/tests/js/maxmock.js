@@ -9,7 +9,8 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const JS_DIR = path.join(__dirname, "..", "..", "..", "max", "bach-mcp", "javascript");
+const SHORT_MS = 500;  // a debounce runs at flush(); a timeout needs wait()
+const JS_DIR = path.join(__dirname, "..", "..", "..", "javascript");
 
 /** A file found by its name, as Max's search path finds it: in the javascript folder or a folder inside it. */
 function onSearchPath(name) {
@@ -154,8 +155,9 @@ function load(script, options = {}) {
         this.state = "idle";
         tasks.push(this);
       }
-      schedule() {
+      schedule(ms) {
         this.state = "once";
+        this.delay = Number(ms) || 0;
       }
       repeat() {
         this.state = "repeat";
@@ -179,10 +181,13 @@ function load(script, options = {}) {
     throw new Error(`no handler for ${selector}`);
   }
 
-  /** Run the tasks that are due: scheduled ones once; repeating ones once per call when repeat is true. */
-  function flush(repeat = false) {
+  /**
+   * Run the tasks that are due: scheduled ones once (those of SHORT_MS or less: a longer one, such as a
+   * timeout, waits for wait()); repeating ones once per call when repeat is true.
+   */
+  function flush(repeat = false, upTo = SHORT_MS) {
     for (const t of tasks) {
-      if (t.state === "once") {
+      if (t.state === "once" && t.delay <= upTo) {
         t.state = "idle";
         t.fn();
       } else if (repeat && t.state === "repeat") {
@@ -191,7 +196,12 @@ function load(script, options = {}) {
     }
   }
 
-  return { ctx, out, posts, embedded, named, send, flush, dicts };
+  /** Let ms pass: every task scheduled within ms runs. */
+  function wait(ms) {
+    flush(false, ms);
+  }
+
+  return { ctx, out, posts, embedded, named, send, flush, wait, dicts };
 }
 
 function readDict(name) {

@@ -1,0 +1,39 @@
+{
+  "bachmcp.server": {
+    "digest": "Run the bach-mcp server",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "server",
+      "model",
+      "MCP"
+    ]
+  },
+  "bachmcp.algo.transform": {
+    "digest": "Transform a score with an algorithm",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "transform",
+      "score"
+    ]
+  },
+  "bachmcp.translate": {
+    "digest": "Convert scores between bach and dictionaries",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "convert",
+      "json",
+      "dictionary",
+      "llll"
+    ]
+  }
+}

@@ -23,7 +23,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const JS = path.join(__dirname, "..", "..", "..", "max", "bach-mcp", "javascript");
+const JS = path.join(__dirname, "..", "..", "..", "javascript");
 const loader = require(path.join(JS, "runners", "bachmcp.runner.loader.js"));
 const paramspec = require(path.join(JS, "runners", "bachmcp.runner.paramspec.js"));
 

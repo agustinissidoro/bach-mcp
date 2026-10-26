@@ -11,29 +11,43 @@ jsui's require gives a module only `exports`, so every name leaves through it.
 "use strict";
 
 var THEME = {
-  bg: [0.14, 0.14, 0.15, 1],
-  row: [0.19, 0.19, 0.2, 1],
-  track: [0.28, 0.28, 0.3, 1],
+  bg: [0.11, 0.115, 0.125, 1],
+  header: [0.15, 0.155, 0.17, 1],
+  card: [0.17, 0.175, 0.19, 1],
+  cardHover: [0.21, 0.215, 0.235, 1],
+  row: [0.17, 0.175, 0.19, 1],
+  well: [0.12, 0.125, 0.135, 1],
+  line: [0.26, 0.265, 0.29, 1],
+  track: [0.27, 0.275, 0.3, 1],
+  button: [0.23, 0.235, 0.26, 1],
+  buttonHover: [0.3, 0.305, 0.34, 1],
   fill: [0.96, 0.63, 0.24, 1],
   fillDim: [0.96, 0.63, 0.24, 0.28],
   knob: [1, 0.86, 0.66, 1],
-  text: [0.9, 0.9, 0.9, 1],
-  dim: [0.58, 0.58, 0.6, 1],
-  ok: [0.5, 0.8, 0.5, 1],
+  text: [0.92, 0.92, 0.93, 1],
+  dim: [0.56, 0.57, 0.6, 1],
+  faint: [0.4, 0.41, 0.44, 1],
+  ok: [0.45, 0.8, 0.5, 1],
   error: [0.96, 0.4, 0.34, 1],
   font: "Arial",
+  bold: "Arial Bold",
   fontSize: 11,
-  titleSize: 12
+  titleSize: 13,
+  smallSize: 9
 };
 
 var M = {
-  pad: 6,
-  row: 20,
-  gap: 3,
-  title: 22,
-  status: 18,
+  pad: 8,
+  row: 20,       // a control's height
+  head: 16,      // a parameter's name and value line
+  gap: 4,
+  title: 30,
+  section: 20,
+  button: 20,
+  status: 20,
+  radius: 5,
   valueMin: 36,
-  valueMax: 120,
+  valueMax: 140,
   charWidth: 6.4,
   labelMin: 54,
   labelMax: 132,
@@ -127,9 +141,9 @@ function fit(g, text, width) {
 }
 
 // Text in a box: align "left", "right" or "center", vertically centred.
-function label(g, text, r, align, c, size) {
+function label(g, text, r, align, c, size, font) {
   size = size || THEME.fontSize;
-  g.select_font_face(THEME.font);
+  g.select_font_face(font || THEME.font);
   g.set_font_size(size);
   var shown = fit(g, text, r.w);
   var w = g.text_measure(shown)[0];
@@ -157,3 +171,13 @@ exports.rounded = rounded;
 exports.dot = dot;
 exports.fit = fit;
 exports.label = label;
+
+/** A rounded outline. */
+function outline(g, x, y, w, h, radius, c) {
+  color(g, c);
+  g.set_line_width(1);
+  g.rectangle_rounded(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1), radius, radius);
+  g.stroke();
+}
+
+exports.outline = outline;

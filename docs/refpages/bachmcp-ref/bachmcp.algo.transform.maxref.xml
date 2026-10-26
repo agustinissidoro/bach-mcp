@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.algo.transform" module="bachmcp" category="bachmcp">
+	<digest>Transform a score with an algorithm</digest>
+	<description>Runs an algorithm written by the model (or by hand) on a score. Scores come in and go out as <o>dict</o> (bachjson); use <o>bachmcp.translate</o> to and from <o>bach.roll</o>. With <at>source_mode</at> 1 it holds the score it received and every output starts again from it. With <at>source_mode</at> 0 every score it receives replaces the source, and is transformed by the next <m>bang</m> or parameter change.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">algorithm</metadata>
+		<metadata name="tag">transform</metadata>
+		<metadata name="tag">score</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>dictionary, bang, param, source_mode, auto_dump, name, write, open</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="dictionary">
+			<digest>Score out (dictionary)</digest>
+		</outlet>
+		<outlet id="1" type="bang">
+			<digest>Asks for a score: connect to bach.roll (through bachmcp.translate)</digest>
+		</outlet>
+		<outlet id="2" type="">
+			<digest>To bachmcp.gui.params</digest>
+		</outlet>
+		<outlet id="3" type="">
+			<digest>Status: algo_loaded, algo_done, processing</digest>
+		</outlet>
+	</outletlist>
+	<objarglist>
+		<objarg name="name" optional="0" type="symbol">
+			<digest>Instance name</digest>
+			<description>The name the model and the server know this instance by. Unique in the patch.</description>
+		</objarg>
+	</objarglist>
+	<methodlist>
+		<method name="dictionary">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Score in</digest>
+			<description>A score as a dictionary. With <at>source_mode</at> 1 the first one becomes the source; with <at>source_mode</at> 0 each one becomes the source, without being transformed.</description>
+		</method>
+		<method name="bang">
+			<arglist></arglist>
+			<digest>Output a score</digest>
+			<description>Transforms the source with the current parameters and outputs it.</description>
+		</method>
+		<method name="param">
+			<arglist><arg name="name" optional="0" type="symbol" /><arg name="value" optional="0" type="list" /></arglist>
+			<digest>Set a parameter</digest>
+			<description>Sets a parameter of the algorithm, e.g. <m>param shift 700</m>. Pitch parameters also take note names.</description>
+		</method>
+		<method name="source_mode">
+			<arglist><arg name="mode" optional="0" type="int" /></arglist>
+			<digest>Destructive (0) or non-destructive (1)</digest>
+			<description>See <at>source_mode</at>.</description>
+		</method>
+		<method name="auto_dump">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Output on every parameter change</digest>
+			<description>See <at>auto_dump</at>.</description>
+		</method>
+		<method name="name">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Rename the instance</digest>
+			<description>Sets a new instance name.</description>
+		</method>
+		<method name="write">
+			<arglist></arglist>
+			<digest>Save the source</digest>
+			<description>Writes the source to <i>playground/algorithms/&lt;name&gt;.source.json</i>.</description>
+		</method>
+		<method name="open">
+			<arglist></arglist>
+			<digest>Open the algorithm</digest>
+			<description>Opens the algorithm's code.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="source_mode" get="1" set="1" type="int" size="1">
+			<digest>Destructive (0) or non-destructive (1)</digest>
+			<description><m>1</m>: the first score received is the source; every output starts again from it. <m>0</m>: every score received becomes the source; after an output, parameter changes wait (up to 3 s) for the next score to come back.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Source Mode" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="2">
+					<enum name="0" />
+					<enum name="1" />
+				</attribute>
+			</attributelist>
+		</attribute>
+		<attribute name="auto_dump" get="1" set="1" type="int" size="1">
+			<digest>Output on every parameter change</digest>
+			<description><m>1</m>: every parameter change outputs a score. <m>0</m>: only <m>bang</m> does.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Auto Dump" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<seealsolist>
+		<seealso name="bachmcp.translate" />
+		<seealso name="bachmcp.server" />
+		<seealso name="bach.roll" />
+	</seealsolist>
+</c74object>

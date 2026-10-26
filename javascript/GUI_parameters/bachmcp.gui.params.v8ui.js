@@ -1,27 +1,25 @@
 /*
-bachmcp.gui.params.jsui.js — the parameter panel (jsui; ECMAScript 5 for the legacy engine).
+bachmcp.gui.params.v8ui.js — the parameter panel (v8ui).
 
-Create it as [jsui] with this file (or drag the file onto a jsui), then:
-  a runner's middle outlet  ->  this inlet           (spec, set, status)
-  this outlet               ->  the runner's inlet   (<param> <value...>, load <path>)
+Create it as [v8ui bachmcp.gui.params.v8ui.js] (its box must not ignore clicks), then:
+  a runner's middle outlet  ->  this inlet           (spec, set, status, source, source_mode)
+  this outlet               ->  the runner's inlet   (param <name> <value...>, load <path>, ...)
 
-The panel builds itself from the spec the runner sends when it loads a file:
-one element per parameter, placed automatically (bachmcp.gui.params.panel.js,
-with the elements of bachmcp.gui.params.elements.js). Moving
-an element sends "<param> <value...>". Double-click an element: back to its
-declared value. Click a pitch's value text to show it as a name, midicents or
-MIDI (an interval: cents or semitones); "snap" in the title row makes drags
-land on round values (alt inverts it while dragging). The panel resizes itself to its content (autosize 0 to stop).
+The panel builds itself from the spec the runner sends when it loads a file
+(bachmcp.gui.params.panel.js, with the elements of bachmcp.gui.params.elements.js):
+  options     snap (drags land on round values; alt inverts it while dragging),
+              reset all; a transformer's source: notes, write
+              (write_to_playground), capture (capture_source) and its mode,
+              non-destructive | destructive (sends "source_mode 1|0")
+  parameters  one card each. Moving a control sends "param <name> <value...>".
+              Double-click a control: back to its declared value. Click a
+              pitch's value (highlighted) to show it as a name, midicents or
+              MIDI (an interval: cents or semitones).
+The panel resizes itself to its content (autosize 0 to stop).
 
 It is saved with the patch (parameters, values and the file path), and on
 reopening it asks the runner to load the file again with those values. It also
 works with pattr / pattrstorage: give it a scripting name to store presets.
-
-A transformer shows its source score in the title row, its source mode
-("keep" the original, or "follow" every score at the runner's right inlet;
-click to switch, sends "sourcemode keep|follow"), and a capture button that
-sends "capture" to the runner (take the score now in the roll as the new
-source).
 
 Other messages: reset (all parameters to their declared values), bang (send
 every value), clear, autosize 0/1.
@@ -35,7 +33,7 @@ mgraphics.init();
 mgraphics.relative_coords = 0;
 mgraphics.autofill = 0;
 
-var gui = (function () {
+const gui = (() => {
   try {
     return require("bachmcp.gui.params.panel.js");
   } catch (e) {
@@ -45,49 +43,49 @@ var gui = (function () {
 
 var panel = gui && gui.Panel ? new gui.Panel() : null;
 if (!panel) post("bachmcp.gui.params: cannot load bachmcp.gui.params.panel.js; the GUI_parameters folder must be in Max's search path\n");
-var autosizing = true;
-var reloader = new Task(askForFile, this);
+let autosizing = true;
+const reloader = new Task(askForFile, this);
 
-setinletassist(0, "from a runner's middle outlet: spec, set, status, source, sourcemode");
-setoutletassist(0, "to the runner: <param> <value...>");
+setinletassist(0, "from a runner's middle outlet: spec, set, status, source, source_mode");
+setoutletassist(0, "to the runner: param <name> <value...>; capture_source, write_to_playground, source_mode, load");
 
 function emit(messages) {
-  for (var i = 0; i < messages.length; i++) outlet(0, messages[i]);
+  for (const m of messages) outlet(0, m);
 }
+emit.local = 1;
 
 function fitHeight() {
   if (!autosizing || !panel) return;
-  var size = mgraphics.size;
-  var need = Math.ceil(panel.layout(size[0]));
-  var r = box.rect;
+  const need = Math.ceil(panel.layout(mgraphics.size[0]));
+  const r = box.rect;
   if (r && Math.abs((r[3] - r[1]) - need) > 0.5) box.rect = [r[0], r[1], r[2], r[1] + need];
 }
+fitHeight.local = 1;
 
 function refresh() {
   fitHeight();
   mgraphics.redraw();
 }
+refresh.local = 1;
 
 // ── From the runner ────────────────────────────────────────────────────── //
 
 function spec(text) {
   if (!panel) return;
-  var data;
+  let data;
   try {
     data = JSON.parse(String(text));
   } catch (e) {
     post("bachmcp.gui.params: unreadable spec\n");
     return;
   }
-  var kept = panel.setSpec(data);
+  const kept = panel.setSpec(data);
   refresh();
   emit(kept);
 }
 
-function set() {
-  if (!panel) return;
-  var a = arrayfromargs(arguments);
-  if (panel.setValue(String(a[0]), a.slice(1))) mgraphics.redraw();
+function set(name, ...atoms) {
+  if (panel && panel.setValue(String(name), atoms)) mgraphics.redraw();
 }
 
 function source(notes, from) {
@@ -96,14 +94,16 @@ function source(notes, from) {
   mgraphics.redraw();
 }
 
-function sourcemode(mode) {
-  if (panel && panel.setSourceMode(String(mode))) mgraphics.redraw();
+// the runner's request for a score (capture_source), meant for the roll beside the panel
+function dump() {}
+
+function source_mode(flag) {
+  if (panel && panel.setSourceMode(flag)) mgraphics.redraw();
 }
 
-function status() {
+function status(kind, ...text) {
   if (!panel) return;
-  var a = arrayfromargs(arguments);
-  panel.setStatus(a[0], a.slice(1).join(" "));
+  panel.setStatus(kind, text.join(" "));
   mgraphics.redraw();
 }
 
@@ -122,8 +122,7 @@ function reset() {
 }
 
 function bang() {
-  if (!panel) return;
-  emit(panel.allMessages());
+  if (panel) emit(panel.allMessages());
 }
 
 function autosize(on) {
@@ -134,13 +133,13 @@ function autosize(on) {
 // ── Drawing and the mouse ───────────────────────────────────────────────── //
 
 function paint() {
-  var size = mgraphics.size;
+  const [w, h] = mgraphics.size;
   if (panel) {
-    panel.paint(mgraphics, size[0], size[1]);
+    panel.paint(mgraphics, w, h);
     return;
   }
-  mgraphics.set_source_rgba(0.14, 0.14, 0.15, 1);
-  mgraphics.rectangle(0, 0, size[0], size[1]);
+  mgraphics.set_source_rgba(0.11, 0.115, 0.125, 1);
+  mgraphics.rectangle(0, 0, w, h);
   mgraphics.fill();
   mgraphics.set_source_rgba(0.96, 0.4, 0.34, 1);
   mgraphics.select_font_face("Arial");
@@ -150,6 +149,7 @@ function paint() {
 }
 
 function onresize() {
+  if (panel) panel.places = null;
   mgraphics.redraw();
 }
 
@@ -175,6 +175,16 @@ function ondblclick(x, y) {
 }
 ondblclick.local = 1;
 
+function onidle(x, y) {
+  if (panel && panel.mouseMove(x, y)) mgraphics.redraw();
+}
+onidle.local = 1;
+
+function onidleout() {
+  if (panel && panel.mouseMove(null)) mgraphics.redraw();
+}
+onidleout.local = 1;
+
 // ── Saved with the patch ────────────────────────────────────────────────── //
 
 function save() {
@@ -184,7 +194,7 @@ function save() {
 
 function restore(text) {
   if (!panel) return;
-  var snapshot;
+  let snapshot;
   try {
     snapshot = JSON.parse(String(text));
   } catch (e) {
@@ -208,8 +218,8 @@ function getvalueof() {
   return panel ? panel.flatValues() : [];
 }
 
-function setvalueof() {
+function setvalueof(...flat) {
   if (!panel) return;
-  emit(panel.setFlatValues(arrayfromargs(arguments)));
+  emit(panel.setFlatValues(flat));
   mgraphics.redraw();
 }

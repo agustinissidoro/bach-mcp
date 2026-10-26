@@ -9,29 +9,47 @@ file adds the source.
 
 The source is the score a transformer works on, in bachjson-complete like every
 score between objects. It arrives at the inlet as `input dictionary <name>`
-(from another runner, or from a roll through bachmcp.translate @out json). The
-runner keeps it, so every run starts again from it, never from the
-transformer's own output, and saves it next to the algorithm as
-<name>.source.json, so that it survives reopening the patch. What a new input
-does depends on the source mode:
+(from another runner, or from a roll through bachmcp.translate @out json) and
+lives only in memory: nothing is written to disk unless write_to_playground
+asks for it. The result leaves outlet 0 as `dictionary <name>`, and the runner
+never tells a roll to read it, so a transformer fits any flow. The runner never
+feeds its own result back: what it transforms is always a score that came in at
+the inlet, so that anything (another algorithm, a hand edit in a roll) can act
+on the music between two transformations. What happens depends on the source
+mode:
 
-  keep    (default) the source is kept: an input becomes the source only when
-          there is none yet; after that, inputs are ignored until `capture`
-  follow  every input becomes the source, so that the next change of a
-          parameter transforms the latest score. An input does not run the
-          transformer by itself (only the first one does), so a score coming
-          back from the roll can never loop into a run.
+  source_mode 1   non-destructive (default). The source is held: every output
+                  starts again from it. An input becomes the source only when
+                  there is none yet; after that, inputs are ignored until
+                  capture_source.
+  source_mode 0   destructive. Every input becomes the source, and is never
+                  transformed by itself (no loop through a roll): the next dump
+                  or parameter change transforms it. After an output the runner
+                  is "processing" until the next input arrives (outlet 2:
+                  <name> processing 1, then 0): while it is, parameter changes are
+                  kept but output nothing, so that each output works on the score
+                  that came back. If nothing comes back within 3 seconds, the
+                  runner stops waiting: <name> timeout 1, then processing 0.
+                  dump always outputs.
+
+auto_dump 1 (default) outputs a score on every parameter change; auto_dump 0
+outputs only on dump (or bang).
 
 Messages:
-  setname <name> [file]   the instance's name (and a file to load)
+  set_name <name> [file]  the instance's name (and a file to load)
   load <path>             load and run a file
+  load_algo <path>        the same; a failure is "error: impossible to load ..." (outlet 2)
+  try_load_algo <path>    the same, silent: a file that cannot be loaded is ignored
   reload                  read the file again
-  run, bang               run with the current values
+  dump, bang, run         transform the source with the current values: the score out of outlet 0
   <param> <value...>      set a parameter, e.g. "shift 700"
+  param <param> <value...>  the same, as bachmcp.gui.params sends it
   input dictionary <n>    a source score; input clear forgets it
-  capture                 the next input becomes the source, even in keep mode
-  sourcemode keep|follow  what a score at the inlet does (see above)
-  auto 0/1                run on every parameter change (default 1)
+  capture_source          "dump" out of outlet 1; the next input becomes the source
+  source_mode 0/1         0 destructive, 1 non-destructive (see above)
+  write_to_playground     write the source next to the algorithm, as <name>.source.json
+  auto_dump 0/1           output on every parameter change (default 1); 0: only on dump
+  verbose 0/1             say in the Max console what happens (default 0: only errors)
   watch 0/1               reload when the file changes on disk (default 1)
 */
 "use strict";
@@ -54,13 +72,14 @@ function need(name) {
 
 const { createEngine } = need("bachmcp.runner.engine.js");
 
-const SOURCE_MODES = ["keep", "follow"];
+const PROCESSING_TIMEOUT_MS = 3000;
 
 const source = {
   score: null,
-  from: "",          // "file" (the .source.json next to the algorithm) or "inlet"
-  mode: "keep",      // or "follow": see the top
-  open: false,       // capture: the next input becomes the source
+  from: "",                 // "inlet"
+  destructive: false,       // source_mode 0: see the top
+  open: false,              // capture_source: the next input becomes the source
+  processing: false,        // destructive: an output went out, its score has not come back yet
 };
 
 const engine = createEngine(
@@ -70,59 +89,78 @@ const engine = createEngine(
     source: () => source.score,
     spec: () => ({ source: sourceInfo() }),
     loaded() {
-      // It keeps the source it has, else the one saved next to it; without one it waits for an input.
-      if (!source.score) {
-        const saved = readSource();
-        if (saved) {
-          source.score = saved;
-          source.from = "file";
-        }
-      }
+      // The source belongs to the instance, not to the file: a new algorithm keeps it.
       if (source.score) return false;
       engine.say("waiting for a source: input dictionary <name>");
       return true;
     },
-    forget() {
-      source.score = null;  // another algorithm: its own source
-      source.from = "";
+    automatic: () => !(source.destructive && source.processing),
+    ran() {
+      if (source.destructive) setProcessing(true);
     },
   },
 );
 
 try {
-  setinletassist(0, "load <path>, run, <param> <value>, input dictionary <name>");
+  setinletassist(0, "load_algo <path>, run, [param] <param> <value>, input dictionary <name>, capture_source");
   setoutletassist(0, "dictionary <name>: the score (bachjson-complete)");
-  setoutletassist(1, "to the parameter panel (bachmcp.gui.params.jsui.js)");
-  setoutletassist(2, "<name> algo_loaded / algo_done / algo_error");
+  setoutletassist(1, "to the parameter panel (bachmcp.gui.params.v8ui.js); dump (capture_source)");
+  setoutletassist(2, "<name> algo_loaded / algo_done / algo_error / processing 0|1 / timeout 1");
 } catch (e) {
   // assist strings are optional
 }
 
 // ── Messages ────────────────────────────────────────────────────────────── //
 
-function setname(name, file) { engine.setname(name, file); }
+function set_name(name, file) { engine.setname(name, file); }
 function load(path) { engine.load(path); }
+function load_algo(path) { engine.loadAlgo(path); }
+function try_load_algo(path) { engine.tryLoadAlgo(path); }
 function reload() { engine.reload(); }
 function run() { engine.runNow(); }
 function bang() { engine.runNow(); }
-function auto(on) { engine.auto(on); }
+function dump() { engine.runNow(); }
+function auto_dump(on) { engine.autoDump(on); }
 function watch(on) { engine.watch(on); }
+function verbose(on) { engine.verbose(on); }
+function param(name, ...args) { engine.setParam(String(name), args); }
 function anything(...args) { engine.setParam(messagename, args); }
-function notifydeleted() { engine.deleted(); }
 function done() {} // end of patcherargs' attribute list
 
-/** The source mode: keep the original, or follow every score that arrives. */
-function sourcemode(mode) {
-  const m = String(mode);
-  if (!SOURCE_MODES.includes(m)) return engine.fail(`sourcemode is ${SOURCE_MODES.join(" or ")}, got ${m}`);
-  source.mode = m;
-  outlet(1, "sourcemode", m);
+/** 0 destructive (every input is the source), 1 non-destructive (the source is held). */
+function source_mode(flag) {
+  const m = Number(flag);
+  if (m !== 0 && m !== 1) return engine.fail(`source_mode is 0 (destructive) or 1 (non-destructive), got ${flag}`);
+  source.destructive = m === 0;
+  setProcessing(false);
+  outlet(1, "source_mode", m);
 }
 
-/** The next input becomes the source, even in keep mode. */
-function capture() {
+function setProcessing(on) {
+  if (on) timeout.schedule(PROCESSING_TIMEOUT_MS);
+  else timeout.cancel();
+  if (source.processing === on) return;
+  source.processing = on;
+  outlet(2, engine.state.name, "processing", on ? 1 : 0);
+}
+
+/** Nothing came back after an output: stop waiting, so that parameter changes output again. */
+const timeout = new Task(() => {
+  if (!source.processing) return;
+  outlet(2, engine.state.name, "timeout", 1);
+  setProcessing(false);
+});
+
+function notifydeleted() {
+  timeout.cancel();
+  engine.deleted();
+}
+
+/** Ask for the score (a roll answers "dump"); the next input becomes the source, in either mode. */
+function capture_source() {
   source.open = true;
   outlet(1, "status", "ok", "the next score at the inlet becomes the source");
+  outlet(1, "dump");
 }
 
 function input(what, name) {
@@ -140,20 +178,25 @@ function input(what, name) {
     return engine.fail(`cannot read the input dictionary ${name}`);
   }
   const first = !source.score || source.open;
-  if (source.mode === "keep" && !first) return;  // the original stays until capture
+  if (!source.destructive && !first) return;  // the source stays until capture_source
   source.score = score;
   source.from = "inlet";
   source.open = false;
-  saveSource(score);
   tellPanelSource();
-  if (engine.state.autorun && (first || source.mode === "keep")) engine.schedule();
+  if (source.destructive) return setProcessing(false);  // kept, transformed by the next dump or change
+  if (engine.state.autorun) engine.schedule();
+}
+
+/** Write the source next to the algorithm (<name>.source.json), where the server checks a transformer. */
+function write_to_playground() {
+  if (!source.score) return engine.fail("write_to_playground: there is no source yet");
+  if (!engine.state.path) return engine.fail("write_to_playground: no algorithm loaded, so no folder to write to");
+  const path = engine.state.path.replace(/[^\/:]*$/, "") + engine.state.name + ".source.json";
+  if (!engine.files.write(path, JSON.stringify(source.score))) return engine.fail(`could not write ${path}`);
+  outlet(1, "status", "ok", `source written to ${path}`);
 }
 
 // ── The source ──────────────────────────────────────────────────────────── //
-
-function sourcePath() {
-  return engine.state.path ? engine.state.path.replace(/\.js$/, "") + ".source.json" : "";
-}
 
 function countNotes(score) {
   let n = 0;
@@ -168,22 +211,4 @@ function sourceInfo() {
 function tellPanelSource() {
   const info = sourceInfo();
   outlet(1, "source", info.notes, info.from || "none");
-}
-
-function readSource() {
-  const path = sourcePath();
-  const text = path ? engine.files.read(path) : null;
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    engine.say(`${path} is not a score (JSON): ignored`);
-    return null;
-  }
-}
-
-/** Keep the source next to the algorithm, so that it survives reopening the patch. */
-function saveSource(score) {
-  const path = sourcePath();
-  if (path && !engine.files.write(path, JSON.stringify(score))) engine.say(`could not save the source to ${path}`);
 }

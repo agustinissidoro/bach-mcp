@@ -6,7 +6,7 @@ const assert = require("node:assert");
 const fs = require("fs");
 const path = require("path");
 
-const C = require(path.join(__dirname, "..", "..", "..", "max", "bach-mcp", "javascript", "server_utilities", "bachmcp.server.config.js"));
+const C = require(path.join(__dirname, "..", "..", "..", "javascript", "server_utilities", "bachmcp.server.config.js"));
 const REAL = fs.readFileSync(path.join(__dirname, "..", "..", "..", "bachmcp.toml"), "utf8");
 
 const TOML = `# top comment
