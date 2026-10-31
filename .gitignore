@@ -210,3 +210,9 @@ max/bach-mcp/.buffer.txt.tmp
 
 # bachmcp externals: the build folder (the .mxo is kept)
 max/bach-mcp/externals/build/
+
+sources/*
+!sources/.gitkeep
+playground/*
+!playground/.gitkeep
+/deprecated

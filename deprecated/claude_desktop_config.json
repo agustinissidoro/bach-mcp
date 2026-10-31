@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "bach-mcp": {
-      "command": "/absolute/path/to/conda/envs/bach-mcp/bin/python",
-      "args": ["/absolute/path/to/bach-mcp/py/main.py", "serve", "--stdio"],
-      "cwd": "/absolute/path/to/bach-mcp"
-    }
-  }
-}
