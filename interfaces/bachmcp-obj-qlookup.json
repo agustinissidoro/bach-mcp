@@ -35,5 +35,120 @@
       "dictionary",
       "llll"
     ]
+  },
+  "bachmcp.algo.select": {
+    "digest": "Select notes of a score with an algorithm",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "select",
+      "selection",
+      "score"
+    ]
+  },
+  "bachmcp.algo.generate": {
+    "digest": "Generate a score with an algorithm",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "generate",
+      "produce",
+      "score"
+    ]
+  },
+  "bachmcp.gui.params": {
+    "digest": "Parameter panel for a bach-mcp algorithm",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "parameters",
+      "panel",
+      "slider",
+      "algorithm",
+      "interface"
+    ]
+  },
+  "bachmcp.transformer": {
+    "digest": "Transformer with its parameter panel",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "transform",
+      "score",
+      "panel"
+    ]
+  },
+  "bachmcp.selector": {
+    "digest": "Selector with its parameter panel",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "select",
+      "score",
+      "panel"
+    ]
+  },
+  "bachmcp.generator": {
+    "digest": "Generator with its parameter panel",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "generate",
+      "score",
+      "panel"
+    ]
+  },
+  "bachmcp.bpatcher.transformer": {
+    "digest": "Transformer and panel, for a bpatcher",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "transform",
+      "bpatcher"
+    ]
+  },
+  "bachmcp.bpatcher.selector": {
+    "digest": "Selector and panel, for a bpatcher",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "select",
+      "bpatcher"
+    ]
+  },
+  "bachmcp.bpatcher.generator": {
+    "digest": "Generator and panel, for a bpatcher",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "generate",
+      "bpatcher"
+    ]
   }
 }

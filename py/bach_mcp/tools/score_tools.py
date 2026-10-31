@@ -6,13 +6,13 @@ The score tools: write_score, read_score, clear_score.
 The model reads and writes scores in the compressed form (music/compress.py):
 chords and notes as plain lists, nothing empty, slots by name. Everywhere else a
 score is bachjson-complete, and so is what these tools pass on: read_score
-compresses the roll's complete score; write_score expands what the model wrote
+asks the server patch for buffer.json and shows it through music/reader.py; write_score expands what the model wrote
 onto the roll's score, so everything the model does not see (the header:
 slotinfo, clefs, keys ...) is kept.
 
 Each call is for one instance (session.py: the one whose prompt is being
 answered, else the active one): its score travels through its own file in the
-playground, rolls/<name>.json (buffer.py), never as messages. Only a writer
+playground, scores/<name>.json (buffer.py), never as messages. Only a writer
 writes notes; any instance can have its roll read.
 """
 
@@ -23,15 +23,15 @@ from typing import Any, Dict, List, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 
-from ..bridge.buffer import RollBuffer
+from ..bridge.buffer import RollBuffer, ServerBuffer
 from ..bridge.max import MaxBridge
 from ..bridge.protocol import line
-from ..music.compress import compress, count_notes, describe, expand
+from ..music.compress import count_notes, describe, expand
+from ..music.reader import read_view
 from .session import NoTarget, Target, conversation, target
 
 SCORE_TOOLS = ("write_score", "read_score", "clear_score")
 MAX_NOTES = 20000
-_READ_CHORD_LIMIT = 2000  # a whole score of ~900 chords is ~30K tokens; the context is 64K
 
 
 def close_brackets(text: str) -> Optional[Any]:
@@ -171,7 +171,7 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
         problem = check_short(raw)
         if problem:
             return f"ERROR: {problem}. Nothing was written. Fix this and call the tool again."
-        current = buffer.fetch(timeout_seconds=3.0)  # its header is kept (and, with add, its notes)
+        current = ServerBuffer(bridge).fetch(timeout_seconds=3.0)  # read like read_score; its header is kept (and, with add, its notes)
         if add and current is None:
             return "ERROR: Max did not hand over the current score (is the patch open?). Nothing was added."
         written = expand(raw, current)
@@ -208,8 +208,10 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
         """Read the current score from Max. Use ONLY when you need content you did not write yourself, e.g. the
         user edited the score or asks about it. Never use it to check your own write.
 
-        It answers in the same form write_score takes: chord = [onset, note, ...],
-        note = [pitch, dur, vel] (extras, if any, in an object after vel).
+        It answers with one line per voice about the whole score, then the music in the same form
+        write_score takes (chord = [onset, note, ...], note = [pitch, dur, vel], extras in an object
+        after vel), each voice with its number. A long score is cut at one time for all voices; the
+        answer says the from_ms to read on from.
 
         voice: 0 = all voices, or a voice number. from_ms / to_ms: optional window on the onsets, in milliseconds.
         """
@@ -217,36 +219,15 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
             t = target()
         except NoTarget as exc:
             return f"ERROR: {exc}."
-        complete = _buffer(t).fetch(timeout_seconds=5.0)
+        complete = ServerBuffer(bridge).fetch(timeout_seconds=5.0)
         if complete is None:
             return "ERROR: Max did not answer. Is the patch open? Do not retry more than once."
-        total = count_notes(complete)
-        short = compress(complete)
-
-        def in_window(onset: Any) -> bool:
-            return onset >= from_ms and (to_ms < 0 or onset < to_ms)
-
-        voices = short["voices"]
-        if voice > 0:
-            voices = [voices[voice - 1]] if voice <= len(voices) else []
-        shown, truncated = 0, False
-        for v in voices:
-            v["chords"] = [c for c in v["chords"] if in_window(c[0])]
-            room = max(0, _READ_CHORD_LIMIT - shown)
-            if len(v["chords"]) > room:
-                v["chords"], truncated = v["chords"][:room], True
-            shown += len(v["chords"])
-        short["voices"] = voices
-        if "markers" in short:
-            short["markers"] = [m for m in short["markers"] if in_window(m[0])]
-
-        text = json.dumps(short, ensure_ascii=False, separators=(",", ":"))
+        text = read_view(complete, voice, from_ms, to_ms)
         key = (conversation(), t.name, voice, from_ms, to_ms, text)  # a new chat has not seen the last answer
         if state["last_read"] == key:
             return "Unchanged since your previous read_score. Use that result; do not read again."
         state["last_read"] = key
-        note = f"\n(truncated to {_READ_CHORD_LIMIT} chords; narrow with voice/from_ms/to_ms)" if truncated else ""
-        return f"{len(complete.get('voices') or [])} voice(s), {total} notes in the whole score.\n{text}{note}"
+        return text
 
     @mcp.tool()
     def clear_score() -> str:

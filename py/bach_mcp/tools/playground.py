@@ -5,7 +5,7 @@ The playground: the folder where everything a model makes is kept, set by the
 patch with `set_playground <path>`. It always has three folders:
 
     <path>/algorithms   <name>.js (and .history/), <name>.source.json
-    <path>/rolls        <name>.json, each roll's score (bachjson-complete)
+    <path>/scores       <name>.json, each roll's score (bachjson-complete)
     <path>/prompts      <name>.jsonl, the conversation of each instance
 
 Whatever is missing is made, the folder itself included (as the patch's
@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 import re
 
-FOLDERS = ("algorithms", "rolls", "prompts")
+FOLDERS = ("algorithms", "scores", "prompts")
 
 _MAX_VOLUME = re.compile(r"^[^/:]+:(/.*)$")
 

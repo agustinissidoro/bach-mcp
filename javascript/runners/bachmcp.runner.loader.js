@@ -6,10 +6,15 @@ Loads and runs an algorithm file, with the algorithmic core library in scope
 (v8, in the runners: runners/bachmcp.runner.engine.js) and in Node (the check before a file reaches Max), so
 an algorithm behaves identically in both.
 
-An algorithm is one of two kinds:
+An algorithm is one of three kinds:
 
     a producer makes a score from nothing       function produce(p) { ... return s; }
     a transformer changes a score it is given   function transform(source, p) { ... return out; }
+    a selector picks notes of a score           function select(source, p) { ... return notes; }
+
+A selector returns a list of notes: the note objects of `source` themselves (as
+eachNote gives them), or their addresses [voice, chord, note], 1-based as in
+bach. run() turns either into addresses.
 
 and declares its parameters first (bachmcp.runner.paramspec.js):
 
@@ -21,7 +26,7 @@ and declares its parameters first (bachmcp.runner.paramspec.js):
 
 `p` holds the current value of every parameter. `source` is the original score
 (JSON) a transformer works on: the runner keeps it, so every run starts again
-from it, never from the transformer's own output. Both return a JSON score.
+from it, never from the transformer's own output. A producer and a transformer return a JSON score.
 (An older file with `function generate(p, input)` is a producer.)
 
     compile(code)                  the file -> {specs, kind, fn, state}; throws AlgoError
@@ -56,6 +61,7 @@ function wrapSource(code) {
     '\n;return { params: typeof params === "undefined" ? undefined : params,' +
     ' produce: typeof produce === "undefined" ? undefined : produce,' +
     ' transform: typeof transform === "undefined" ? undefined : transform,' +
+    ' select: typeof select === "undefined" ? undefined : select,' +
     ' generate: typeof generate === "undefined" ? undefined : generate };\n})();';
 }
 
@@ -93,16 +99,17 @@ function compile(code) {
   }
   const produce = typeof parts.produce === "function" ? parts.produce : null;
   const transform = typeof parts.transform === "function" ? parts.transform : null;
+  const select = typeof parts.select === "function" ? parts.select : null;
   const generate = typeof parts.generate === "function" ? parts.generate : null;
-  if (produce && transform) {
-    throw new AlgoError("define produce or transform, not both: a producer makes a score, a transformer changes its source");
+  if ([produce, transform, select].filter(Boolean).length > 1) {
+    throw new AlgoError("define one of produce, transform or select: a producer makes a score, a transformer changes its source, a selector picks notes of it");
   }
-  if (!produce && !transform && !generate) {
-    throw new AlgoError("function produce(p) { ... } (a producer) or function transform(source, p) { ... } (a transformer) is missing");
+  if (!produce && !transform && !select && !generate) {
+    throw new AlgoError("function produce(p) { ... } (a producer), function transform(source, p) { ... } (a transformer) or function select(source, p) { ... } (a selector) is missing");
   }
   const specs = normalizeParams(parts.params);
-  const kind = transform ? "transformer" : "producer";
-  return { specs, kind, fn: transform || produce || generate, legacy: !produce && !transform, state };
+  const kind = transform ? "transformer" : (select ? "selector" : "producer");
+  return { specs, kind, fn: transform || select || produce || generate, legacy: !produce && !transform && !select, state };
 }
 
 /**
@@ -115,14 +122,16 @@ function run(compiled, values, source) {
   const seedSpec = compiled.specs.find((s) => s.type === "seed");
   compiled.state.seed = seedSpec ? (values[seedSpec.name] !== undefined ? values[seedSpec.name] : seedSpec.default) : 0;
   compiled.state.streams = new Map();
-  const name = compiled.kind === "transformer" ? "transform" : (compiled.legacy ? "generate" : "produce");
-  if (compiled.kind === "transformer" && !source) {
-    throw new AlgoError("this transformer has no source score yet: send it one (input dictionary <name>)");
+  const name = { transformer: "transform", selector: "select" }[compiled.kind] || (compiled.legacy ? "generate" : "produce");
+  const given = compiled.kind === "transformer" || compiled.kind === "selector";
+  if (given && !source) {
+    throw new AlgoError(`this ${compiled.kind} has no source score yet: send it one (input dictionary <name>)`);
   }
   let result;
+  let input = null;
   try {
     const p = prepare(compiled.specs, values);
-    if (compiled.kind === "transformer") result = compiled.fn(copy(source), p);
+    if (given) result = compiled.fn(input = copy(source), p);
     else if (compiled.legacy) result = compiled.fn(p, source ? copy(source) : null);
     else result = compiled.fn(p);
   } catch (e) {
@@ -130,7 +139,11 @@ function run(compiled, values, source) {
     throw new AlgoError(`error in ${name}: ${e.message}`, lineOf(e));
   }
   if (result === undefined || result === null) {
-    throw new AlgoError(`${name}() returned nothing: it must end by returning the score`);
+    throw new AlgoError(`${name}() returned nothing: it must end by returning ${compiled.kind === "selector" ? "the notes it picks" : "the score"}`);
+  }
+  if (compiled.kind === "selector") {
+    const selection = addresses(input, result, name);
+    return { selection, notes: selection.length, ms: Date.now() - start };
   }
   if (!isObject(result) || !Array.isArray(result.voices)) {
     throw new AlgoError(`${name}() must return a score: an object with "voices"`);
@@ -151,6 +164,32 @@ function foldPitch(p) {
   while (p < MIDI_RANGE[0]) p += OCTAVE;
   while (p > MIDI_RANGE[1]) p -= OCTAVE;
   return p;
+}
+
+/** A selector's result -> sorted, distinct [voice, chord, note] addresses (1-based) of notes in `score`. */
+function addresses(score, result, name) {
+  if (!Array.isArray(result)) throw new AlgoError(`${name}() must return a list of notes (note objects or [voice, chord, note])`);
+  const where = new Map();
+  const voices = score.voices || [];
+  voices.forEach((v, vi) => ((v && v.chords) || []).forEach((c, ci) =>
+    ((c && c.notes) || []).forEach((n, ni) => where.set(n, [vi + 1, ci + 1, ni + 1]))));
+  const seen = new Set();
+  const out = [];
+  for (const item of result) {
+    let a = where.get(item);
+    if (!a && Array.isArray(item) && item.length === 3 && item.every(Number.isInteger)) {
+      const [v, c, n] = item;
+      const chord = voices[v - 1] && voices[v - 1].chords && voices[v - 1].chords[c - 1];
+      if (chord && chord.notes && chord.notes[n - 1]) a = item.slice();
+    }
+    if (!a) throw new AlgoError(`${name}() returned something that is not a note of the source: ${JSON.stringify(item)}`);
+    const key = a.join(" ");
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(a);
+    }
+  }
+  return out.sort((x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2]);
 }
 
 function countNotes(score) {
@@ -174,4 +213,4 @@ function foldPitches(result) {
   }
 }
 
-module.exports = { AlgoError, LIBRARY, compile, run };
+module.exports = { AlgoError, LIBRARY, compile, run, countNotes };

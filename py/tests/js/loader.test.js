@@ -171,7 +171,7 @@ test("producers and transformers", () => {
     function generate(p, input) { const s = score(); s.voice("A").note(0, input ? 7000 : 6000, 100); return s; }`);
   assert.equal(legacy.kind, "producer");
   assert.equal(loader.run(legacy, {}, { voices: [] }).score.voices[0].chords[0].notes[0].pitch, 7000);
-  assert.throws(() => loader.compile("const params = {}; function produce(p) {} function transform(s, p) {}"), /not both/);
+  assert.throws(() => loader.compile("const params = {}; function produce(p) {} function transform(s, p) {}"), /define one of produce, transform or select/);
 });
 
 test("a transformer always starts again from the original source", () => {

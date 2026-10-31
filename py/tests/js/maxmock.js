@@ -131,7 +131,7 @@ function load(script, options = {}) {
   const embedded = [];
   const tasks = [];
   const ctx = {
-    autowatch: 0, inlets: 1, outlets: 1, messagename: "", jsarguments: [script],
+    autowatch: 0, inlets: 1, outlets: 1, messagename: "", jsarguments: [script, ...(options.args || [])],
     box: { rect: [0, 0, options.width || 300, options.height || 100] },
     console,
     post: (...a) => posts.push(a.join(" ")),

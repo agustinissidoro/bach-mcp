@@ -5,35 +5,35 @@ What Bach tells Max about itself, over the same UDP bridge as the tools.
 
 Unasked, Bach sends only two lines, which arrive at [udpreceive 3000]:
 
-    mcp_info status 1   once it has started (the bridge and its door are up)
-    mcp_info status 0   its very last message, before it goes off
+    server status 1   once it has started (the bridge and its door are up)
+    server status 0   its very last message, before it goes off
 
-(and `mcp_info warning "Another bach server is already running"` from a second
+(and `server warning "Another bach server is already running"` from a second
 Bach, which therefore does not start).
 
 Max asks with one line, sent to [udpsend 127.0.0.1 3001]; Bach answers at once:
 
-Every line is `mcp_info <what it is> <value>`, so the patch routes on the second word.
+Every line is `server <what it is> <value>`, so the patch routes on the second word.
 
-    bach status     mcp_info status 1
-                    mcp_info model <model>             only when a model is loaded and answers
-                    mcp_info warning <text>            only when there is something to say (e.g. no model)
-    bach settings   mcp_info <section.key> <value>     one per setting, e.g. mcp_info generation.temperature 0.7
-                    mcp_info end settings <count>
-    bach models     mcp_info models <name> <format> <GB> <in use 1/0>   one per model in models/
-                    mcp_info end models <count>
-    bach catalog    mcp_info catalog <name> <format> <GB> <downloaded 1/0> <repo> <note>
-                        one per model of models/catalog.toml, then: mcp_info end catalog <count>
+    bach status     server status 1
+                    server model <model>             only when a model is loaded and answers
+                    server warning <text>            only when there is something to say (e.g. no model)
+    bach settings   server <section.key> <value>     one per setting, e.g. server generation.temperature 0.7
+                    server end settings <count>
+    bach models     server models <name> <format> <GB> <in use 1/0>   one per model in models/
+                    server end models <count>
+    bach catalog    server catalog <name> <format> <GB> <downloaded 1/0> <repo> <note>
+                        one per model of models/catalog.toml, then: server end catalog <count>
     bach download_model <name|repo|link> [use]
-                    mcp_info download_start <name> <GB>
-                    mcp_info download_progress <percent>          every 2 s
-                    mcp_info download_done <name>                 (with use: bachmcp.toml now names it)
-                    or: mcp_info download_error <message>
+                    server download_start <name> <GB>
+                    server download_progress <percent>          every 2 s
+                    server download_done <name>                 (with use: bachmcp.toml now names it)
+                    or: server download_error <message>
     bach download_stop
-                    mcp_info download_stopped <name>  (what was fetched stays: the next start goes on)
-    bach quit       mcp_info status 0; Bach stops its model server, downloads and page, and exits
-    bach help       mcp_info help <the requests>
-    bach ping       mcp_info pong
+                    server download_stopped <name>  (what was fetched stays: the next start goes on)
+    bach quit       server status 0; Bach stops its model server, downloads and page, and exits
+    bach help       server help <the requests>
+    bach ping       server pong
 
 <state> is one of:
     starting   Bach is starting
@@ -43,13 +43,16 @@ Every line is `mcp_info <what it is> <value>`, so the patch routes on the second
     stopped    the model server ended: <message> has its last words
     claude     Bach serves Claude, which brings its own model
 
-In the patch, after [udpreceive 3000]: [route mcp_info] -> [print bach], or
+In the patch, after [udpreceive 3000]: [route server] -> [print bach], or
 [route status model warning models catalog download_progress download_done end].
 """
 
 from __future__ import annotations
 
 import os
+import signal
+import stat
+import sys
 import threading
 from dataclasses import fields
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -58,7 +61,7 @@ from ..bridge.max import BridgeBusy, MaxBridge
 from ..config import Config, ConfigError
 from .download import DownloadJob, ModelInfo, in_use, list_models, load_catalog, make_plan, use_in_config
 
-INFO = "mcp_info"
+INFO = "server"
 REQUESTS = ("status", "settings", "models", "catalog", "download_model", "download_stop", "quit", "help", "ping")
 Word = Union[str, int, float]
 
@@ -77,6 +80,7 @@ class Status:
         self._on_quit: List[Callable[[], None]] = []  # what to stop before exiting, in order
         self._on_change: List[Callable[[], None]] = []  # who shows the state (the hub, for the page)
         self._off_said = False
+        self._quitting = threading.Lock()
         self._downloading = threading.Lock()  # one download at a time, from the request to its end
 
     @property
@@ -98,17 +102,17 @@ class Status:
         self._on_change.append(changed)
 
     def started(self) -> None:
-        """Tell Max that Bach has started: mcp_info status 1."""
+        """Tell Max that Bach has started: server status 1."""
         self._say("status", 1)
 
     def off(self) -> None:
-        """Tell Max that Bach goes off: mcp_info status 0, its last message."""
+        """Tell Max that Bach goes off: server status 0, its last message."""
         if not self._off_said:
             self._off_said = True
             self._say("status", 0)
 
     def warning(self, text: str) -> None:
-        """Anything to tell Max that has no category of its own: mcp_info warning <text>."""
+        """Anything to tell Max that has no category of its own: server warning <text>."""
         self._say("warning", text)
 
     def answer(self, request: str) -> None:
@@ -161,7 +165,9 @@ class Status:
         self._on_quit.append(stop)
 
     def quit(self) -> None:
-        """Stop everything and exit the process, whatever door it is (`bach quit`)."""
+        """Stop everything and exit the process, whatever door it is (`bach quit`, a signal, closed input)."""
+        if not self._quitting.acquire(blocking=False):
+            return  # already on its way: the first one exits the process
         self.set("off")
         if self.job is not None and self.job.running:
             self.job.stop()
@@ -226,15 +232,38 @@ def watch_input(status: Status) -> None:
     """Read what reaches Bach's own input, on a thread. Max's [shell] runs Bach in a terminal of
     its own, and while Bach runs, a second command sent to that [shell] is typed into Bach rather
     than started: a second start therefore arrives here, and Max is warned. `quit` typed there
-    stops Bach. Only for `run`: with `serve --stdio` the input is MCP, with `agent` the chat."""
+    stops Bach, and so does that terminal closing. Not with `serve --stdio`, where the input is
+    MCP, or `agent`, where it is the chat. A Bach started with no input at all keeps running."""
+    if _no_input():
+        return
+
     def read() -> None:
-        import sys
         try:
             for line in sys.stdin:
                 on_input(status, line)
         except (OSError, ValueError):
-            pass  # no input (closed, or none at all)
+            pass  # the terminal went away
+        status.quit()
     threading.Thread(target=read, name="bach-input", daemon=True).start()
+
+
+def _no_input() -> bool:
+    """Started without an input to lose (no stdin, or /dev/null): the end of it means nothing."""
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            return sys.stdin is None
+        return stat.S_ISCHR(os.fstat(sys.stdin.fileno()).st_mode)
+    except (OSError, ValueError):
+        return True
+
+
+def quit_on_signals(status: Status) -> None:
+    """SIGTERM and SIGHUP (the process killed, its terminal gone) quit like `bach quit`, so the
+    model server never stays behind. On a thread: quit() waits for the model server to stop."""
+    def on_signal(_number: int, _frame: Any) -> None:
+        threading.Thread(target=status.quit, name="bach-quit", daemon=True).start()
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGHUP, on_signal)
 
 
 def on_input(status: Status, line: str) -> None:
@@ -307,4 +336,4 @@ def start_bridge(config: Config, door: str) -> Tuple[MaxBridge, Status]:
     return bridge, status
 
 
-__all__ = ["Status", "start_bridge", "watch_input", "settings", "INFO", "REQUESTS"]
+__all__ = ["Status", "start_bridge", "watch_input", "quit_on_signals", "settings", "INFO", "REQUESTS"]

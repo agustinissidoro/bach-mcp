@@ -19,7 +19,7 @@
 	</inletlist>
 	<outletlist>
 		<outlet id="0" type="">
-			<digest>Score in the @out format</digest>
+			<digest>Score in the @to format, or a message passed through (@transparent 1)</digest>
 		</outlet>
 	</outletlist>
 	<objarglist>
@@ -28,16 +28,21 @@
 		<method name="llll">
 			<arglist><arg name="score" optional="0" type="llll" /></arglist>
 			<digest>Score in (llll)</digest>
-			<description>A score in <o>bach.roll</o>'s gathered syntax, when <at>in</at> is <m>llll</m> or <m>t</m>.</description>
+			<description>A score in <o>bach.roll</o>'s gathered syntax, when <at>from</at> is <m>llll</m> or <m>t</m>.</description>
 		</method>
 		<method name="dictionary">
 			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
 			<digest>Score in (dictionary)</digest>
-			<description>A score as a dictionary, when <at>in</at> is <m>json</m>.</description>
+			<description>A score as a dictionary, when <at>from</at> is <m>json</m>.</description>
+		</method>
+		<method name="anything">
+			<arglist><arg name="message" optional="0" type="list" /></arglist>
+			<digest>Any other message</digest>
+			<description>With <at>transparent</at> 1, any message that is not a native llll or <m>dictionary</m> &lt;name&gt; goes out of the outlet unchanged. With <at>transparent</at> 0 it is refused with an error. With <at>from</at> <m>t</m> every message is read as a text llll, so nothing is passed through.</description>
 		</method>
 	</methodlist>
 	<attributelist>
-		<attribute name="in" get="1" set="1" type="symbol" size="1">
+		<attribute name="from" get="1" set="1" type="symbol" size="1">
 			<digest>Input format</digest>
 			<description><m>llll</m>: native bach llll. <m>t</m>: text llll. <m>json</m>: a dictionary.</description>
 			<attributelist>
@@ -50,7 +55,7 @@
 				</attribute>
 			</attributelist>
 		</attribute>
-		<attribute name="out" get="1" set="1" type="symbol" size="1">
+		<attribute name="to" get="1" set="1" type="symbol" size="1">
 			<digest>Output format</digest>
 			<description><m>json</m>: a dictionary. <m>llll</m>: native bach llll. <m>t</m>: text llll.</description>
 			<attributelist>
@@ -61,6 +66,15 @@
 					<enum name="llll" />
 					<enum name="t" />
 				</attribute>
+			</attributelist>
+		</attribute>
+		<attribute name="transparent" get="1" set="1" type="int" size="1">
+			<digest>Pass other messages through</digest>
+			<description>1 (default): messages that are not a native llll or a dictionary go out of the outlet unchanged. 0: only lllls and dictionaries are taken. With <at>from</at> <m>t</m> every message is a text llll, so nothing is passed through.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Pass Other Messages Through" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
 			</attributelist>
 		</attribute>
 	</attributelist>

@@ -4,7 +4,7 @@ bachmcp.playground.js
 Node for Max ([node.script]): makes sure a playground folder is there, with
 
     <path>/algorithms
-    <path>/rolls
+    <path>/scores
     <path>/prompts
 
     script start <path>
@@ -28,7 +28,7 @@ const path = require("path");
 let Max = null;
 try { Max = require("max-api"); } catch (e) { /* outside Max: print instead */ }
 
-const FOLDERS = ["algorithms", "rolls", "prompts"];
+const FOLDERS = ["algorithms", "scores", "prompts"];
 
 // Max quotes an atom with spaces in it, so a message is words; the path stays one atom.
 function out(...atoms) {

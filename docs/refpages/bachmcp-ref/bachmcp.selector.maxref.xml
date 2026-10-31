@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.selector" module="bachmcp" category="bachmcp">
+	<digest>Selector with its parameter panel</digest>
+	<description>Typed in a box, becomes a bpatcher of <o>bachmcp.bpatcher.selector</o>: <o>bachmcp.algo.select</o> with its <o>bachmcp.gui.params</o> panel. The first argument is the instance's name.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">algorithm</metadata>
+		<metadata name="tag">select</metadata>
+		<metadata name="tag">score</metadata>
+		<metadata name="tag">panel</metadata>
+	</metadatalist>
+</c74object>

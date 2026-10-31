@@ -15,7 +15,7 @@ model: they ask target(), which the hub (chat/hub.py) answers, with the
 instance of the prompt being answered, else the active one.
 
     Target(name, kind, playground)
-      .algorithms .rolls .prompts            the playground's folders
+      .algorithms .scores .prompts           the playground's folders
       .algorithm_file .roll_file             <name>.js, <name>.json in them
 """
 
@@ -67,8 +67,8 @@ class Target:
         return os.path.join(self.playground, "algorithms")
 
     @property
-    def rolls(self) -> str:
-        return os.path.join(self.playground, "rolls")
+    def scores(self) -> str:
+        return os.path.join(self.playground, "scores")
 
     @property
     def prompts(self) -> str:
@@ -80,7 +80,7 @@ class Target:
 
     @property
     def roll_file(self) -> str:
-        return os.path.join(self.rolls, f"{self.name}.json")
+        return os.path.join(self.scores, f"{self.name}.json")
 
 
 def _no_hub() -> Target:

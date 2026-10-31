@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.algo.generate" module="bachmcp" category="bachmcp">
+	<digest>Generate a score with an algorithm</digest>
+	<description>Runs a generator algorithm (function produce(p)) and outputs its score as a <o>dict</o> (bachjson); use <o>bachmcp.translate</o> to send it to <o>bach.roll</o>. Every parameter change runs it again (<at>auto_dump</at> 1).</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">algorithm</metadata>
+		<metadata name="tag">generate</metadata>
+		<metadata name="tag">produce</metadata>
+		<metadata name="tag">score</metadata>
+	</metadatalist>
+</c74object>

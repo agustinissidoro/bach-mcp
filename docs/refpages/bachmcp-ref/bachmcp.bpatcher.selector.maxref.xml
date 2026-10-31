@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.bpatcher.selector" module="bachmcp" category="bachmcp">
+	<digest>Selector and panel, for a bpatcher</digest>
+	<description>The view of <o>bachmcp.selector</o>: load it in a <o>bpatcher</o> with the instance's name in @args.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">algorithm</metadata>
+		<metadata name="tag">select</metadata>
+		<metadata name="tag">bpatcher</metadata>
+	</metadatalist>
+</c74object>

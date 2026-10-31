@@ -1,28 +1,34 @@
 /*
 bachmcp.gui.params.v8ui.js — the parameter panel (v8ui).
 
-Create it as [v8ui bachmcp.gui.params.v8ui.js] (its box must not ignore clicks), then:
+Create it as [v8ui bachmcp.gui.params.v8ui.js] (its box must not ignore clicks), or
+[bachmcp.gui.params] (init/bachmcp-objectmappings.txt); a first argument is the
+name (as set_name), e.g. [bachmcp.gui.params t1]. Then:
   a runner's middle outlet  ->  this inlet           (spec, set, status, source, source_mode)
-  this outlet               ->  the runner's inlet   (param <name> <value...>, load <path>, ...)
+  this outlet               ->  the runner's inlet   (param <name> <value...>, ...)
 
 The panel builds itself from the spec the runner sends when it loads a file
 (bachmcp.gui.params.panel.js, with the elements of bachmcp.gui.params.elements.js):
-  options     snap (drags land on round values; alt inverts it while dragging),
-              reset all; a transformer's source: notes, write
+  options     drags land on round values (alt lets one through);
+              reset all; a source's process sel. ("process_only_selection 0|1"); bypass ("bypass 0|1"), repeat; a pitch card's snap toggle ½ | ¼ | free ("snap 0|1|3"),
+              a time card's 100ms | 10ms | free;
+              a transformer's source: notes, write
               (write_to_playground), capture (capture_source) and its mode,
-              non-destructive | destructive (sends "source_mode 1|0")
+              non-destructive | destructive (sends "source_mode 1|0");
+              a selector's: the same, and whole score | selection only (sends "dump_selection_only 0|1")
   parameters  one card each. Moving a control sends "param <name> <value...>".
               Double-click a control: back to its declared value. Click a
               pitch's value (highlighted) to show it as a name, midicents or
               MIDI (an interval: cents or semitones).
 The panel resizes itself to its content (autosize 0 to stop).
 
-It is saved with the patch (parameters, values and the file path), and on
-reopening it asks the runner to load the file again with those values. It also
+It is saved with the patch (parameters, values and the file path) and shows
+them again on reopening; it sends nothing then (no load to the runner). It also
 works with pattr / pattrstorage: give it a scripting name to store presets.
 
 Other messages: reset (all parameters to their declared values), bang (send
-every value), clear, autosize 0/1.
+every value), clear, autosize 0/1, set_name [name] (drawn while no algorithm is
+loaded; without a name, or with none set: "No algorithm loaded.").
 */
 
 autowatch = 1;
@@ -42,12 +48,13 @@ const gui = (() => {
 })();
 
 var panel = gui && gui.Panel ? new gui.Panel() : null;
+// the box's first argument: the name, as set_name
+if (panel && jsarguments.length > 1 && !String(jsarguments[1]).startsWith("@")) panel.setName(jsarguments[1]);
 if (!panel) post("bachmcp.gui.params: cannot load bachmcp.gui.params.panel.js; the GUI_parameters folder must be in Max's search path\n");
 let autosizing = true;
-const reloader = new Task(askForFile, this);
 
 setinletassist(0, "from a runner's middle outlet: spec, set, status, source, source_mode");
-setoutletassist(0, "to the runner: param <name> <value...>; capture_source, write_to_playground, source_mode, load");
+setoutletassist(0, "to the runner: param <name> <value...>; capture_source, write_to_playground, source_mode");
 
 function emit(messages) {
   for (const m of messages) outlet(0, m);
@@ -84,6 +91,10 @@ function spec(text) {
   emit(kept);
 }
 
+function set_name(name) {
+  if (panel && panel.setName(name)) mgraphics.redraw();
+}
+
 function set(name, ...atoms) {
   if (panel && panel.setValue(String(name), atoms)) mgraphics.redraw();
 }
@@ -100,6 +111,29 @@ function dump() {}
 function source_mode(flag) {
   if (panel && panel.setSourceMode(flag)) mgraphics.redraw();
 }
+
+function involutive(flag) {
+  if (panel && panel.setInvolutive(flag)) mgraphics.redraw();
+}
+
+function process_only_selection(flag) {
+  if (panel && panel.setWithinSelection(flag)) mgraphics.redraw();
+}
+
+function bypass(flag) {
+  if (panel && panel.setBypass(flag)) mgraphics.redraw();
+}
+
+function snap(n) {
+  if (panel && panel.setPitchSnap(n)) mgraphics.redraw();
+}
+
+function dump_selection_only(flag) {
+  if (panel && panel.setSelectionOnly(flag)) mgraphics.redraw();
+}
+
+// a transformer's input_mode echo: nothing to show
+function input_mode() {}
 
 function status(kind, ...text) {
   if (!panel) return;
@@ -202,15 +236,7 @@ function restore(text) {
   }
   panel.restore(snapshot);
   refresh();
-  // Once the patch is connected, ask the runner for the file. It answers with its
-  // spec, and the panel sends back the values it kept.
-  if (panel.path) reloader.schedule(250);
 }
-
-function askForFile() {
-  if (panel.path) outlet(0, ["load", panel.path]);
-}
-askForFile.local = 1;
 
 // ── pattr ───────────────────────────────────────────────────────────────── //
 

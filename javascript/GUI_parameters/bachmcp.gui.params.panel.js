@@ -2,12 +2,13 @@
 bachmcp.gui.params.panel.js
 ---------------------------
 The Panel: a title row (the algorithm and its kind), then two sections.
-"Options": snap (drags land on the grid; alt inverts it while dragging) and
-reset all; a transformer adds its source card: how many notes, write
+Drags land on each slider's grid; alt lets one through. "Options": reset
+all; then bypass ("bypass 0|1"), repeat ("repeat"); pitch cards toggle ½ | ¼ | free ("snap 0|1|3"), time cards 100ms | 10ms | free; a transformer adds its source card: how many notes, write
 (write_to_playground), capture (capture_source) and the source mode as two
 segments, non-destructive (the source is held; every output starts again from
 it) or destructive (every score at the runner's inlet becomes the source), sent
-as "source_mode 1|0". "Parameters": one card each, its name and value above its
+as "source_mode 1|0". A selector has the same card, and under the mode
+two more segments, whole score | selection only (sent as "dump_selection_only 0|1"). "Parameters": one card each, its name and value above its
 control. A status line closes the panel.
 
 The Panel turns mouse gestures into "param <name> <value...>" messages for a runner
@@ -45,8 +46,17 @@ var THEME = base.THEME,
 var makeElement = elements.makeElement;
 
 function Panel() {
+  this.name = "";  // set_name: shown while no algorithm is loaded; kept by clear
   this.clear();
 }
+
+/** The instance's name, drawn while no algorithm is loaded. */
+Panel.prototype.setName = function (name) {
+  var next = name === undefined || name === null ? "" : String(name);
+  if (next === this.name) return false;
+  this.name = next;
+  return !this.title;
+};
 
 Panel.prototype.clear = function () {
   this.title = "";
@@ -62,6 +72,22 @@ Panel.prototype.clear = function () {
   this.hover = null;
   this.snap = true;  // drags snap to each element's grid; alt inverts it for one gesture
   this.sourceMode = "nondestructive";  // transformers: or "destructive" (see the runner)
+  this.involutive = false;  // selectors: sel (false) or select (true)
+  this.selectionOnly = true;  // selectors: dump_selection_only
+  this.bypass = false;
+  this.withinSelection = false;  // process_only_selection
+  this.pitchSnap = 3;  // the output's pitches: 0 semitones, 1 quarter tones, 3 free
+  this.timeSnap = 0;   // time sliders: 0 their own grid, 1 100 ms, 2 10 ms
+};
+
+/** Transformers and selectors work on a source: they have the source card. */
+Panel.prototype.hasSource = function () {
+  return this.kind === "transformer" || this.kind === "selector";
+};
+
+/** The two segments of the source mode, and whether the right one is on. */
+Panel.prototype.modes = function () {
+  return { left: "non-destructive", right: "destructive", on: this.sourceMode === "destructive" };
 };
 
 /**
@@ -89,11 +115,16 @@ Panel.prototype.setSpec = function (spec) {
     }
     this.items.push(item);
   }
+  this.applyGrids();
   this.active = null;
   this.width = 0;
   this.places = null;
   // the runner starts nondestructive: tell it the mode this panel is in
-  if (this.kind === "transformer" && this.sourceMode !== "nondestructive") messages.push(["source_mode", 0]);
+  if (this.hasSource() && this.sourceMode !== "nondestructive") messages.push(["source_mode", 0]);
+  if (this.kind === "selector" && !this.selectionOnly) messages.push(["dump_selection_only", 0]);
+  if (this.bypass) messages.push(["bypass", 1]);
+  if (this.hasSource() && this.withinSelection) messages.push(["process_only_selection", 1]);
+  if (this.pitchSnap !== 3) messages.push(["snap", this.pitchSnap]);
   return messages;
 };
 
@@ -102,6 +133,99 @@ Panel.prototype.setSourceMode = function (flag) {
   if (String(flag) !== "0" && String(flag) !== "1") return false;
   this.sourceMode = String(flag) === "0" ? "destructive" : "nondestructive";
   return true;
+};
+
+/** A selector's mode set from outside (the runner's echo). */
+Panel.prototype.setInvolutive = function (flag) {
+  if (String(flag) !== "0" && String(flag) !== "1") return false;
+  this.involutive = String(flag) === "1";
+  return true;
+};
+
+/** A selector's dump_selection_only set from outside (the runner's echo). */
+Panel.prototype.setSelectionOnly = function (flag) {
+  if (String(flag) !== "0" && String(flag) !== "1") return false;
+  this.selectionOnly = String(flag) === "1";
+  return true;
+};
+
+/** bypass and snap set from outside (the runner's echo). */
+Panel.prototype.setWithinSelection = function (flag) {
+  if (String(flag) !== "0" && String(flag) !== "1") return false;
+  this.withinSelection = String(flag) === "1";
+  return true;
+};
+
+Panel.prototype.setBypass = function (flag) {
+  if (String(flag) !== "0" && String(flag) !== "1") return false;
+  this.bypass = String(flag) === "1";
+  return true;
+};
+
+Panel.prototype.setPitchSnap = function (n) {
+  if (["0", "1", "3"].indexOf(String(n)) < 0) return false;
+  this.pitchSnap = Number(n);
+  this.applyGrids();
+  return true;
+};
+
+/**
+ * The snap toggles, three states each, on the cards they act on. A pitch (or
+ * interval) card's toggle is the runner's snap: ½ (semitones), ¼ (quarter
+ * tones), free; it sets where those sliders drag to and is sent as "snap
+ * 0|1|3". A time card's toggle only sets where time sliders drag to: 100 ms,
+ * 10 ms, free (the slider's own grid).
+ */
+var PITCH_SNAPS = [[0, "\u00bd", 100], [1, "\u00bc", 50], [3, "free", 0]];
+var TIME_SNAPS = [[1, "100ms", 100], [2, "10ms", 10], [0, "free", 0]];
+
+function pitchy(item) {
+  return item.kind === "pitch" || item.kind === "interval";
+}
+
+function timed(item) {
+  return item.kind === "time";
+}
+
+function snapStates(item) {
+  return pitchy(item) ? PITCH_SNAPS : timed(item) ? TIME_SNAPS : null;
+}
+
+function stateOf(states, value) {
+  for (var i = 0; i < states.length; i++) if (states[i][0] === value) return i;
+  return states.length - 1;
+}
+
+/** The toggle's state for this item: [value, text, step], or null if it has none. */
+Panel.prototype.snapState = function (item) {
+  var states = snapStates(item);
+  if (!states) return null;
+  return states[stateOf(states, pitchy(item) ? this.pitchSnap : this.timeSnap)];
+};
+
+/** A click on an item's toggle: the next state; the messages for the runner. */
+Panel.prototype.nextSnap = function (item) {
+  var states = snapStates(item);
+  var next = states[(stateOf(states, pitchy(item) ? this.pitchSnap : this.timeSnap) + 1) % states.length][0];
+  if (pitchy(item)) this.pitchSnap = next;
+  else this.timeSnap = next;
+  this.applyGrids();
+  return pitchy(item) ? [["snap", next]] : [];
+};
+
+Panel.prototype.applyGrids = function () {
+  for (var i = 0; i < this.items.length; i++) {
+    var it = this.items[i];
+    if (it.baseGrid === undefined) it.baseGrid = it.grid;
+    var st = this.snapState(it);
+    if (st) it.grid = st[2] || it.baseGrid;
+  }
+};
+
+/** Whether a drag of this item snaps (before alt): always, on its toggle's step or its own grid. */
+Panel.prototype.snapping = function (item) {
+  var st = this.snapState(item);
+  return st && st[2] ? true : this.snap;
 };
 
 Panel.prototype.find = function (name) {
@@ -126,7 +250,7 @@ Panel.prototype.setSource = function (notes, from) {
 
 /** Where the options are, for this width: computed by layout(). */
 Panel.prototype.ui = function (width) {
-  if (!this.places || width !== this.width) this.layout(width);
+  if (!this.places || width !== this.width) this.layout(width, this.height);
   return this.places;
 };
 
@@ -143,11 +267,6 @@ Panel.prototype.writeRect = function (width) {
 /** The switch between holding the source (non-destructive) and working on every result (destructive). */
 Panel.prototype.modeRect = function (width) {
   return this.ui(width).mode;
-};
-
-/** The switch that turns snapping to the grid on and off. */
-Panel.prototype.snapRect = function (width) {
-  return this.ui(width).snap;
 };
 
 /** The button that sets every parameter back to its declared value. */
@@ -167,53 +286,90 @@ Panel.prototype.valueWidth = function () {
 };
 
 /**
- * Place everything for this width; returns the height the panel needs.
- * Title row, then "options" (snap, reset; a transformer's source), then
- * "parameters": one card each, its name and value above its control.
+ * Place everything for this width (and height, when known); returns the height
+ * the panel needs. Title row: the algorithm, its kind and the bypass toggle.
+ * "output": repeat, write. Pitch and time cards carry their snap toggle
+ * (see snapState). "source"
+ * (transformers, selectors; its header says how many notes): capture and the
+ * toggles destructive and, for selectors, selection only. "parameters": its
+ * header holds the grid toggle and reset; one card each. When everything does
+ * not fit the height, the panel is compact: smaller headers, and each
+ * parameter on one line (name, control, value).
  */
-Panel.prototype.layout = function (width) {
+Panel.prototype.layout = function (width, height) {
+  this.height = height || 0;
+  var full = this.place(width, false);
+  if (height > 0 && full > height + 0.5) {
+    this.compact = true;
+    return this.place(width, true);
+  }
+  this.compact = false;
+  return full;
+};
+
+Panel.prototype.place = function (width, compact) {
   this.width = width;
   this.rows = [];
-  var p = { snap: null, reset: null, capture: null, write: null, mode: null, source: null, sections: [] };
+  var p = { within: null, bypass: null, repeat: null, write: null, capture: null, mode: null, only: null,
+    snap: null, reset: null, sections: [] };
   this.places = p;
   var inner = width - 2 * M.pad;
+  var section = compact ? 14 : M.section;
   var y = M.title + M.gap;
   if (!this.items.length && !this.title) return y + M.row + M.status;
-  p.sections.push({ text: "options", y: y });
-  y += M.section;
-  var x = M.pad;
-  if (this.hasGrid()) {
-    p.snap = { x: x, y: y, w: 58, h: M.button };
-    x += 62;
-  }
-  p.reset = { x: x, y: y, w: 62, h: M.button };
+  p.bypass = { x: width - M.pad - 56, y: (M.title - M.button) / 2, w: 56, h: M.button };
+  // output
+  p.sections.push({ text: "output", y: y, h: section });
+  y += section;
+  p.repeat = { x: M.pad, y: y, w: 50, h: M.button };
+  p.write = { x: M.pad + 54, y: y, w: 44, h: M.button };
   y += M.button + M.gap;
-  if (this.kind === "transformer") {
-    var cardY = y;
-    p.capture = { x: width - M.pad - 6 - 56, y: y + 6, w: 56, h: M.button };
-    p.write = { x: p.capture.x - 50, y: y + 6, w: 46, h: M.button };
-    p.source = { x: M.pad + 8, y: y + 6, w: p.write.x - M.pad - 14, h: M.button };
-    p.mode = { x: M.pad + 6, y: y + 6 + M.button + M.gap, w: inner - 12, h: M.button };
-    y = p.mode.y + M.button + 6;
-    p.sourceCard = { x: M.pad, y: cardY, w: inner, h: y - cardY };
-    y += M.gap;
+  // source
+  if (this.hasSource()) {
+    p.sections.push({ text: "source", y: y, h: section, source: true });
+    y += section;
+    var n = this.kind === "selector" ? 4 : 3, w = (inner - (n - 1) * 4) / n;
+    p.capture = { x: M.pad, y: y, w: w, h: M.button };
+    p.mode = { x: M.pad + w + 4, y: y, w: w, h: M.button };
+    p.within = { x: M.pad + 2 * (w + 4), y: y, w: w, h: M.button };
+    if (n === 4) p.only = { x: M.pad + 3 * (w + 4), y: y, w: w, h: M.button };
+    y += M.button + M.gap;
   }
-  p.sections.push({ text: "parameters" + (this.items.length ? " · " + this.items.length : ""), y: y + 2 });
-  y += M.section + 2;
+  // parameters, reset in the header
+  var head = { text: "parameters" + (this.items.length ? " \u00b7 " + this.items.length : ""), y: y, h: section };
+  p.sections.push(head);
+  var by = y + (section - 16) / 2 - 1;
+  p.reset = { x: width - M.pad - 44, y: by, w: 44, h: 16 };
+  y += section + 2;
   var vw = this.valueWidth();
+  var lw = clamp(Math.round(inner * 0.28), M.labelMin, M.labelMax);
   for (var i = 0; i < this.items.length; i++) {
     var item = this.items[i];
     var row = { item: item, y: y };
-    row.label = { x: M.pad + 8, y: y + 4, w: inner - vw - 20, h: M.head };
-    row.value = { x: width - M.pad - 8 - vw, y: y + 4, w: vw, h: M.head };
     var ch = item.tall || M.row;
-    row.control = { x: M.pad + 8, y: y + 4 + M.head + 2, w: inner - 16, h: ch };
-    row.h = 4 + M.head + 2 + ch + 6;
+    if (compact && !item.tall) {
+      row.label = { x: M.pad + 8, y: y + 3, w: lw, h: M.row };
+      row.value = { x: width - M.pad - 6 - vw, y: y + 3, w: vw, h: M.row };
+      row.control = { x: row.label.x + lw + 4, y: y + 3, w: row.value.x - row.label.x - lw - 10, h: M.row };
+      row.h = M.row + 6;
+    } else {
+      row.label = { x: M.pad + 8, y: y + 4, w: inner - vw - 20, h: M.head };
+      row.value = { x: width - M.pad - 8 - vw, y: y + 4, w: vw, h: M.head };
+      row.control = { x: M.pad + 8, y: y + 4 + M.head + 2, w: inner - 16, h: ch };
+      row.h = 4 + M.head + 2 + ch + 6;
+    }
+    if (snapStates(item)) {
+      // the snap toggle, left of the value
+      row.snapToggle = { x: row.value.x - 42, y: row.value.y + (row.value.h - 16) / 2, w: 38, h: 16 };
+      if (compact) row.control.w -= 42;
+      else row.label.w -= 42;
+    }
     this.rows.push(row);
-    y += row.h + M.gap;
+    y += row.h + (compact ? 2 : M.gap);
   }
   return y + M.status;
 };
+
 
 function button(g, r, text, on, hot) {
   rounded(g, r.x, r.y, r.w, r.h, 4, on ? THEME.fill : (hot ? THEME.buttonHover : THEME.button));
@@ -225,51 +381,45 @@ Panel.prototype.hot = function (r) {
 };
 
 Panel.prototype.paint = function (g, width, height) {
-  if (width !== this.width || !this.places) this.layout(width);
+  if (width !== this.width || height !== this.height || !this.places) this.layout(width, height);
   var p = this.places;
   box(g, 0, 0, width, height, THEME.bg);
   // title row
   box(g, 0, 0, width, M.title, THEME.header);
   box(g, 0, M.title - 1, width, 1, THEME.line);
-  var kindText = this.title ? (this.kind === "transformer" ? "transformer" : "generator") : "";
-  var titleRight = width - M.pad;
+  var kindText = this.title ? ({ transformer: "transformer", selector: "selector" }[this.kind] || "generator") : "";
+  var titleRight = p.bypass ? p.bypass.x - 6 : width - M.pad;
   if (kindText) {
     var kw = kindText.length * 6 + 14;
-    var kr = { x: width - M.pad - kw, y: (M.title - 16) / 2, w: kw, h: 16 };
+    var kr = { x: titleRight - kw, y: (M.title - 16) / 2, w: kw, h: 16 };
     rounded(g, kr.x, kr.y, kr.w, kr.h, 8, THEME.button);
     label(g, kindText, kr, "center", THEME.dim, THEME.smallSize);
     titleRight = kr.x - 6;
   }
-  label(g, this.title || "bachmcp.gui.params", { x: M.pad + 2, y: 0, w: titleRight - M.pad - 2, h: M.title },
-    "left", this.title ? THEME.text : THEME.dim, THEME.titleSize, THEME.bold);
-  if (!this.items.length && !this.title) {
-    label(g, "waiting for a runner", { x: M.pad + 2, y: M.title + M.gap, w: width - 2 * M.pad, h: M.row }, "left", THEME.dim);
+  // no algorithm: the instance's name (set_name) over "No algorithm loaded.", or that alone
+  label(g, this.title || this.name || "No algorithm loaded.", { x: M.pad + 2, y: 0, w: titleRight - M.pad - 2, h: M.title },
+    "left", this.title || this.name ? THEME.text : THEME.dim, THEME.titleSize, THEME.bold);
+  if (!this.items.length && !this.title && this.name) {
+    label(g, "No algorithm loaded.", { x: M.pad + 2, y: M.title + M.gap, w: width - 2 * M.pad, h: M.row }, "left", THEME.dim);
   }
+  if (p.bypass) button(g, p.bypass, this.bypass ? "bypassed" : "bypass", this.bypass, this.hot(p.bypass));
   for (var k = 0; k < p.sections.length; k++) {
     var sec = p.sections[k];
-    label(g, sec.text.toUpperCase(), { x: M.pad + 2, y: sec.y, w: width - 2 * M.pad, h: M.section - 4 },
-      "left", THEME.faint, THEME.smallSize, THEME.bold);
+    var text = sec.text.toUpperCase(), tc = THEME.faint;
+    if (sec.source) {
+      var has = this.source && this.source.notes;
+      text += has ? " \u00b7 " + this.source.notes + " notes" + (this.source.from ? " \u00b7 " + this.source.from : "") : " \u00b7 none";
+      if (!has) tc = THEME.error;
+    }
+    label(g, text.toUpperCase(), { x: M.pad + 2, y: sec.y, w: width - 2 * M.pad, h: sec.h - 4 }, "left", tc, THEME.smallSize, THEME.bold);
   }
-  if (p.snap) button(g, p.snap, this.snap ? "snap on" : "snap off", this.snap, this.hot(p.snap));
-  if (p.reset) button(g, p.reset, "reset all", false, this.hot(p.reset));
-  if (p.sourceCard) {
-    var c = p.sourceCard;
-    rounded(g, c.x, c.y, c.w, c.h, M.radius, THEME.card);
-    var has = this.source && this.source.notes;
-    var from = has && this.source.from ? " · " + this.source.from : "";
-    label(g, has ? "source: " + this.source.notes + " notes" + from : "no source", p.source, "left",
-      has ? THEME.text : THEME.error);
-    button(g, p.write, "write", false, this.hot(p.write));
-    button(g, p.capture, "capture", true, false);
-    if (this.hot(p.capture)) outline(g, p.capture.x, p.capture.y, p.capture.w, p.capture.h, 4, THEME.knob);
-    // the source mode, as two segments
-    var m = p.mode, half = m.w / 2, destructive = this.sourceMode === "destructive";
-    rounded(g, m.x, m.y, m.w, m.h, 4, THEME.well);
-    var on = { x: m.x + (destructive ? half : 0) + 2, y: m.y + 2, w: half - 4, h: m.h - 4 };
-    rounded(g, on.x, on.y, on.w, on.h, 3, THEME.fill);
-    label(g, "non-destructive", { x: m.x, y: m.y, w: half, h: m.h }, "center", destructive ? THEME.dim : THEME.bg, 10);
-    label(g, "destructive", { x: m.x + half, y: m.y, w: half, h: m.h }, "center", destructive ? THEME.bg : THEME.dim, 10);
-  }
+  if (p.repeat) button(g, p.repeat, "repeat", false, this.hot(p.repeat));
+  if (p.write) button(g, p.write, "write", false, this.hot(p.write));
+  if (p.capture) button(g, p.capture, "capture", false, this.hot(p.capture));
+  if (p.mode) button(g, p.mode, "destructive", this.sourceMode === "destructive", this.hot(p.mode));
+  if (p.within) button(g, p.within, "process sel.", this.withinSelection, this.hot(p.within));
+  if (p.only) button(g, p.only, "dump sel.", this.selectionOnly, this.hot(p.only));
+  if (p.reset) button(g, p.reset, "reset", false, this.hot(p.reset));
   if (this.title && !this.items.length) {
     label(g, "no parameters", { x: M.pad + 2, y: (p.sections.length ? p.sections[p.sections.length - 1].y : M.title) + M.section,
       w: width - 2 * M.pad, h: M.row }, "left", THEME.dim);
@@ -283,6 +433,8 @@ Panel.prototype.paint = function (g, width, height) {
     if (active) outline(g, M.pad, row.y, width - 2 * M.pad, row.h, M.radius, THEME.fillDim);
     label(g, row.item.name, row.label, "left", THEME.text, THEME.fontSize, THEME.bold);
     row.item.paint(g, row.control);
+    var st = this.snapState(row.item);
+    if (st && row.snapToggle) button(g, row.snapToggle, st[1], st[2] > 0, this.hot(row.snapToggle));
     var t = row.item.text();
     if (t) {
       var switchable = row.item.displays().length > 1;
@@ -323,17 +475,31 @@ Panel.prototype.mouseDown = function (x, y, mods) {
   this.active = null;
   if (p.capture && inside(p.capture, x, y)) return [["capture_source"]];
   if (p.write && inside(p.write, x, y)) return [["write_to_playground"]];
+  if (p.within && inside(p.within, x, y)) {
+    this.withinSelection = !this.withinSelection;
+    return [["process_only_selection", this.withinSelection ? 1 : 0]];
+  }
+  if (p.only && inside(p.only, x, y)) {
+    this.selectionOnly = !this.selectionOnly;
+    return [["dump_selection_only", this.selectionOnly ? 1 : 0]];
+  }
   if (p.mode && inside(p.mode, x, y)) {
-    var mode = x >= p.mode.x + p.mode.w / 2 ? "destructive" : "nondestructive";
-    if (mode === this.sourceMode) return [];
-    this.sourceMode = mode;
-    return [["source_mode", mode === "destructive" ? 0 : 1]];
+    this.sourceMode = this.sourceMode === "destructive" ? "nondestructive" : "destructive";
+    return [["source_mode", this.sourceMode === "destructive" ? 0 : 1]];
   }
   if (p.snap && inside(p.snap, x, y)) {
     this.snap = !this.snap;
     return [];
   }
   if (p.reset && inside(p.reset, x, y)) return this.resetAll();
+  if (p.bypass && inside(p.bypass, x, y)) {
+    this.bypass = !this.bypass;
+    return [["bypass", this.bypass ? 1 : 0]];
+  }
+  if (p.repeat && inside(p.repeat, x, y)) return [["repeat"]];
+  for (var k = 0; k < this.rows.length; k++) {
+    if (this.rows[k].snapToggle && inside(this.rows[k].snapToggle, x, y)) return this.nextSnap(this.rows[k].item);
+  }
   for (var i = 0; i < this.rows.length; i++) {
     if (inside(this.rows[i].value, x, y) && this.rows[i].item.nextDisplay()) {
       this.active = null;
@@ -345,7 +511,7 @@ Panel.prototype.mouseDown = function (x, y, mods) {
   this.active = row;
   if (!row) return [];
   mods = mods || {};
-  row.item.snapping = this.snap !== Boolean(mods.alt);
+  row.item.snapping = this.snapping(row.item) !== Boolean(mods.alt);
   return row.item.down(row.control, x, y, mods) ? [this.message(row.item)] : [];
 };
 
@@ -353,7 +519,7 @@ Panel.prototype.mouseDrag = function (x, y, mods) {
   var row = this.active;
   if (!row) return [];
   mods = mods || {};
-  row.item.snapping = this.snap !== Boolean(mods.alt);
+  row.item.snapping = this.snapping(row.item) !== Boolean(mods.alt);
   return row.item.drag(row.control, x, y, mods) ? [this.message(row.item)] : [];
 };
 
@@ -395,15 +561,22 @@ Panel.prototype.snapshot = function () {
     var it = this.items[i];
     params.push({ name: it.name, type: it.type, range: it.range, step: it.step, unit: it.unit,
       options: it.options, value: copy(it.value), "default": copy(it.def),
-      kind: it.kind, grid: it.grid, display: it.display });
+      kind: it.kind, grid: it.baseGrid !== undefined ? it.baseGrid : it.grid, display: it.display });
   }
   return { title: this.title, path: this.path, kind: this.kind, source: this.source, params: params, snap: this.snap,
-    sourceMode: this.sourceMode };
+    sourceMode: this.sourceMode, involutive: this.involutive, selectionOnly: this.selectionOnly,
+    bypass: this.bypass, withinSelection: this.withinSelection, pitchSnap: this.pitchSnap, timeSnap: this.timeSnap };
 };
 
 Panel.prototype.restore = function (snapshot) {
   this.setSpec({ title: snapshot.title, path: snapshot.path, kind: snapshot.kind, params: [] });
   this.sourceMode = snapshot.sourceMode === "destructive" ? "destructive" : "nondestructive";
+  this.involutive = snapshot.involutive === true;
+  this.selectionOnly = snapshot.selectionOnly !== false;
+  this.bypass = snapshot.bypass === true;
+  this.withinSelection = snapshot.withinSelection === true;
+  this.pitchSnap = [0, 1, 3].indexOf(snapshot.pitchSnap) < 0 ? 3 : snapshot.pitchSnap;
+  this.timeSnap = [0, 1, 2].indexOf(snapshot.timeSnap) < 0 ? 0 : snapshot.timeSnap;
   this.setSpec(snapshot);
   this.snap = snapshot.snap !== false;
 };

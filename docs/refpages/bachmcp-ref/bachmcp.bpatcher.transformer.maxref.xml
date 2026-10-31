@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.bpatcher.transformer" module="bachmcp" category="bachmcp">
+	<digest>Transformer and panel, for a bpatcher</digest>
+	<description>The view of <o>bachmcp.transformer</o>: load it in a <o>bpatcher</o> with the instance's name in @args.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">algorithm</metadata>
+		<metadata name="tag">transform</metadata>
+		<metadata name="tag">bpatcher</metadata>
+	</metadatalist>
+</c74object>

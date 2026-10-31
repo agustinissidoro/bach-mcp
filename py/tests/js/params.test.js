@@ -92,11 +92,22 @@ test("rows do not overlap and controls stay inside the panel", () => {
   for (const r of rows) assert.ok(r.control.x >= 0 && r.control.x + r.control.w <= 320, r.item.name);
 });
 
-test("an empty panel says it is waiting", () => {
+test("an empty panel: No algorithm loaded., under the set_name name if there is one", () => {
   const m = loadPanel({ width: 200, height: 60 });
-  m.ctx.paint();
-  const texts = m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
-  assert.ok(texts.some((t) => t.startsWith("waiting")));
+  const texts = () => {
+    m.ctx.mgraphics.calls.length = 0;
+    m.ctx.paint();
+    return m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
+  };
+  assert.deepEqual(texts(), ["No algorithm loaded."]);
+  m.send("set_name", "t1");
+  assert.deepEqual(texts(), ["t1", "No algorithm loaded."]);
+  m.send("set_name");
+  assert.deepEqual(texts(), ["No algorithm loaded."]);
+  const named = loadPanel({ width: 200, height: 60, args: ["t2"] });
+  named.ctx.paint();
+  assert.deepEqual(named.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]),
+                   ["t2", "No algorithm loaded."], "the box's first argument is the name");
 });
 
 test("slider: click jumps, drag follows, shift drag is fine, double-click resets", () => {
@@ -212,7 +223,7 @@ test("status line, reset and bang", () => {
   assert.equal(sent(m).length, 9);
 });
 
-test("saved with the patch: restore rebuilds the panel and asks the runner for the file", () => {
+test("saved with the patch: restore rebuilds the panel and sends nothing", () => {
   const m = panelWith();
   m.send("set", "times", 33);
   m.ctx.save();
@@ -222,7 +233,7 @@ test("saved with the patch: restore rebuilds the panel and asks the runner for t
   fresh.send("restore", text);
   assert.equal(fresh.ctx.panel.find("times").value, 33);
   fresh.flush();
-  assert.deepEqual(sent(fresh), [["load", "/tmp/walkers.js"]]);
+  assert.deepEqual(sent(fresh), [], "no load on restore");
   // the runner answers with its spec at the declared values; the panel sends back what it kept
   fresh.send("spec", JSON.stringify(SPEC));
   assert.deepEqual(sent(fresh), [["times", 33]]);
@@ -313,7 +324,7 @@ test("a transformer's panel shows its source and a capture button", () => {
   m.ctx.paint();
   const texts = m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
   assert.ok(texts.includes("capture"));
-  assert.ok(texts.includes("source: 893 notes · file"));
+  assert.ok(texts.includes("SOURCE · 893 NOTES · FILE"));
   const b = m.ctx.panel.captureRect(320);
   m.ctx.onclick(b.x + 5, b.y + 5, 1, 0, 0, 0, 0, 0);
   assert.deepEqual(sent(m), [["capture_source"]]);
@@ -354,7 +365,7 @@ function clickValue(m, name) {
 test("a pitch shows as a name; clicking its value text switches to midicents, MIDI and back, sending nothing", () => {
   const m = panelWith(KINDS);
   let t = texts(m);
-  for (const shown of ["E4", "+400 mc", "C3–C6", "300 ms", "snap on"]) assert.ok(t.includes(shown), `draws ${shown}`);
+  for (const shown of ["E4", "+400 mc", "C3–C6", "300 ms", "reset"]) assert.ok(t.includes(shown), `draws ${shown}`);
   clickValue(m, "target");
   assert.ok(texts(m).includes("6400 mc"));
   clickValue(m, "target");
@@ -368,7 +379,7 @@ test("a pitch shows as a name; clicking its value text switches to midicents, MI
   assert.deepEqual(sent(m), []);
 });
 
-test("drags snap to the grid; alt or the snap switch lets them through", () => {
+test("drags snap to the grid; alt lets them through", () => {
   const m = panelWith(KINDS);
   click(m, "target", 0.5513);  // about 7001 cents
   assert.deepEqual(sent(m), [["target", 7000]]);
@@ -381,50 +392,35 @@ test("drags snap to the grid; alt or the snap switch lets them through", () => {
   click(m, "register", 0.01);
   assert.equal(sent(m)[0][1] % 100, 0);
   release(m);
-  const sw = m.ctx.panel.snapRect(m.ctx.panel.width);
-  m.ctx.onclick(sw.x + 2, sw.y + 2, 1, 0, 0, 0, 0, 0);
-  assert.equal(m.ctx.panel.snap, false);
-  release(m);
-  click(m, "target", 0.5513);
-  assert.notEqual(sent(m)[0][1] % 100, 0, "snap off: free");
-  release(m);
   click(m, "gap", 0);
   assert.deepEqual(sent(m), [["gap", 50]], "the ends of the range stay reachable");
 });
 
-test("the display and the snap switch are saved with the patch, and kept when the code is reloaded", () => {
+test("the display is saved with the patch, and kept when the code is reloaded", () => {
   const m = panelWith(KINDS);
   clickValue(m, "target");
-  const sw = m.ctx.panel.snapRect(m.ctx.panel.width);
-  m.ctx.onclick(sw.x + 2, sw.y + 2, 1, 0, 0, 0, 0, 0);
-  release(m);
   m.send("spec", JSON.stringify(KINDS));
   assert.equal(m.ctx.panel.find("target").display, "mc", "a new spec keeps the display");
   const snapshot = m.ctx.panel.snapshot();
   const n = loadPanel({ width: 320, height: 100 });
   n.ctx.panel.restore(snapshot);
   assert.equal(n.ctx.panel.find("target").display, "mc");
-  assert.equal(n.ctx.panel.snap, false);
 });
 
 test("a transformer's source mode: click to switch, sent to the runner, kept with the patch", () => {
   const spec = Object.assign({}, SPEC, { kind: "transformer", source: { notes: 4, from: "file" } });
   const m = panelWith(spec);
   const r = m.ctx.panel.modeRect(m.ctx.panel.width);
-  assert.ok(texts(m).includes("non-destructive"));
+  assert.ok(texts(m).includes("destructive"), "a toggle, off: non-destructive");
   m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
   release(m);
-  assert.deepEqual(sent(m), [], "clicking the mode already on sends nothing");
-  m.ctx.onclick(r.x + r.w - 2, r.y + 2, 1, 0, 0, 0, 0, 0);
-  release(m);
   assert.deepEqual(sent(m), [["source_mode", 0]]);
-  assert.ok(texts(m).includes("destructive"));
   m.send("spec", JSON.stringify(spec));
   assert.deepEqual(sent(m).filter((x) => x[0] === "source_mode"), [["source_mode", 0]], "a reload tells the runner");
   m.send("source_mode", 1);
   assert.equal(m.ctx.panel.sourceMode, "nondestructive");
   assert.deepEqual(sent(m), [], "the runner's echo is not sent back");
-  m.ctx.onclick(r.x + r.w - 2, r.y + 2, 1, 0, 0, 0, 0, 0);
+  m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
   release(m);
   const n = loadPanel({ width: 320, height: 100 });
   n.ctx.panel.restore(m.ctx.panel.snapshot());
@@ -446,4 +442,68 @@ test("reset all in the options, and hovering a card redraws only when it changes
   assert.equal(m.ctx.mgraphics.redraws, before + 1);
   m.ctx.onidleout();
   assert.equal(m.ctx.mgraphics.redraws, before + 2);
+});
+
+const M_TITLE = 30;
+
+test("bypass sits in the title row; a pitch card's toggle cycles ½ | ¼ | free, sets its grid and is sent as snap", () => {
+  const m = panelWith(KINDS);
+  const panel = m.ctx.panel;
+  const p = panel.ui(panel.width);
+  assert.ok(p.bypass.y < M_TITLE, "bypass on top");
+  m.ctx.onclick(p.bypass.x + 2, p.bypass.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  assert.deepEqual(sent(m), [["bypass", 1]]);
+  const row = panel.rows.find((r) => r.item.name === "target");
+  assert.ok(row.snapToggle, "the toggle is on the pitch card");
+  const t = row.snapToggle;
+  m.ctx.onclick(t.x + 2, t.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  assert.deepEqual(sent(m), [["snap", 0]], "free -> ½");
+  assert.equal(panel.find("target").grid, 100);
+  m.ctx.onclick(t.x + 2, t.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  assert.deepEqual(sent(m), [["snap", 1]]);
+  assert.equal(panel.find("target").grid, 50, "quarter tones");
+  m.send("snap", 0);
+  assert.equal(panel.find("target").grid, 100);
+  assert.deepEqual(sent(m), [], "the echo is not sent back");
+  click(m, "target", 0.5513);
+  assert.equal(sent(m)[0][1] % 100, 0);
+  release(m);
+  const time = panel.rows.find((r) => r.item.kind === "time");
+  if (time) {
+    m.ctx.onclick(time.snapToggle.x + 2, time.snapToggle.y + 2, 1, 0, 0, 0, 0, 0);
+    release(m);
+    assert.deepEqual(sent(m), [], "a time toggle stays in the panel");
+    assert.equal(time.item.grid, 100);
+  }
+});
+
+test("the panel goes compact when its parameters do not fit the box: one line each", () => {
+  const panel = loadPanel({ width: 320, height: 100 }).ctx.panel;
+  panel.setSpec(KINDS);
+  const full = panel.layout(320);
+  assert.equal(panel.compact, false);
+  const compact = panel.layout(320, full - 40);
+  assert.equal(panel.compact, true);
+  assert.ok(compact < full);
+  const row = panel.rows[0];
+  assert.equal(row.label.y, row.control.y, "name and control on one line");
+});
+
+test("process sel. toggles process_only_selection on a transformer's and a selector's source row", () => {
+  for (const kind of ["transformer", "selector"]) {
+    const m = panelWith(Object.assign({}, SPEC, { kind, source: { notes: 4, from: "inlet" } }));
+    const r = m.ctx.panel.ui(m.ctx.panel.width).within;
+    assert.ok(texts(m).includes("process sel."));
+    m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
+    release(m);
+    assert.deepEqual(sent(m), [["process_only_selection", 1]]);
+    m.send("process_only_selection", 0);
+    assert.equal(m.ctx.panel.withinSelection, false);
+    assert.deepEqual(sent(m), []);
+  }
+  const g = panelWith(SPEC);
+  assert.equal(g.ctx.panel.ui(g.ctx.panel.width).within, null, "a generator has no source row");
 });

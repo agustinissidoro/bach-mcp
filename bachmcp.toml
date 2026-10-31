@@ -23,7 +23,7 @@ reasoning = "off"         # "off" or "on". Off: Qwen with reasoning on spends mi
 skill_file = ""           # system prompt. Empty = the built-in skill (py/bach_mcp/prompt/BACH_SKILL.md)
 max_tool_rounds = 8       # tool calls the model may chain in one answer (pitch tools, then the score)
 docs = true               # add the instrument docs (py/bach_mcp/prompt/docs) to each message that names an instrument
-open_browser = true       # open the chat page when the model is ready
+open_browser = false      # open the chat page when the model is ready
 
 [server]
 host = "127.0.0.1"
@@ -35,4 +35,4 @@ send_port = 3000          # Python -> Max: [udpreceive 3000] in the patch
 receive_port = 3001       # Max -> Python: [udpsend 127.0.0.1 3001] in the patch. One Bach at a time can hold it.
 
 [algo]
-node = "node"             # Node.js, to check each algorithm before it is loaded in Max (name on PATH or absolute path)
+node = "/usr/local/bin/node"             # Node.js, to check each algorithm before it is loaded in Max (name on PATH or absolute path)

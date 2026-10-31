@@ -81,7 +81,7 @@
 		</attribute>
 		<attribute name="playground" get="1" set="1" type="symbol" size="1">
 			<digest>Folder for everything the model makes</digest>
-			<description>Algorithms, rolls and conversations are saved here. Default: <i>playground/</i> in the package.</description>
+			<description>Algorithms, scores and conversations are saved here. Default: <i>playground/</i> in the package.</description>
 			<attributelist>
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Playground" />
 			</attributelist>

@@ -27,6 +27,7 @@ content is always text.
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 namespace {
 
@@ -393,6 +394,16 @@ bool append_rational_or_pitch(t_llll *ll, const char *s)
 
 void append_atoms(t_llll *ll, long ac, t_atom *av, bool literal);
 
+/** Text as a symbol: a symbol, or a string object (a JSON string parsed by a [v8]'s Dict holds those); else NULL. */
+t_symbol *atom_text(t_atom *a)
+{
+    if (atom_gettype(a) == A_SYM)
+        return atom_getsym(a);
+    if (is_class(a, gensym("string")))
+        return gensym(string_getptr((t_string *)atom_getobj(a)));
+    return NULL;
+}
+
 /** One dictionary atom into an llll: an atomarray becomes a sublist; text stays text when `literal`. */
 void append_atom(t_llll *ll, t_atom *a, bool literal)
 {
@@ -410,7 +421,10 @@ void append_atom(t_llll *ll, t_atom *a, bool literal)
             break;
         }
         case A_OBJ:
-            if (is_class(a, sym().atomarray)) {
+            if (t_symbol *s = atom_text(a)) {  // a string object: as a symbol
+                if (literal || !append_rational_or_pitch(ll, s->s_name))
+                    llll_appendsym(ll, s);
+            } else if (is_class(a, sym().atomarray)) {
                 long ac = 0;
                 t_atom *av = NULL;
                 atomarray_getatoms((t_atomarray *)atom_getobj(a), &ac, &av);
@@ -481,8 +495,8 @@ void text_slots(t_dictionary *header, bool literal[MAX_SLOTS + 1])
         snprintf(buf, sizeof(buf), "%ld", i);
         long ac = 0;
         t_atom *av = NULL;
-        if (entry_atoms(entry_dictionary(slotinfo, gensym(buf)), sym().type, &ac, &av) && ac > 0 && atom_gettype(av) == A_SYM)
-            literal[i] = atom_getsym(av) == sym().text || atom_getsym(av) == sym().filelist;
+        if (entry_atoms(entry_dictionary(slotinfo, gensym(buf)), sym().type, &ac, &av) && ac > 0 && atom_text(av))
+            literal[i] = atom_text(av) == sym().text || atom_text(av) == sym().filelist;
     }
 }
 
@@ -579,8 +593,8 @@ t_llll *note_llll(t_dictionary *n, const bool literal_slots[MAX_SLOTS + 1])
     t_llll *ll = llll_get();
     t_symbol *spelling = NULL;
     t_atom a;
-    if (dictionary_getatom(n, sym().spelling, &a) == MAX_ERR_NONE && atom_gettype(&a) == A_SYM)
-        spelling = atom_getsym(&a);
+    if (dictionary_getatom(n, sym().spelling, &a) == MAX_ERR_NONE)
+        spelling = atom_text(&a);
     if (!(spelling && append_rational_or_pitch(ll, spelling->s_name)))
         llll_appenddouble(ll, entry_float(n, sym().pitch, 6000.));
     llll_appenddouble(ll, entry_float(n, sym().dur, 1000.));
@@ -721,4 +735,75 @@ t_llll *dictionary_to_roll(t_dictionary *dict, t_object *x)
             object_warn(x, "voice %ld is not an object: skipped", i + 1);
     }
     return roll;
+}
+
+// ═══ @force_onset_chord ════════════════════════════════════════════════════ //
+
+namespace {
+
+bool is_plain_list(const t_llllelem *el)  // an llll that does not start with a symbol: a voice, a chord, a note
+{
+    return hatom_gettype(&el->l_hatom) == H_LLLL && !head_symbol(hatom_getllll(&el->l_hatom));
+}
+
+/** One voice with its chords of the same onset made one: the first chord's notes, then the others',
+    then the first chord's other elements (names, flag). Everything else stays where it was. */
+t_llll *merged_voice(const t_llll *voice)
+{
+    struct Chord { double onset; t_llll *notes; t_llll *rest; };
+    std::vector<Chord> chords;
+    std::vector<long> order;  // >= 0: a chord's index; -1 - i: the voice's i-th other element
+    std::vector<const t_llllelem *> others;
+    for (const t_llllelem *el = voice->l_head; el; el = el->l_next) {
+        if (!is_plain_list(el) || !hatom_getllll(&el->l_hatom)->l_head) {
+            others.push_back(el);
+            order.push_back(-(long)others.size());
+            continue;
+        }
+        const t_llll *chord = hatom_getllll(&el->l_hatom);
+        double onset = hatom_getdouble(&chord->l_head->l_hatom);
+        long found = -1;
+        for (size_t i = 0; i < chords.size() && found < 0; i++)
+            if (fabs(chords[i].onset - onset) < 1e-6)
+                found = (long)i;
+        bool first = found < 0;
+        if (first) {
+            chords.push_back({ onset, llll_get(), llll_get() });
+            found = (long)chords.size() - 1;
+            order.push_back(found);
+        }
+        for (const t_llllelem *it = chord->l_head->l_next; it; it = it->l_next) {
+            if (is_plain_list(it))
+                llll_appendhatom_clone(chords[found].notes, &it->l_hatom);
+            else if (first)
+                llll_appendhatom_clone(chords[found].rest, &it->l_hatom);
+        }
+    }
+    t_llll *out = llll_get();
+    for (long k : order) {
+        if (k < 0) {
+            llll_appendhatom_clone(out, &others[-k - 1]->l_hatom);
+            continue;
+        }
+        t_llll *c = llll_get();
+        llll_appenddouble(c, chords[k].onset);
+        llll_chain(c, chords[k].notes);
+        llll_chain(c, chords[k].rest);
+        llll_appendllll(out, c);
+    }
+    return out;
+}
+
+}  // namespace
+
+t_llll *merge_onset_chords(const t_llll *roll)
+{
+    t_llll *out = llll_get();
+    for (const t_llllelem *el = roll->l_head; el; el = el->l_next) {
+        if (is_plain_list(el))
+            llll_appendllll(out, merged_voice(hatom_getllll(&el->l_hatom)));
+        else
+            llll_appendhatom_clone(out, &el->l_hatom);
+    }
+    return out;
 }

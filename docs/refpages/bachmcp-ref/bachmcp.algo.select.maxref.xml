@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.algo.select" module="bachmcp" category="bachmcp">
+	<digest>Select notes of a score with an algorithm</digest>
+	<description>Runs a selector algorithm (function select(source, p)) on the score of a <o>bach.roll</o>. A parameter change sends <m>dump</m> to the roll; the score that comes back is the source, and the notes the algorithm picks go back to the roll as <m>sel</m> (or <m>select</m> with <at>involutive</at> 1) notes, while the source goes out marked in the slot <at>selection_slot</at>.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">algorithm</metadata>
+		<metadata name="tag">select</metadata>
+		<metadata name="tag">selection</metadata>
+		<metadata name="tag">score</metadata>
+	</metadatalist>
+</c74object>

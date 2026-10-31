@@ -623,7 +623,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 0,
                                     "patching_rect": [ 30.0, 185.0, 620.0, 21.0 ],
-                                    "text": "rolls/        the scores the model reads and writes"
+                                    "text": "scores/       the scores the model reads and writes"
                                 }
                             },
                             {

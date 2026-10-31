@@ -1,16 +1,8 @@
-# Direct runtime dependencies (from the imports under py/)
-# Python version target from environment.yml: 3.11
+# What every Bach needs, Claude or local (from the imports under py/)
+# Python version target: 3.11, the oldest that runs Bach (tomllib)
 
 # The MCP app and its HTTP transport (tools/registry.py, claude.py, chat/web.py)
 mcp~=1.26.0
 
-# The client that talks to the model server (model/client.py)
+# The client that talks to the model server (model/client.py), and connect (claude.py)
 httpx~=0.28.0
-
-# The mlx backend: Apple's MLX and its model server (model/backends.py). Apple Silicon only.
-mlx-lm~=0.32.0; sys_platform == "darwin" and platform_machine == "arm64"
-
-# Downloading models into models/ (model/download.py); also comes with mlx-lm
-huggingface-hub>=1.0
-
-# The gguf backend needs llama.cpp's llama-server, installed apart: brew install llama.cpp

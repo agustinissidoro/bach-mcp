@@ -15,6 +15,11 @@ Messages:
   dump, bang, run        run with the current values: the score out of outlet 0
   <param> <value...>     set a parameter, e.g. "times 32", "register 4800 8400"
   param <param> <value...>  the same, as bachmcp.gui.params sends it
+  snap 0/1/3             the output's pitches: 0 semitones, 1 quarter tones, 3 free (default)
+  bypass 0/1             1: runs do nothing; a score at the inlet goes straight out of outlet 0
+  repeat                 the last score sent, out of outlet 0 again
+  input dictionary <n>   passed through while bypassed, otherwise ignored (a generator takes no input)
+  write_to_playground    write the last score sent to <playground>/scores/<name>.json
   auto_dump 0/1          output on every parameter change (default 1); 0: only on dump
   verbose 0/1            say in the Max console what happens (default 0: only errors)
   watch 0/1              reload when the file changes on disk (default 1)
@@ -66,5 +71,12 @@ function watch(on) { engine.watch(on); }
 function verbose(on) { engine.verbose(on); }
 function param(name, ...args) { engine.setParam(String(name), args); }
 function anything(...args) { engine.setParam(messagename, args); }
+function snap(n) { engine.setSnap(n); }
+function bypass(on) { engine.setBypass(on); }
+function repeat() { engine.repeat(); }
+function input(what, name) {
+  if (engine.state.bypass && what === "dictionary") engine.passThrough(name);
+}
+function write_to_playground() { engine.writeScore(); }
 function notifydeleted() { engine.deleted(); }
 function done() {} // end of patcherargs' attribute list

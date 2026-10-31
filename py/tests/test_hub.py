@@ -155,15 +155,15 @@ class MapTests(HubTest):
         self.bridge.from_max("set_active_instance nobody")
         self.bridge.from_max("add_instance_names_map lonely")
         self.assertEqual(self.bridge.sent, [
-            'mcp_info warning "odd: unknown type mixer (one of generator, transformer, selector, writer)"',
-            'mcp_info warning "set_active_instance: no instance nobody in the map"',
-            'mcp_info warning "add_instance_names_map needs a name and a type"'])
+            'server warning "odd: unknown type mixer (one of generator, transformer, selector, writer)"',
+            'server warning "set_active_instance: no instance nobody in the map"',
+            'server warning "add_instance_names_map needs a name and a type"'])
         self.assertNotIn("odd", self.hub.instances)
 
     def test_the_playground_is_made_and_echoed(self):
         self.bridge.from_max(f"set_playground {line('Macintosh HD:' + self.playground)}")
         self.assertEqual(self.hub.playground, self.playground)
-        self.assertEqual(sorted(os.listdir(self.playground)), ["algorithms", "prompts", "rolls"])
+        self.assertEqual(sorted(os.listdir(self.playground)), ["algorithms", "prompts", "scores"])
         self.assertEqual(self.heard(), [line("set_playground", self.playground)])
         with open(os.path.join(self.folder, "file"), "w") as f:
             f.write("")
@@ -199,8 +199,13 @@ class PromptTests(HubTest):
         self.assertIn('notes1 delta "Three "', heard)
         self.assertIn('notes1 answer "Three notes for you."', heard)
         self.assertTrue(heard[-1].startswith("notes1 done 7 "))
-        self.assertEqual([t.split()[1] for t in self.bridge.sent], ["thinking", "answer", "done"],
+        self.assertEqual(self.bridge.sent.pop(0), "server prompt received")
+        self.assertEqual([t.split()[1] for t in self.bridge.sent[:3]], ["thinking", "answer", "done"],
                          "Max gets no echo of its own prompt, and no pieces")
+        self.assertEqual(self.bridge.sent[3:5], ['server answer notes1 "Three notes for you."',
+                                                 "server answer tokens 7"])
+        self.assertTrue(self.bridge.sent[5].startswith("server answer time "))
+        self.assertEqual(len(self.bridge.sent), 6)
         self.assertIn("You are writing for a writer", self.client.requests[0]["messages"][0]["content"])
 
     def test_the_tools_work_for_the_prompted_instance_not_the_active_one(self):
@@ -219,15 +224,12 @@ class PromptTests(HubTest):
         self.hub.handle("ghost prompt hello", "web")
         before = self.heard()
         self.setup_patch()
-        self.hub.handle("add_instance_names_map picker selector", "web")
-        self.hub.handle("picker prompt hello", "web")
         self.hub.handle("scales1 prompt", "web")
         self.status.set("loading", model="test-model")
         self.hub.handle("scales1 prompt hello", "web")
         errors = [t for t in before + self.heard() if " error " in t]
         self.assertEqual(errors, ['scales1 error "no playground: the patch sends set_playground <folder>"',
                                   'ghost error "no instance ghost in the map"',
-                                  'picker error "selector instances are not built yet"',
                                   'scales1 error "the prompt is empty"',
                                   'scales1 error "the model is not ready (loading)"'])
 

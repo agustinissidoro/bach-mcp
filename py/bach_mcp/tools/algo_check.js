@@ -8,11 +8,12 @@ Loads the file with the same loader and algorithmic core library as Max, runs it
 with its declared values, then once more for each slider at its minimum and
 maximum, each toggle flipped and each other menu option, so that every setting
 reachable from the panel is known to work.
-A transformer runs on the --source score (a bachjson-complete file), or on a
-small built-in score without one.
+A transformer or a selector runs on the --source score (a bachjson-complete
+file), or on a small built-in score without one.
 Prints one JSON line:
-    {"ok": true, "kind": "producer" | "transformer", "source": {"notes": n, "given": true} | null,
+    {"ok": true, "kind": "producer" | "transformer" | "selector", "source": {"notes": n, "given": true} | null,
      "params": [...], "describe": [...], "score": {...}, "notes": n, "ms": t, "runs": k}
+    (a selector: "selection": [[voice, chord, note], ...] in place of "score", "notes" the notes picked)
     {"ok": false, "error": "...", "line": n, "context": "with times = 111 (its maximum)"}
 Before each run it writes the setting to stderr, so a caller that has to stop an
 endless loop can tell which setting caused it.
@@ -115,7 +116,7 @@ function main() {
   }
 
   let source = null;
-  if (compiled.kind === "transformer") {
+  if (compiled.kind === "transformer" || compiled.kind === "selector") {
     try {
       source = sourceFile ? readSource(sourceFile) : SAMPLE_SOURCE;
     } catch (e) {
@@ -155,6 +156,7 @@ function main() {
     params: compiled.specs,
     describe: paramspec.describe(compiled.specs),
     score: first.score,
+    selection: first.selection,
     notes: first.notes,
     ms: first.ms,
     runs,

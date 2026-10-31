@@ -33,7 +33,17 @@ Out of the hub, to Max and to the page:
     <name> done <tokens> <ms>
     <name> stopped
     <name> error <message>
-    mcp_info warning <text>                   something to fix (a bad path, an unknown type)
+    server warning <text>                   something to fix (a bad path, an unknown type)
+
+Only to Max, when it sends a prompt:
+
+    server prompt received
+
+Only to Max, after each answer:
+
+    server answer <name> <text>
+    server answer tokens <tokens>
+    server answer time <ms>
 
 Only to the page (Max does not need them):
 
@@ -144,7 +154,7 @@ class Hub:
                 self._unsubscribe(client)
 
     def _warn(self, text: str) -> None:
-        self._send("mcp_info", "warning", text)
+        self._send("server", "warning", text)
 
     def _state(self) -> List[Word]:
         return ["state", self.status.state, self.status.model, self.status.message]
@@ -244,8 +254,6 @@ class Hub:
             return f"no instance {name} in the map"
         if not self.playground:
             return "no playground: the patch sends set_playground <folder>"
-        if kind == "selector":
-            return "selector instances are not built yet"
         if self.make is None:
             return self.status.message or "no local model here: this Bach serves Claude through MCP"
         if not self.status.ready:
@@ -253,6 +261,8 @@ class Hub:
         return ""
 
     def _prompt(self, name: str, text: str, echo: bool) -> None:
+        if not echo:  # Max is told its prompt arrived
+            self.bridge.send(line("server", "prompt", "received"))
         if not text:
             self._send(name, "error", "the prompt is empty")
             return
@@ -391,9 +401,13 @@ class Hub:
             self._send(name, "error", "the answer reached the reply limit ([generation] max_tokens)")
         elif finish == "rounds":
             self._send(name, "error", "stopped after [chat] max_tool_rounds tool calls")
-        if "".join(answer).strip():
-            self._send(name, "answer", "".join(answer).strip())
-        self._send(name, "done", tokens, int((time.time() - started) * 1000))
+        whole, ms = "".join(answer).strip(), int((time.time() - started) * 1000)
+        if whole:
+            self._send(name, "answer", whole)
+        self._send(name, "done", tokens, ms)
+        self.bridge.send(line("server", "answer", name, whole))
+        self.bridge.send(line("server", "answer", "tokens", tokens))
+        self.bridge.send(line("server", "answer", "time", ms))
 
     # ── Conversations, kept in the playground ──────────────────────────── #
 

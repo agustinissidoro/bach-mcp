@@ -119,9 +119,9 @@ class ModelServer:
                 self.process.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 self.process.kill()
-        if self._log is not None:
-            self._log.close()
-            self._log = None
+        log, self._log = self._log, None  # a quit and the door's own ending may both stop it
+        if log is not None:
+            log.close()
 
 
 @contextlib.contextmanager

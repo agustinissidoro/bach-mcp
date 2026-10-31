@@ -57,7 +57,7 @@ class RegisterTests(unittest.TestCase):
     def test_a_new_configuration(self):
         claude.register_desktop(self.path)
         entry = self.read()["mcpServers"]["bach"]
-        self.assertEqual(entry["args"], [claude.MAIN_PY, "serve", "--stdio"])
+        self.assertEqual(entry["args"], [claude.MAIN_PY, "connect"])
         self.assertEqual(entry["command"], sys.executable)
 
     def test_everything_else_is_kept_and_an_older_entry_replaced(self):
@@ -74,10 +74,26 @@ class RegisterTests(unittest.TestCase):
             self.assertEqual(json.load(f), before)
 
     def test_claude_code_lines(self):
-        stdio, http = claude.claude_code_commands(Config())
+        http, stdio = claude.claude_code_commands(Config())
         self.assertTrue(stdio.startswith("claude mcp add --scope user bach -- "))
         self.assertTrue(stdio.endswith("serve --stdio"))
         self.assertTrue(http.endswith("http://127.0.0.1:8090/mcp"))
+
+    def test_claude_code_without_its_command_goes_in_its_file(self):
+        path = os.path.join(self.folder, "claude.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"account": "kept", "mcpServers": {"other": {}}}, f)
+        os.chmod(path, 0o600)
+        self.assertTrue(claude.register_code(Config(), None, path))
+        with open(path, encoding="utf-8") as f:
+            after = json.load(f)
+        self.assertEqual(after["account"], "kept")
+        self.assertEqual(after["mcpServers"]["bach"], {"type": "http", "url": "http://127.0.0.1:8090/mcp"})
+        self.assertIn("other", after["mcpServers"])
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+
+    def test_claude_code_not_on_this_computer(self):
+        self.assertFalse(claude.register_code(Config(), None, os.path.join(self.folder, "none.json")))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.gui.params" module="bachmcp" category="bachmcp">
+	<digest>Parameter panel for a bach-mcp algorithm</digest>
+	<description>The panel of an algorithm's parameters (v8ui). Connect a runner's panel outlet to it and its outlet back to the runner. The first argument (or <m>set_name</m>) is the name shown while no algorithm is loaded.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">parameters</metadata>
+		<metadata name="tag">panel</metadata>
+		<metadata name="tag">slider</metadata>
+		<metadata name="tag">algorithm</metadata>
+		<metadata name="tag">interface</metadata>
+	</metadatalist>
+</c74object>

@@ -10,6 +10,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from bach_mcp.bridge import buffer as buffer_module  # noqa: E402
 from bach_mcp.bridge.buffer import RollBuffer, read_json  # noqa: E402
 from bach_mcp.bridge.protocol import words as split  # noqa: E402
 from bach_mcp.tools.playground import prepare  # noqa: E402
@@ -34,7 +35,8 @@ ROLL = {
 
 class FakeMax:
     """The patch around one instance's roll: on <name> load_roll it takes the file, on
-    <name> write_roll it writes its score there and answers <name> roll_written."""
+    <name> write_roll it writes its score there and answers <name> roll_written; on
+    server write_buffer it writes the score to buffer.json and answers server buffer_done."""
 
     def __init__(self, rolls, score=ROLL):
         self.rolls = rolls
@@ -46,7 +48,11 @@ class FakeMax:
     def send(self, message):
         self.sent.append(message)
         name, command, *args = split(message)
-        if command == "load_roll":
+        if name == "server" and command == "write_buffer":
+            with open(buffer_module.BUFFER_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.score, f)
+            self.queue.append("server buffer_done")
+        elif command == "load_roll":
             self.score = read_json(os.path.join(self.rolls, args[0]))
         elif command == "write_roll":
             with open(os.path.join(self.rolls, args[0]), "w", encoding="utf-8") as f:
@@ -81,18 +87,37 @@ class ScoreToolTests(unittest.TestCase):
         self.target = Target("notes1", "writer", self.folder)
         serve_targets(lambda: self.target)
         self.addCleanup(serve_targets, None)
-        self.max = FakeMax(self.target.rolls)
+        self.max = FakeMax(self.target.scores)
+        saved = buffer_module.BUFFER_FILE
+        buffer_module.BUFFER_FILE = os.path.join(self.folder, "buffer.json")
+        self.addCleanup(setattr, buffer_module, "BUFFER_FILE", saved)
         mcp = FakeMCP()
         register_score_tools(mcp, self.max)
         self.tools = mcp.tools
 
     def test_read_answers_compressed(self):
         reply = self.tools["read_score"]()
-        self.assertTrue(reply.startswith("2 voice(s), 2 notes in the whole score."), reply)
-        short = json.loads(reply.splitlines()[1])
-        self.assertEqual(short, {"slots": {"7": "sample"}, "markers": [[0, "A"]], "voices": [
-            {"name": "Flute", "chords": [[0, [7200, 500, 100, {"sample": "Fl-ord-C6-ff.wav"}]], [1000, [7400, 500, 100]]]},
-            {"chords": []}]})
+        self.assertEqual(self.max.sent[-1], "server write_buffer")
+        lines = reply.splitlines()
+        self.assertEqual(lines[:4], ["voice 1 (Flute): 2 notes in 2 chords, 0-1500 ms, pitch 7200-7400, clef G",
+                                     "voice 2: empty, clef F", "2 voice(s), 2 notes, 1500 ms long.", "markers: A@0"])
+        self.assertEqual(json.loads(lines[4]), {"slots": {"7": "sample"}, "markers": [[0, "A"]], "voices": [
+            {"voice": 1, "name": "Flute", "chords": [[0, [7200, 500, 100, {"sample": "Fl-ord-C6-ff.wav"}]], [1000, [7400, 500, 100]]]}]})
+
+    def test_a_long_read_is_cut_at_one_time_for_all_voices(self):
+        from bach_mcp.music.reader import read_view
+        chord = lambda t, p: {"onset": t, "notes": [{"pitch": p, "dur": 100, "vel": 90}]}
+        score = {"voices": [{"chords": [chord(t * 100, 6000) for t in range(400)]},
+                            {"chords": [chord(t * 100, 4800) for t in range(400)]}]}
+        reply = read_view(score, budget=2000)
+        shown = json.loads(reply.splitlines()[3])
+        last = [v["chords"][-1][0] for v in shown["voices"]]
+        self.assertEqual(last[0], last[1], "both voices stop at the same time")
+        self.assertLessEqual(len(reply.splitlines()[3]), 2000)
+        self.assertIn(f"from_ms={last[0] + 100}", reply)
+        later = json.loads(read_view(score, voice=2, from_ms=last[0] + 100, budget=2000).splitlines()[3])
+        self.assertEqual([v["voice"] for v in later["voices"]], [2])
+        self.assertEqual(later["voices"][0]["chords"][0][0], last[0] + 100)
 
     def test_write_expands_onto_the_roll_and_keeps_its_header(self):
         written = {"voices": [{"name": "Oboe", "chords": [[0, [6950, 500, 80, {"dynamics": "p<"}]], [500, [7000, 500, 80]]]}]}
@@ -135,7 +160,7 @@ class ScoreToolTests(unittest.TestCase):
         reply = self.tools["write_score"](score={"voices": [{"chords": [[0, [6000, 500, 80]]]}]})
         self.assertIn("scales1 is a generator: it takes an algorithm (send_algorithm), not notes", reply)
         self.assertIn("Nothing was cleared", self.tools["clear_score"]())
-        self.assertTrue(self.tools["read_score"]().startswith("2 voice(s)"), "any instance's roll can be read")
+        self.assertTrue(self.tools["read_score"]().startswith("voice 1 (Flute)"), "any instance's roll can be read")
 
     def test_without_an_instance_nothing_is_sent(self):
         def none():
@@ -150,10 +175,10 @@ class ScoreToolTests(unittest.TestCase):
         self.assertEqual(self.max.sent, ["notes1 clear"])
 
     def test_a_second_read_is_unchanged_only_within_one_chat(self):
-        self.assertTrue(self.tools["read_score"]().startswith("2 voice(s)"))
+        self.assertTrue(self.tools["read_score"]().startswith("voice 1 (Flute)"))
         self.assertTrue(self.tools["read_score"]().startswith("Unchanged since your previous read_score"))
         new_conversation()
-        self.assertTrue(self.tools["read_score"]().startswith("2 voice(s)"))
+        self.assertTrue(self.tools["read_score"]().startswith("voice 1 (Flute)"))
 
     def test_when_max_does_not_answer(self):
         class Silent(FakeMax):
@@ -161,7 +186,7 @@ class ScoreToolTests(unittest.TestCase):
                 self.sent.append(message)
                 return True
         mcp = FakeMCP()
-        register_score_tools(mcp, Silent(self.target.rolls))
+        register_score_tools(mcp, Silent(self.target.scores))
         self.assertIn("Max did not answer", mcp.tools["read_score"]())
         self.assertIn("Nothing was added", mcp.tools["write_score"](score={"voices": [{"chords": [[0, [6000, 500, 80]]]}]}, add=True))
 
@@ -171,7 +196,7 @@ class ScoreToolTests(unittest.TestCase):
                 self.sent.append(message)
                 self.queue += ["other roll_written other.json", "notes1 algo_done 3 1"]
                 return True
-        self.assertIsNone(RollBuffer(Other(self.target.rolls), "notes1", self.target.roll_file).fetch(timeout_seconds=0.2))
+        self.assertIsNone(RollBuffer(Other(self.target.scores), "notes1", self.target.roll_file).fetch(timeout_seconds=0.2))
 
 
 class UDPBridgeTests(unittest.TestCase):

@@ -10,27 +10,35 @@ file adds the source.
 The source is the score a transformer works on, in bachjson-complete like every
 score between objects. It arrives at the inlet as `input dictionary <name>`
 (from another runner, or from a roll through bachmcp.translate @out json) and
-lives only in memory: nothing is written to disk unless write_to_playground
-asks for it. The result leaves outlet 0 as `dictionary <name>`, and the runner
+lives only in memory: nothing is written to disk. write_to_playground writes
+the last score sent (the result), not the source. The result leaves outlet 0 as `dictionary <name>`, and the runner
 never tells a roll to read it, so a transformer fits any flow. The runner never
 feeds its own result back: what it transforms is always a score that came in at
 the inlet, so that anything (another algorithm, a hand edit in a roll) can act
-on the music between two transformations. What happens depends on the source
-mode:
+on the music between two transformations.
 
-  source_mode 1   non-destructive (default). The source is held: every output
-                  starts again from it. An input becomes the source only when
-                  there is none yet; after that, inputs are ignored until
-                  capture_source.
-  source_mode 0   destructive. Every input becomes the source, and is never
-                  transformed by itself (no loop through a roll): the next dump
-                  or parameter change transforms it. After an output the runner
-                  is "processing" until the next input arrives (outlet 2:
-                  <name> processing 1, then 0): while it is, parameter changes are
-                  kept but output nothing, so that each output works on the score
-                  that came back. If nothing comes back within 3 seconds, the
-                  runner stops waiting: <name> timeout 1, then processing 0.
-                  dump always outputs.
+Every run goes: parameter change (or dump), "dump" out of outlet 1 to ask the
+roll for its score, the score comes in, it is processed, the result goes out.
+While the runner waits for the score it is "processing" (outlet 2: <name>
+processing 1, then 0); changes meanwhile are kept, and the score that comes in
+runs with the latest values. If nothing comes in within 3 seconds: <name>
+timeout 1, then processing 0. What happens depends on the source mode:
+
+  source_mode 1   non-destructive (default). Only the first run asks for the
+                  score: it becomes the source, held, and every later run
+                  starts again from it, without a dump. capture_source asks
+                  for a new one. An input that arrives unasked becomes the
+                  source only when there is none yet.
+  source_mode 0   destructive. Every run asks for the score, so it works on
+                  what the roll holds now. An input that arrives unasked is
+                  kept as the source but never transformed by itself (no loop
+                  through a roll).
+
+process_only_selection 1 transforms only the selected notes: those flagged 1
+in slot `selection_slot` (default 11; bachmcp.runner.selection.js, a selector
+writes it). The algorithm gets a score of those notes only; the others are put
+back unchanged around its result. process_only_selection 0 (default): the
+whole score.
 
 auto_dump 1 (default) outputs a score on every parameter change; auto_dump 0
 outputs only on dump (or bang).
@@ -47,7 +55,13 @@ Messages:
   input dictionary <n>    a source score; input clear forgets it
   capture_source          "dump" out of outlet 1; the next input becomes the source
   source_mode 0/1         0 destructive, 1 non-destructive (see above)
-  write_to_playground     write the source next to the algorithm, as <name>.source.json
+  input_mode 0/1          0 the whole score (default), 1 only the notes flagged in the slot named "selected"
+  process_only_selection 0/1  0 the whole score (default), 1 only the selected notes (see above)
+  selection_slot <n>      the slot that flags the selected notes (default 11)
+  snap 0/1/3              the output's pitches: 0 semitones, 1 quarter tones, 3 free (default)
+  bypass 0/1              1: runs do nothing; a score at the inlet goes straight out of outlet 0
+  repeat                  the last score sent, out of outlet 0 again
+  write_to_playground     write the last score sent to <playground>/scores/<name>.json
   auto_dump 0/1           output on every parameter change (default 1); 0: only on dump
   verbose 0/1             say in the Max console what happens (default 0: only errors)
   watch 0/1               reload when the file changes on disk (default 1)
@@ -71,6 +85,7 @@ function need(name) {
 }
 
 const { createEngine } = need("bachmcp.runner.engine.js");
+const sel = need("bachmcp.runner.selection.js");
 
 const PROCESSING_TIMEOUT_MS = 3000;
 
@@ -79,24 +94,37 @@ const source = {
   from: "",                 // "inlet"
   destructive: false,       // source_mode 0: see the top
   open: false,              // capture_source: the next input becomes the source
-  processing: false,        // destructive: an output went out, its score has not come back yet
+  processing: false,        // a dump went out, the score has not come in yet
+  selectedOnly: false,      // process_only_selection 1
+  byName: false,            // input_mode 1: the slot is the one named "selected"
+  slot: 11,                 // selection_slot
+  rest: null,               // process_only_selection 1: the notes left out of the run, put back after it
 };
 
 const engine = createEngine(
   { outlet: (...a) => outlet(...a), post: (...a) => post(...a), messnamed: (...a) => messnamed(...a), Dict, Task, File },
   { name: "transformer", accepts: "transformer", needs: "function transform(source, p) { ... }" },
   {
-    source: () => source.score,
-    spec: () => ({ source: sourceInfo() }),
-    loaded() {
-      // The source belongs to the instance, not to the file: a new algorithm keeps it.
-      if (source.score) return false;
-      engine.say("waiting for a source: input dictionary <name>");
-      return true;
+    source: () => {
+      source.rest = null;
+      if (!source.selectedOnly || !source.score) return source.score;
+      let slot = source.slot;
+      if (source.byName) {
+        slot = sel.selectionSlot(source.score);
+        if (slot === null) throw new Error(`input_mode 1: the source has no slot named "${sel.SLOT_NAME}" (a selector writes it)`);
+      }
+      const parts = sel.split(source.score, slot);
+      source.rest = parts.rest;
+      return parts.picked;
     },
-    automatic: () => !(source.destructive && source.processing),
-    ran() {
-      if (source.destructive) setProcessing(true);
+    output: (score) => (source.rest ? sel.merge(source.rest, score) : score),
+    spec: () => ({ source: sourceInfo() }),
+    loaded: () => true,  // a load runs nothing: the first change (or dump) asks for the score
+    // Every run starts with a dump: the roll's score comes in, is processed, goes out.
+    request: () => {
+      if (source.score && !source.destructive) return false;  // non-destructive: the held source
+      askForScore();
+      return true;
     },
   },
 );
@@ -125,6 +153,12 @@ function watch(on) { engine.watch(on); }
 function verbose(on) { engine.verbose(on); }
 function param(name, ...args) { engine.setParam(String(name), args); }
 function anything(...args) { engine.setParam(messagename, args); }
+function snap(n) { engine.setSnap(n); }
+function repeat() { engine.repeat(); }
+function bypass(on) {
+  engine.setBypass(on);
+  if (engine.state.bypass) setProcessing(false);
+}
 function done() {} // end of patcherargs' attribute list
 
 /** 0 destructive (every input is the source), 1 non-destructive (the source is held). */
@@ -136,6 +170,31 @@ function source_mode(flag) {
   outlet(1, "source_mode", m);
 }
 
+/** 0 the whole score, 1 only its selected notes. */
+/** As before: 1 transforms only the notes flagged in the slot named "selected". */
+function input_mode(flag) {
+  const m = Number(flag);
+  if (m !== 0 && m !== 1) return engine.fail(`input_mode is 0 (the whole score) or 1 (only the selected notes), got ${flag}`);
+  source.selectedOnly = m === 1;
+  source.byName = m === 1;
+  outlet(1, "input_mode", m);
+}
+
+function process_only_selection(flag) {
+  const m = Number(flag);
+  if (m !== 0 && m !== 1) return engine.fail(`process_only_selection is 0 (the whole score) or 1 (only the selected notes), got ${flag}`);
+  source.selectedOnly = m === 1;
+  source.byName = false;
+  outlet(1, "process_only_selection", m);
+  if (engine.state.autorun && engine.state.compiled) engine.schedule();
+}
+
+function selection_slot(n) {
+  const slot = Number(n);
+  if (!Number.isInteger(slot) || slot < 1 || slot > 30) return engine.fail(`selection_slot is a slot number 1..30, got ${n}`);
+  source.slot = slot;
+}
+
 function setProcessing(on) {
   if (on) timeout.schedule(PROCESSING_TIMEOUT_MS);
   else timeout.cancel();
@@ -144,7 +203,7 @@ function setProcessing(on) {
   outlet(2, engine.state.name, "processing", on ? 1 : 0);
 }
 
-/** Nothing came back after an output: stop waiting, so that parameter changes output again. */
+/** No score answered the dump: stop waiting, so that the next change asks again. */
 const timeout = new Task(() => {
   if (!source.processing) return;
   outlet(2, engine.state.name, "timeout", 1);
@@ -163,6 +222,13 @@ function capture_source() {
   outlet(1, "dump");
 }
 
+/** A run waits for the score: "dump" out of outlet 1, the input that answers it becomes the source and runs. */
+function askForScore() {
+  if (source.processing) return;  // already asked: the score runs with the latest values
+  setProcessing(true);
+  outlet(1, "dump");
+}
+
 function input(what, name) {
   if (what === "clear") {
     source.score = null;
@@ -177,24 +243,24 @@ function input(what, name) {
   } catch (e) {
     return engine.fail(`cannot read the input dictionary ${name}`);
   }
+  if (engine.state.bypass) return engine.passThrough(name);
+  const asked = source.processing;
   const first = !source.score || source.open;
-  if (!source.destructive && !first) return;  // the source stays until capture_source
-  source.score = score;
-  source.from = "inlet";
+  if (!source.destructive && !first && !asked) return;  // the source stays until capture_source
+  if (source.destructive || first) {
+    source.score = score;
+    source.from = "inlet";
+    tellPanelSource();
+  }
   source.open = false;
-  tellPanelSource();
-  if (source.destructive) return setProcessing(false);  // kept, transformed by the next dump or change
-  if (engine.state.autorun) engine.schedule();
+  setProcessing(false);
+  if (asked) return engine.process();                       // the answer to a dump: process it
+  if (!source.destructive && engine.state.autorun) engine.schedule();  // a first source, unasked
+  // destructive and unasked: kept, processed by the next change or dump (no loop through a roll)
 }
 
-/** Write the source next to the algorithm (<name>.source.json), where the server checks a transformer. */
-function write_to_playground() {
-  if (!source.score) return engine.fail("write_to_playground: there is no source yet");
-  if (!engine.state.path) return engine.fail("write_to_playground: no algorithm loaded, so no folder to write to");
-  const path = engine.state.path.replace(/[^\/:]*$/, "") + engine.state.name + ".source.json";
-  if (!engine.files.write(path, JSON.stringify(source.score))) return engine.fail(`could not write ${path}`);
-  outlet(1, "status", "ok", `source written to ${path}`);
-}
+/** Write the last score sent to the playground: scores/<name>.json. */
+function write_to_playground() { engine.writeScore(); }
 
 // ── The source ──────────────────────────────────────────────────────────── //
 

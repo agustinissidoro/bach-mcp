@@ -179,17 +179,24 @@ test("nondestructive: the first score at the inlet is held in memory; later ones
   assert.deepEqual(scorePitches(m), [[5000]], "capture_source: the next input is the new source");
 });
 
-test("write_to_playground writes the source next to the algorithm, only when asked", () => {
-  const file = tempFile(TRANSFORMER);
+test("write_to_playground writes the last score sent to the playground's scores folder", () => {
+  const playground = fs.mkdtempSync(path.join(os.tmpdir(), "bachmcp-"));
+  for (const dir of ["algorithms", "scores"]) fs.mkdirSync(path.join(playground, dir));
+  const file = path.join(playground, "algorithms", "t1.js");
+  fs.writeFileSync(file, TRANSFORMER);
   const m = load("bachmcp.runner.transformer.js");
   m.send("set_name", "t1");
   m.send("write_to_playground");
-  assert.match(last(m.out, 2)[3], /no source yet/);
+  assert.match(last(m.out, 2)[3], /no algorithm loaded/);
   m.send("load", file);
-  inputFrom(m, 3600);
   m.send("write_to_playground");
-  const written = path.join(path.dirname(file), "t1.source.json");
-  assert.equal(JSON.parse(fs.readFileSync(written, "utf8")).voices[0].chords[0].notes[0].pitch, 3600);
+  assert.match(last(m.out, 2)[3], /no score sent yet/);
+  inputFrom(m, 3600);
+  m.flush();
+  m.send("write_to_playground");
+  const written = path.join(playground, "scores", "t1.json");
+  assert.deepEqual(JSON.parse(fs.readFileSync(written, "utf8")).voices[0].chords[0].notes.map((n) => n.pitch),
+                   scorePitches(m)[0], "the result, not the source");
 });
 
 test("verbose 0 (default): only errors reach the Max console", () => {
@@ -218,51 +225,69 @@ test("load_algo reports a file it cannot load; try_load_algo stays silent", () =
   assert.deepEqual(scorePitches(m), [[3700]]);
 });
 
-test("without a source a transformer waits for one", () => {
+test("a load runs nothing; the first run asks the roll for a dump, and processes what comes in", () => {
   const m = load("bachmcp.runner.transformer.js");
-  m.send("verbose", 1);
+  m.send("set_name", "t1");
   m.send("load", tempFile(TRANSFORMER));
   assert.equal(scoreOut(m), null);
-  assert.ok(m.posts.some((t) => /waiting for a source/.test(t)));
+  assert.equal(last(m.out, 1, "dump"), null, "no dump on load");
+  assert.equal(last(m.out, 2, "t1"), null, "no algo_loaded: nothing ran");
+  m.send("dump");
+  assert.deepEqual(last(m.out, 1, "dump"), [1, "dump"], "asks the roll for its score");
+  assert.deepEqual(last(m.out, 2), [2, "t1", "processing", 1]);
   inputFrom(m, 6000);
-  m.flush();
-  assert.deepEqual(scorePitches(m), [[6100]]);
-  assert.equal(last(m.out, 2)[2], "algo_loaded");
+  assert.deepEqual(scorePitches(m), [[6100]], "the answer is processed at once");
+  assert.equal(last(m.out, 2, "t1")[2], "algo_done");
 });
 
-test("destructive: every input is the source, never transformed by itself; processing until it comes back", () => {
+test("nondestructive: once the source is held, a change runs without a dump", () => {
+  const m = load("bachmcp.runner.transformer.js");
+  m.send("load", tempFile(TRANSFORMER));
+  inputFrom(m, 3600);
+  const dumps = () => m.out.filter((o) => o[0] === 1 && o[1] === "dump").length;
+  const before = dumps();
+  m.send("shift", 200);
+  m.flush();
+  assert.deepEqual(scorePitches(m), [[3800]]);
+  assert.equal(dumps(), before, "no dump");
+});
+
+test("destructive: every run is change, dump, process; an unasked input is never transformed by itself", () => {
   const m = load("bachmcp.runner.transformer.js");
   m.send("set_name", "t1");
   m.send("source_mode", 0);
   assert.deepEqual(last(m.out, 1, "source_mode"), [1, "source_mode", 0]);
   m.send("load", tempFile(TRANSFORMER));
-  inputFrom(m, 3600);
+  m.send("dump");
+  inputFrom(m, 3600);  // the answer to the dump
+  assert.deepEqual(scorePitches(m), [[3700]]);
+  const outs = () => m.out.filter((o) => o[0] === 0).length;
+  const dumps = () => m.out.filter((o) => o[0] === 1 && o[1] === "dump").length;
+  let runs = outs();
+  inputFrom(m, 4000);  // unasked, e.g. the result coming back through a roll
   m.flush();
-  assert.equal(scoreOut(m), null, "an input does not run");
+  assert.equal(outs(), runs, "no loop");
+  const d = dumps();
   m.send("shift", 200);
   m.flush();
-  assert.deepEqual(scorePitches(m), [[3800]]);
+  assert.equal(dumps(), d + 1, "the change asks for a dump");
   assert.deepEqual(last(m.out, 2), [2, "t1", "processing", 1]);
-  const outs = () => m.out.filter((o) => o[0] === 0).length;
-  const runs = outs();
+  assert.equal(outs(), runs, "nothing goes out before the score comes in");
   m.send("shift", 300);
   m.flush();
-  assert.equal(outs(), runs, "processing: the change is kept, nothing goes out");
-  inputFrom(m, 5000);  // back from outside, edited
-  m.flush();
-  assert.deepEqual(last(m.out, 2), [2, "t1", "processing", 0]);
-  assert.equal(outs(), runs, "the returning score is not transformed: no loop");
+  assert.equal(dumps(), d + 1, "already asked: no second dump");
+  inputFrom(m, 5000);  // the roll answers, edited by hand
+  assert.ok(m.out.some((o) => o[0] === 2 && o[2] === "processing" && o[3] === 0));
+  assert.deepEqual(scorePitches(m), [[5300]], "processed with the latest value");
   m.send("dump");
-  assert.deepEqual(scorePitches(m), [[5300]], "dump transforms the score that came back, with the kept value");
-  m.send("bang");
-  assert.deepEqual(scorePitches(m), [[5300]], "dump always outputs, from the last input, never from its own result");
+  assert.equal(dumps(), d + 2, "dump asks too");
   m.wait(2999);
-  assert.equal(last(m.out, 2, "t1") && m.out.some((o) => o[2] === "timeout"), false, "still waiting");
+  assert.equal(m.out.some((o) => o[2] === "timeout"), false, "still waiting");
   m.wait(3000);
-  assert.deepEqual(m.out.slice(-2), [[2, "t1", "timeout", 1], [2, "t1", "processing", 0]], "nothing came back");
+  assert.deepEqual(m.out.slice(-2), [[2, "t1", "timeout", 1], [2, "t1", "processing", 0]], "nothing came in");
   m.send("shift", 100);
   m.flush();
-  assert.deepEqual(scorePitches(m), [[5100]], "changes output again");
+  assert.equal(dumps(), d + 3, "the next change asks again");
   m.send("source_mode", 2);
   assert.match(last(m.out, 2)[3], /source_mode is 0 \(destructive\) or 1/);
 });
@@ -280,4 +305,223 @@ test("auto_dump 0: a parameter change outputs nothing until dump", () => {
   assert.equal(outs(), runs);
   m.send("dump");
   assert.deepEqual(scorePitches(m), [[4100]]);
+});
+
+// ── The selector, and the transformer's input_mode ──────────────────────── //
+
+const SELECTOR = `const params = { above: { type: "slider", range: [0, 12700], value: 6000 } };
+function select(source, p) {
+  const out = [];
+  eachNote(source, (n) => { if (n.pitch > p.above) out.push(n); });
+  return out;
+}
+`;
+
+function inputScore(m, score) {
+  const d = new Dict(`input_${++inputCount}`);
+  d.parse(JSON.stringify(score));
+  m.send("input", "dictionary", d.name);
+}
+
+const THREE = { voices: [{ chords: [
+  { onset: 0, notes: [{ pitch: 5500, dur: 500, vel: 90 }, { pitch: 6400, dur: 500, vel: 90 }] },
+  { onset: 500, notes: [{ pitch: 7200, dur: 500, vel: 90 }] },
+] }] };
+
+test("a selector outputs the selected notes flagged in the slot, then clearselection and sel note", () => {
+  const m = load("bachmcp.runner.selector.js");
+  m.send("set_name", "s1");
+  m.send("load", tempFile(SELECTOR));
+  assert.equal(last(m.out, 1), null, "no dump on load");
+  m.send("dump");
+  inputScore(m, THREE);
+  m.flush();
+  const bach = m.out.filter((o) => o[0] === 1).map((o) => o.slice(1).join(" "));
+  assert.deepEqual(bach, ["dump", "clearselection", "sel note [ 1 1 2 ] [ 1 2 1 ]"], "dump asks for the score, then selects in it");
+  const only = scoreOut(m);
+  assert.deepEqual(only.header.slotinfo["11"], { name: ["selected"], type: ["int"], range: [0, 1], default: [0] });
+  assert.deepEqual(only.voices[0].chords.map((c) => c.notes.map((n) => [n.pitch, n.slots["11"][0]])), [[[6400, 1]], [[7200, 1]]]);
+  assert.ok(m.out.findIndex((o) => o[0] === 0) < m.out.findIndex((o) => o[0] === 1 && o[1] === "clearselection"), "the score before the commands");
+  assert.match(last(m.out, 2, "status")[3], /2 notes selected/);
+  assert.deepEqual(last(m.out, 3).slice(0, 4), [3, "s1", "algo_done", 2]);
+  m.send("dump_selection_only", 0);
+  assert.deepEqual(last(m.out, 2, "dump_selection_only"), [2, "dump_selection_only", 0]);
+  m.send("dump");
+  inputScore(m, THREE);
+  assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => c.notes.map((n) => n.slots["11"][0])), [[0, 1], [1]], "the whole source, flagged");
+  m.send("clear_selection");
+  assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => c.notes.map((n) => n.slots["11"][0])), [[0, 0], [0]]);
+  assert.deepEqual(last(m.out, 1), [1, "clearselection"]);
+});
+
+test("selections are not cumulative: each run clears the previous one (involutive ignored)", () => {
+  const m = load("bachmcp.runner.selector.js");
+  m.send("load", tempFile(SELECTOR));
+  m.send("involutive", 1);
+  m.send("source_mode", 0);
+  m.send("dump");
+  inputScore(m, THREE);
+  m.flush();
+  m.send("above", 7000);
+  m.flush();
+  assert.deepEqual(last(m.out, 1), [1, "dump"], "a change asks the roll for its score");
+  inputScore(m, THREE);
+  assert.deepEqual(m.out.filter((o) => o[0] === 1).slice(-2).map((o) => o.slice(1).join(" ")),
+    ["clearselection", "sel note [ 1 2 1 ]"]);
+  assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => c.notes.map((n) => n.pitch)), [[7200]]);
+});
+
+test("a selector refuses a result that is not notes of the source", () => {
+  const m = load("bachmcp.runner.selector.js");
+  m.send("load", tempFile(`const params = {};
+function select(source, p) { return [[1, 9, 1]]; }`));
+  m.send("dump");
+  inputScore(m, THREE);
+  m.flush();
+  assert.match(last(m.out, 3)[3], /not a note of the source/);
+});
+
+test("a destructive selector: an unasked input becomes the source but is not selected in; no answer times out", () => {
+  const m = load("bachmcp.runner.selector.js");
+  m.send("set_name", "s1");
+  m.send("load", tempFile(SELECTOR));
+  m.send("source_mode", 0);
+  m.send("dump");
+  inputScore(m, THREE);  // the answer to the dump
+  const sels = () => m.out.filter((o) => o[0] === 1 && o[1] !== "dump").length;
+  const n = sels();
+  inputScore(m, THREE);  // unasked, e.g. the roll after the sel
+  m.flush();
+  assert.equal(sels(), n, "no loop");
+  m.send("dump");
+  assert.deepEqual(last(m.out, 3), [3, "s1", "processing", 1]);
+  m.wait(3000);
+  assert.deepEqual(m.out.slice(-2), [[3, "s1", "timeout", 1], [3, "s1", "processing", 0]]);
+});
+
+test("input_mode 1: a transformer changes only the notes flagged in the slot named selected", () => {
+  const m = load("bachmcp.runner.transformer.js");
+  m.send("load", tempFile(TRANSFORMER));
+  m.send("input_mode", 1);
+  const flagged = JSON.parse(JSON.stringify(THREE));
+  flagged.header = { slotinfo: { "7": { name: ["selected"], type: ["int"] } } };
+  flagged.voices[0].chords[0].notes[1].slots = { "7": [1] };
+  inputScore(m, flagged);
+  m.flush();
+  const out = scoreOut(m);
+  assert.deepEqual(out.voices[0].chords.map((c) => [c.onset, c.notes.map((n) => n.pitch)]),
+    [[0, [5500]], [0, [6500]], [500, [7200]]]);
+  assert.deepEqual(out.header, flagged.header);
+  const bare = load("bachmcp.runner.transformer.js");
+  bare.send("load", tempFile(TRANSFORMER));
+  bare.send("input_mode", 1);
+  inputScore(bare, THREE);
+  bare.flush();
+  assert.match(last(bare.out, 2)[3], /no slot named "selected"/);
+});
+
+// ── snap, bypass, repeat ────────────────────────────────────────────────── //
+
+test("snap rounds the output's pitches: 0 semitones, 1 quarter tones, 3 free", () => {
+  const m = load("bachmcp.runner.generator.js");
+  m.send("load", tempFile(`const params = {};
+function produce(p) { return { voices: [{ chords: [{ onset: 0, notes: [{ pitch: 6030, dur: 500, vel: 90 }, { pitch: 6080, dur: 500, vel: 90 }] }] }] }; }`));
+  m.flush();
+  const pitches = () => scoreOut(m).voices[0].chords[0].notes.map((n) => n.pitch);
+  assert.deepEqual(pitches(), [6030, 6080]);
+  m.send("snap", 0);
+  m.flush();
+  assert.deepEqual(pitches(), [6000, 6100]);
+  assert.deepEqual(last(m.out, 1, "snap"), [1, "snap", 0]);
+  m.send("snap", 1);
+  m.flush();
+  assert.deepEqual(pitches(), [6050, 6100]);
+  m.send("snap", 2);
+  assert.match(last(m.out, 2)[3], /snap is 0/);
+});
+
+test("bypass passes the input straight through; repeat sends the last score again", () => {
+  const m = load("bachmcp.runner.transformer.js");
+  m.send("load", tempFile(TRANSFORMER));
+  m.send("dump");
+  inputScore(m, THREE);
+  m.flush();
+  const outs = () => m.out.filter((o) => o[0] === 0);
+  const before = outs().length;
+  m.send("repeat");
+  assert.equal(outs().length, before + 1);
+  assert.deepEqual(scoreOut(m).voices[0].chords[0].notes.map((n) => n.pitch), [5600, 6500]);
+  m.send("bypass", 1);
+  assert.deepEqual(last(m.out, 1, "bypass"), [1, "bypass", 1]);
+  m.send("dump");
+  assert.equal(outs().length, before + 1, "no run while bypassed");
+  inputScore(m, THREE);
+  assert.deepEqual(last(m.out, 0), [0, "dictionary", `input_${inputCount}`], "the input as it came");
+});
+
+test("a selector's repeat sends the score and the commands again", () => {
+  const m = load("bachmcp.runner.selector.js");
+  m.send("load", tempFile(SELECTOR));
+  m.send("dump");
+  inputScore(m, THREE);
+  m.flush();
+  const n = m.out.length;
+  m.send("repeat");
+  assert.deepEqual(m.out.slice(n).map((o) => o[0] === 0 ? o[0] : o.slice(0, 2).join(" ")),
+    [0, "1 clearselection", "1 sel"]);
+});
+
+test("a selector's snap rounds the pitches of its output score", () => {
+  const m = load("bachmcp.runner.selector.js");
+  m.send("load", tempFile(SELECTOR));
+  m.send("snap", 0);
+  m.send("dump");
+  const odd = JSON.parse(JSON.stringify(THREE));
+  odd.voices[0].chords[1].notes[0].pitch = 7230;
+  inputScore(m, odd);
+  m.flush();
+  assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => c.notes.map((n) => n.pitch)), [[6400], [7200]]);
+});
+
+test("a non-destructive selector (default) asks once, then selects again in the held source", () => {
+  const m = load("bachmcp.runner.selector.js");
+  m.send("load", tempFile(SELECTOR));
+  m.send("dump");
+  inputScore(m, THREE);
+  m.flush();
+  m.send("above", 7000);
+  m.flush();
+  const bach = m.out.filter((o) => o[0] === 1).map((o) => o.slice(1).join(" "));
+  assert.deepEqual(bach, ["dump", "clearselection", "sel note [ 1 1 2 ] [ 1 2 1 ]", "clearselection", "sel note [ 1 2 1 ]"]);
+  m.send("capture_source");
+  assert.deepEqual(last(m.out, 1), [1, "dump"]);
+  assert.deepEqual(last(m.out, 2, "source_mode"), null);
+  m.send("source_mode", 0);
+  assert.deepEqual(last(m.out, 2, "source_mode"), [2, "source_mode", 0]);
+});
+
+test("process_only_selection: a transformer changes only the notes flagged in selection_slot (default 11)", () => {
+  const m = load("bachmcp.runner.transformer.js");
+  m.send("load", tempFile(TRANSFORMER));
+  m.send("process_only_selection", 1);
+  const flagged = JSON.parse(JSON.stringify(THREE));
+  flagged.voices[0].chords[0].notes[1].slots = { "11": [1] };
+  inputScore(m, flagged);
+  m.flush();
+  assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => [c.onset, c.notes.map((n) => n.pitch)]),
+    [[0, [5500]], [0, [6500]], [500, [7200]]]);
+  assert.deepEqual(last(m.out, 1, "process_only_selection"), [1, "process_only_selection", 1]);
+});
+
+test("process_only_selection: a selector picks only among the flagged notes, addressed in the whole score", () => {
+  const m = load("bachmcp.runner.selector.js");
+  m.send("load", tempFile(SELECTOR));
+  m.send("process_only_selection", 1);
+  m.send("dump");
+  const flagged = JSON.parse(JSON.stringify(THREE));
+  flagged.voices[0].chords[1].notes[0].slots = { "11": [1] };
+  inputScore(m, flagged);
+  m.flush();
+  assert.deepEqual(m.out.filter((o) => o[0] === 1).slice(-1)[0].slice(1).join(" "), "sel note [ 1 2 1 ]",
+    "6400 is above 6000 but not flagged: only 7200");
 });

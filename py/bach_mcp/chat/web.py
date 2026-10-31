@@ -8,18 +8,17 @@ web.py
     /api/events     every line the hub sends, as a stream of server-sent events; a page
                     first gets what it needs to show the present (Hub.snapshot)
     /api/state      Bach's state (status.py): no_model, loading, ready ... (the page's heartbeat)
-    /mcp            the same tools for Claude Code (claude.py)
 
 run() starts the bridge to Max, the hub and the model server (model/backends.py),
 serves the page, opens it in the browser once the model is ready, and stops
-everything on Ctrl-C. Without a model it still runs: the page and Max (bach
-status) say what is missing, and Claude Code can use the tools at /mcp.
+everything on Ctrl-C, a signal or `bach quit`. Without a model it still runs: the
+page and Max (bach status) say what is missing. Claude has no way in here: it
+works with `serve` (bachmcp.server claude), which loads no model.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import os
 import socket
 import subprocess
@@ -27,19 +26,18 @@ import sys
 import threading
 import time
 import webbrowser
-from typing import AsyncIterator, Optional
+from typing import Optional
 
-from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
-from starlette.routing import Mount, Route
+from starlette.routing import Route
 
 from .. import claude
 from ..config import Config, ConfigError
 from ..model.backends import ModelServer
 from ..model.client import ModelClient
-from ..utilities.status import Status, start_bridge, watch_input
+from ..utilities.status import Status, quit_on_signals, start_bridge, watch_input
 from .engine import build_conversation
 from .hub import Hub, Message
 
@@ -52,8 +50,8 @@ def event(text: str) -> bytes:
     return ("".join(f"data: {row}\n" for row in text.split("\n")) + "\n").encode("utf-8")
 
 
-def create_app(hub: Hub, status: Status, mcp: Optional[FastMCP] = None) -> Starlette:
-    """The chat page and the two ends of the hub; with `mcp`, also the tools at /mcp."""
+def create_app(hub: Hub, status: Status) -> Starlette:
+    """The chat page and the two ends of the hub."""
 
     async def page(request: Request) -> Response:
         with open(PAGE, encoding="utf-8") as f:
@@ -99,16 +97,7 @@ def create_app(hub: Hub, status: Status, mcp: Optional[FastMCP] = None) -> Starl
 
     routes = [Route("/", page), Route("/api/state", get_state), Route("/api/events", events),
               Route("/api/line", post_line, methods=["POST"])]
-    if mcp is None:
-        return Starlette(routes=routes)
-    routes.append(Mount("/", app=mcp.streamable_http_app()))  # serves /mcp
-
-    @contextlib.asynccontextmanager
-    async def lifespan(app: Starlette) -> AsyncIterator[None]:
-        async with mcp.session_manager.run():  # the MCP sessions live as long as the app
-            yield
-
-    return Starlette(routes=routes, lifespan=lifespan)
+    return Starlette(routes=routes)
 
 
 def _port_free(host: str, port: int) -> bool:
@@ -134,10 +123,11 @@ def close_page_tabs(url: str) -> None:
 
 def run(config: Config) -> None:
     """Start the bridge to Max, the model and the chat page; open the page when the model is ready.
-    Max hears mcp_info status 1 once the page is up, and status 0 as Bach goes off."""
+    Max hears server status 1 once the page is up, and status 0 as Bach goes off."""
     import uvicorn
 
     bridge, status = start_bridge(config, "run")  # stops here if another Bach is running
+    quit_on_signals(status)
     if not _port_free(config.server.host, config.server.port):
         bridge.stop()
         raise ConfigError(f"[server] port {config.server.port} is in use by another program")
@@ -159,7 +149,6 @@ def run(config: Config) -> None:
             client = ModelClient(server.base_url, config.generation, server.request_model)
             make = lambda kind: build_conversation(config, client, mcp, kind)  # noqa: E731
         print(f"  docs      {'added to messages that name an instrument' if config.chat.docs else 'off'}")
-        print(f"  tools     for Claude Code at {config.mcp_url}")
         print(f"  max       answers bach status|settings|models|catalog|download_model|quit|help on UDP {config.max.receive_port}")
         hub = Hub(bridge, status, make)
         status.on_quit(hub.close)
@@ -177,7 +166,7 @@ def run(config: Config) -> None:
             if config.chat.open_browser:
                 webbrowser.open(config.url)
 
-        http = uvicorn.Server(uvicorn.Config(create_app(hub, status, mcp), host=config.server.host,
+        http = uvicorn.Server(uvicorn.Config(create_app(hub, status), host=config.server.host,
                                              port=config.server.port, log_level="warning",
                                              timeout_graceful_shutdown=1))  # the pages' streams never end
 

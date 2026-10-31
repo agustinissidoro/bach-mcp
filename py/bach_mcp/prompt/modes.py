@@ -48,7 +48,8 @@ KIND_NOTE = {
                  "`function produce(p) { ... }`, and send it with send_algorithm.",
     "transformer": "You are writing for a transformer: it changes the score already in its roll. Write "
                    "`function transform(source, p) { ... }` and send it with send_algorithm.",
-    "selector": "You are writing for a selector: it selects notes of the score already in its roll.",
+    "selector": "You are writing for a selector: it selects notes of the score already in its roll. Write "
+                "`function select(source, p) { ... }` returning the notes it picks, and send it with send_algorithm.",
     "writer": "You are writing for a writer: write the notes themselves with write_score.",
 }
 

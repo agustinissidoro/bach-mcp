@@ -61,7 +61,7 @@ class FakeMCP:
 
 class FakeBridge:
     """Stands in for Max: an instance answers a load the way the patch does (algo_loaded /
-    algo_error), and its roll writes its file when asked (write_roll), as bach.roll's writetxt does."""
+    algo_error), and the server patch writes buffer.json when asked (server write_buffer)."""
 
     def __init__(self, rolls="", answer="loaded", roll=None):
         self.sent = []
@@ -73,10 +73,11 @@ class FakeBridge:
     def send(self, message):
         self.sent.append(message)
         name, command, *args = split(message)
-        if command == "write_roll" and self.roll is not None:
-            with open(os.path.join(self.rolls, args[0]), "w", encoding="utf-8") as f:
+        if name == "server" and command == "write_buffer" and self.roll is not None:
+            from bach_mcp.bridge import buffer
+            with open(buffer.BUFFER_FILE, "w", encoding="utf-8") as f:
                 f.write(self.roll)
-            self.queue.append(f"{name} roll_written {args[0]}")
+            self.queue.append("server buffer_done")
         if self.answer and command == "load_algo":
             reply = {"loaded": f"{name} algo_loaded {args[0]} 12 1",
                      "error": f'{name} algo_error "something went wrong"'}[self.answer]
@@ -113,6 +114,9 @@ class PlaygroundTest(unittest.TestCase):
         self.target = Target("turn", "generator", self.folder)
         serve_targets(lambda: self.target)
         self.addCleanup(serve_targets, None)
+        from bach_mcp.bridge import buffer
+        saved, buffer.BUFFER_FILE = buffer.BUFFER_FILE, os.path.join(self.folder, "buffer.json")
+        self.addCleanup(setattr, buffer, "BUFFER_FILE", saved)
         timeout, algo_tools._CHECK_TIMEOUT_SECONDS = algo_tools._CHECK_TIMEOUT_SECONDS, 3.0
         self.addCleanup(setattr, algo_tools, "_CHECK_TIMEOUT_SECONDS", timeout)
 
@@ -126,14 +130,14 @@ class PlaygroundTest(unittest.TestCase):
 class SendAlgorithmTests(PlaygroundTest):
     def setUp(self):
         super().setUp()
-        self.bridge = FakeBridge(self.target.rolls)
+        self.bridge = FakeBridge(self.target.scores)
         self.send = self.tool(self.bridge)
         self.history = os.path.join(self.folder, "algorithms", ".history")
 
     def test_a_good_file_is_saved_loaded_and_described(self):
         reply = self.send(code=GOOD)
         path = os.path.join(self.folder, "algorithms", "turn.js")
-        self.assertTrue(reply.startswith("OK. Algorithm saved as algorithms/turn.js and loaded in Max (turn)"), reply)
+        self.assertTrue(reply.startswith("OK. Algorithm saved as algorithms/turn.js and sent to Max (turn)"), reply)
         self.assertIn("times: slider 2..40 = 8", reply)
         self.assertIn("step: slider 50..400 mc = 200", reply)
         self.assertIn("Checked in 5 runs", reply)
@@ -177,17 +181,14 @@ class SendAlgorithmTests(PlaygroundTest):
         self.target = Target("turn", "writer", self.folder)
         self.assertIn("turn is a writer: it takes notes (write_score)", self.send(code=GOOD))
         self.target = Target("turn", "selector", self.folder)
-        self.assertIn("selector algorithms are not built yet", self.send(code=GOOD))
+        self.assertIn("turn is a selector: it picks notes of the score in its roll", self.send(code=GOOD))
         self.target = Target("turn", "transformer", self.folder)
         self.assertIn("turn is a transformer: it changes the score in its roll", self.send(code=GOOD))
         self.assertEqual(self.bridge.sent, [])
 
-    def test_what_max_answers_is_reported(self):
-        self.bridge.answer = "error"
-        self.assertIn("but Max reported an error: something went wrong", self.send(code=GOOD))
+    def test_the_load_waits_for_no_answer(self):
         self.bridge.answer = None
-        self.assertIn('which did not confirm (is the instance "turn" in the patch?)', self.send(code=GOOD))
-
+        self.assertIn('and sent to Max (turn)', self.send(code=GOOD))
 
 TRANSFORMER = """// move every note
 const params = { shift: { type: "slider", range: [-1200, 1200], value: 100, unit: "mc" } };
@@ -212,33 +213,53 @@ class TransformerTests(PlaygroundTest):
         return self.tool(bridge)(code=code)
 
     def test_checked_on_the_score_in_the_roll(self):
-        bridge = FakeBridge(self.target.rolls, roll=ROLL)
+        bridge = FakeBridge(self.target.scores, roll=ROLL)
         reply = self.send(bridge)
         self.assertIn("Transformer, checked on the score in the roll (2 notes)", reply)
         self.assertIn("pitch 6100-6300", reply)
-        self.assertEqual(bridge.sent, ["shift write_roll shift.json", "shift load_algo shift.js"])
+        self.assertEqual(bridge.sent, ["server write_buffer", "shift load_algo shift.js"])
         self.assertEqual(os.listdir(os.path.join(self.folder, "algorithms", ".history")), [], "no draft is left")
 
-    def test_checked_on_its_saved_source(self):
-        with open(os.path.join(self.folder, "algorithms", "shift.source.json"), "w", encoding="utf-8") as f:
-            f.write('{"voices": [{"chords": [{"onset": 0, "notes": [{"pitch": 4800, "dur": 500, "vel": 100}]}]}]}')
-        bridge = FakeBridge(self.target.rolls, roll=ROLL)
-        reply = self.send(bridge)
-        self.assertIn("checked on its saved source (shift.source.json) (1 notes)", reply)
-        self.assertNotIn("write_roll", " ".join(bridge.sent))
-
     def test_checked_on_the_built_in_score_without_a_roll(self):
-        from bach_mcp.bridge.buffer import RollBuffer
-        original = RollBuffer.fetch
-        RollBuffer.fetch = lambda self, timeout_seconds=5.0: original(self, 0.1)
-        self.addCleanup(setattr, RollBuffer, "fetch", original)
-        reply = self.send(FakeBridge(self.target.rolls, roll=None))
+        from bach_mcp.bridge.buffer import ServerBuffer
+        original = ServerBuffer.fetch
+        ServerBuffer.fetch = lambda self, timeout_seconds=5.0: original(self, 0.1)
+        self.addCleanup(setattr, ServerBuffer, "fetch", original)
+        reply = self.send(FakeBridge(self.target.scores, roll=None))
         self.assertIn("checked on a built-in test score: the roll is empty or Max did not hand it over (14 notes)", reply)
 
     def test_a_transformer_that_fails_on_the_source(self):
-        reply = self.send(FakeBridge(self.target.rolls, roll=ROLL),
+        reply = self.send(FakeBridge(self.target.scores, roll=ROLL),
                           TRANSFORMER.replace("n.pitch += p.shift", "n.pitch = n.missing.x"))
         self.assertTrue(reply.startswith("ERROR in shift.js line 5: error in transform"), reply)
+
+
+SELECTOR = """// the notes above a floor
+const params = { floor: { type: "slider", range: [1200, 12700], value: 6100, unit: "mc" } };
+function select(source, p) {
+  const out = [];
+  eachNote(source, (n) => { if (n.pitch > p.floor) out.push(n); });
+  return out;
+}
+"""
+
+
+@needs_node
+class SelectorTests(PlaygroundTest):
+    def setUp(self):
+        super().setUp()
+        self.target = Target("picker", "selector", self.folder)
+
+    def test_checked_on_the_score_in_the_roll(self):
+        bridge = FakeBridge(self.target.scores, roll=ROLL)
+        reply = self.tool(bridge)(code=SELECTOR)
+        self.assertIn("Selector, checked on the score in the roll (2 notes)", reply)
+        self.assertIn("it picks 1 notes ([voice chord note]): [1 2 1]", reply)
+        self.assertEqual(bridge.sent, ["server write_buffer", "picker load_algo picker.js"])
+
+    def test_a_selector_must_select(self):
+        reply = self.tool(FakeBridge(self.target.scores, roll=ROLL))(code=TRANSFORMER)
+        self.assertIn("picker is a selector: it picks notes", reply)
 
 
 @needs_node

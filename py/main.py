@@ -1,10 +1,13 @@
 """Bach's command line. Everything is configured in bachmcp.toml.
 
     run      the local model: starts the model (mlx or gguf, as the model is), the
-             bridge to Max and the chat page, and opens the page. run.command does this.
-    serve    the tools for Claude, or another MCP host: --stdio when the host starts
-             Bach itself (Claude Desktop), HTTP at [server] otherwise.
-    agent    the local model in the terminal: the same engine as the chat page.
+             bridge to Max and the chat page, and opens the page. Claude cannot join it.
+    serve    the tools for Claude, or another MCP host, over HTTP at [server]
+             (--stdio when the host starts Bach itself). No model is loaded.
+    connect  what Claude Desktop launches: passes its tool calls to `serve`, holds no port.
+    install  sets Bach up: the .venv, its requirements, the Node path, and Claude.
+             --claude true, --local true, or both. Run it with any Python 3.11 or newer.
+    agent   the local model in the terminal: the same engine as the chat page.
     eval     the evaluation suite against the local model (Max is not needed).
     claude   adds Bach to Claude Desktop, and prints the line that adds it to Claude Code.
     download puts a model in models/: a name from models/catalog.toml, a Hugging Face repo,
@@ -12,6 +15,7 @@
     models   lists the models in models/, and the ones the catalogue knows by name.
 
 Usage:
+    python py/main.py install --claude true --local true
     python py/main.py run
     python py/main.py serve --stdio
     python py/main.py download qwen3.8-27b --use
@@ -26,15 +30,20 @@ from __future__ import annotations
 import argparse
 import sys
 
-from bach_mcp.bridge.max import BridgeBusy
-from bach_mcp.config import ConfigError, load_config
+if sys.argv[1:2] == ["install"]:  # before the imports below: nothing else is there yet, maybe not even Python 3.11
+    from bach_mcp.install import main as install
+    sys.exit(install(sys.argv[2:]))
+
+from bach_mcp.bridge.max import BridgeBusy  # noqa: E402
+from bach_mcp.config import ConfigError, load_config  # noqa: E402
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="bach", description="Bach: compose in bach.roll with a model.")
     parser.add_argument("command", nargs="?", default="serve",
-                        choices=["run", "serve", "agent", "eval", "claude", "download", "models"],
+                        choices=["run", "serve", "connect", "agent", "eval", "claude", "download", "models"],
                         help="run = local model + chat page. serve = the tools for Claude (default). "
+                             "connect = what Claude Desktop launches. "
                              "agent = local model in the terminal. eval = evaluation suite. claude = register in Claude. "
                              "download = a model into models/. models = list them.")
     parser.add_argument("repo", nargs="?", default="",
@@ -86,8 +95,11 @@ def main() -> None:
             from bach_mcp import claude
             print(claude.register_desktop())
             print("Claude Code, either of:")
-            print("  its own Bach:            " + claude.claude_code_commands(config)[0])
-            print("  the Bach of run.command: " + claude.claude_code_commands(config)[1])
+            print("  the Bach Max starts:     " + claude.claude_code_commands(config)[0])
+            print("  its own Bach:            " + claude.claude_code_commands(config)[1])
+        elif args.command == "connect":
+            from bach_mcp import claude
+            claude.connect(config)
         else:
             from bach_mcp import claude
             claude.serve(config, stdio=args.stdio)

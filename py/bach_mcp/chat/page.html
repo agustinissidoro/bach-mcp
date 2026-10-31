@@ -315,7 +315,7 @@ function hear(text) {
     case "clear_instance_names_map": instances.clear(); break;
     case "add_instance_names_map": instances.set(w[1], w[2]); break;
     case "set_active_instance": active = w[1] || ""; if (logs.has(active)) logs.get(active).unread = false; break;
-    case "mcp_info": if (w[1] === "warning") banner(w.slice(2).join(" ")); break;
+    case "server": if (w[1] === "warning") banner(w.slice(2).join(" ")); break;
     default: if (w.length >= 2) instanceLine(w[0], w[1], w.slice(2));
   }
   render();

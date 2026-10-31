@@ -1,9 +1,9 @@
 # bachmcp externals: bachmcp.translate.
 #
-#   cmake -S max/bach-mcp/externals -B max/bach-mcp/externals/build
-#   cmake --build max/bach-mcp/externals/build
+#   cmake -S sources/bachmcp.translate -B sources/bachmcp.translate/build
+#   cmake --build sources/bachmcp.translate/build
 #
-# makes max/bach-mcp/externals/bachmcp.translate.mxo.
+# makes externals/bachmcp.translate.mxo.
 #
 # It compiles bach's shared library (the sources of bach's own "lib_bach" target)
 # from a checkout of bach, read only, and the Max SDK headers. Their places:
@@ -16,7 +16,7 @@ set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "")
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "")
 project(bachmcp_externals C CXX)
 
-get_filename_component(GITHUB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
+get_filename_component(GITHUB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 set(BACH_SOURCE "${GITHUB_DIR}/bach/source" CACHE PATH "bach's source folder")
 set(MAX_SDK_BASE "${GITHUB_DIR}/max-sdk-base-main" CACHE PATH "max-sdk-base")
 set(C74 "${MAX_SDK_BASE}/c74support")
@@ -116,8 +116,8 @@ set_target_properties(bachmcp.translate PROPERTIES
   PREFIX ""
   OUTPUT_NAME bachmcp.translate
   MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist.in"
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../externals")
 
 # Apple Silicon loads only signed code: sign the whole bundle (ad hoc) after each build.
 add_custom_command(TARGET bachmcp.translate POST_BUILD
-  COMMAND codesign --force --sign - "${CMAKE_CURRENT_SOURCE_DIR}/bachmcp.translate.mxo")
+  COMMAND codesign --force --sign - "${CMAKE_CURRENT_SOURCE_DIR}/../../externals/bachmcp.translate.mxo")

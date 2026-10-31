@@ -1,0 +1,10 @@
+# What the local model adds to requirements.in (main.py install --local true)
+-c requirements.txt
+
+# The mlx backend: Apple's MLX and its model server (model/backends.py). Apple Silicon only.
+mlx-lm~=0.32.0; sys_platform == "darwin" and platform_machine == "arm64"
+
+# Downloading models into models/ (model/download.py); also comes with mlx-lm
+huggingface-hub>=1.0
+
+# The gguf backend needs llama.cpp's llama-server, installed apart: brew install llama.cpp

@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 92.0, 1852.0, 954.0 ],
+        "rect": [ 406.0, 231.0, 1069.0, 853.0 ],
         "showrootpatcherontab": 0,
         "boxes": [
             {
@@ -58,7 +58,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 0.0, 26.0, 1852.0, 928.0 ],
+                        "rect": [ 406.0, 257.0, 1069.0, 827.0 ],
                         "showontab": 1,
                         "boxes": [
                             {
@@ -129,13 +129,13 @@
                                     "id": "obj-4",
                                     "maxclass": "newobj",
                                     "numinlets": 1,
-                                    "numoutlets": 1,
-                                    "outlettype": [ "" ],
+                                    "numoutlets": 2,
+                                    "outlettype": [ "", "" ],
                                     "patching_rect": [ 36.0, 320.0, 250.0, 23.0 ],
                                     "saved_object_attributes": {
                                         "versionnumber": 80300
                                     },
-                                    "text": "bachmcp.translate @in llll @out json"
+                                    "text": "bachmcp.translate @from llll @to json"
                                 }
                             },
                             {
@@ -144,13 +144,13 @@
                                     "id": "obj-7",
                                     "maxclass": "newobj",
                                     "numinlets": 1,
-                                    "numoutlets": 1,
-                                    "outlettype": [ "" ],
+                                    "numoutlets": 2,
+                                    "outlettype": [ "", "" ],
                                     "patching_rect": [ 36.0, 426.0, 250.0, 23.0 ],
                                     "saved_object_attributes": {
                                         "versionnumber": 80300
                                     },
-                                    "text": "bachmcp.translate @in json @out llll"
+                                    "text": "bachmcp.translate @from json @to llll"
                                 }
                             },
                             {
@@ -237,7 +237,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 34.0, 118.0, 1852.0, 928.0 ],
+                        "rect": [ 0.0, 26.0, 1069.0, 827.0 ],
                         "showontab": 1,
                         "boxes": [
                             {
@@ -299,13 +299,13 @@
                                     "id": "obj-4",
                                     "maxclass": "newobj",
                                     "numinlets": 1,
-                                    "numoutlets": 1,
-                                    "outlettype": [ "" ],
+                                    "numoutlets": 2,
+                                    "outlettype": [ "", "" ],
                                     "patching_rect": [ 30.0, 280.0, 250.0, 23.0 ],
                                     "saved_object_attributes": {
                                         "versionnumber": 80300
                                     },
-                                    "text": "bachmcp.translate @in llll @out json"
+                                    "text": "bachmcp.translate @from llll @to json"
                                 }
                             },
                             {
@@ -314,13 +314,13 @@
                                     "id": "obj-5",
                                     "maxclass": "newobj",
                                     "numinlets": 1,
-                                    "numoutlets": 1,
-                                    "outlettype": [ "" ],
+                                    "numoutlets": 2,
+                                    "outlettype": [ "", "" ],
                                     "patching_rect": [ 30.0, 320.0, 230.0, 23.0 ],
                                     "saved_object_attributes": {
                                         "versionnumber": 80300
                                     },
-                                    "text": "bachmcp.translate @in json @out t"
+                                    "text": "bachmcp.translate @from json @to t"
                                 }
                             },
                             {
@@ -395,7 +395,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 0.0, 26.0, 1852.0, 928.0 ],
+                        "rect": [ 0.0, 26.0, 1069.0, 827.0 ],
                         "showontab": 1,
                         "boxes": [
                             {
@@ -592,7 +592,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 0.0, 26.0, 1852.0, 928.0 ],
+                        "rect": [ 0.0, 26.0, 1069.0, 827.0 ],
                         "showontab": 1,
                         "boxes": [],
                         "lines": []

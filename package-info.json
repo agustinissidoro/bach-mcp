@@ -1,0 +1,13 @@
+{
+    "name": "bach-mcp",
+    "displayname": "bach-mcp",
+    "version": "0.1.0",
+    "author": "Agustín Issidoro",
+    "description": "Algorithms for bach scores, written by a model or by hand, with parameter panels",
+    "tags": [ "bach", "algorithm", "score", "composition" ],
+    "max_version_min": "9.0.0",
+    "max_version_max": "none",
+    "package_extra": {
+        "forcerestart": 1
+    }
+}

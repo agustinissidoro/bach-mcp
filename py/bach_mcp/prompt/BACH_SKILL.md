@@ -71,7 +71,7 @@ purpose.
 <!-- algo -->
 ## Algorithms
 
-There are two kinds of algorithm, and the request decides which:
+There are three kinds of algorithm; the instance decides which:
 
 - A **producer** makes music from nothing: `function produce(p) { ... }`.
 - A **transformer** changes music already in the score (the user's, or an
@@ -79,7 +79,11 @@ There are two kinds of algorithm, and the request decides which:
   request works on existing material: "take the phrases in the score and...",
   "vary", "reverse", "transpose this".
 
-Both declare their parameters first, then return a score.
+- A **selector** picks notes of the score in its roll, without changing them:
+  `function select(source, p) { ... }`. It returns the notes it picks.
+
+All declare their parameters first. A producer and a transformer return a
+score, a selector a list of notes.
 
 ```js
 // Voices leave one pitch together and drift apart by random walks; notes get longer as they spread.
@@ -167,6 +171,32 @@ function transform(source, p) {
     });
   }
   return out;
+}
+```
+
+**Selectors.** `source` is the score in the roll now, in the same form. Return
+the notes you pick: the note objects of `source` themselves (as `eachNote`
+hands them), or their addresses `[voice, chord, note]`, counted from 1. The
+roll selects them; nothing in the score changes, so a transformer after it can
+work on the selection alone.
+
+```js
+// Picks the highest note of every chord whose top rises above `floor`, and every note longer than `long`.
+const params = {
+  floor: { type: "slider", range: [1200, 12700], value: 7200, unit: "mc" },
+  long:  { type: "slider", range: [50, 4000], value: 1000, unit: "ms" },
+};
+
+function select(source, p) {
+  const picked = [];
+  for (const voice of source.voices) {
+    for (const chord of voice.chords) {
+      const top = chord.notes.reduce((a, n) => (n.pitch > a.pitch ? n : a), chord.notes[0]);
+      if (top && top.pitch > p.floor) picked.push(top);
+      for (const note of chord.notes) if (note.dur > p.long && note !== top) picked.push(note);
+    }
+  }
+  return picked;
 }
 ```
 

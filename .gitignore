@@ -203,9 +203,9 @@ models/*
 max/bach-mcp/algorithms/.history/
 
 # The score exchange file between the MCP server and bach.roll
-buffer.txt
+
 .buffer.txt.tmp
-max/bach-mcp/buffer.txt
+
 max/bach-mcp/.buffer.txt.tmp
 
 # bachmcp externals: the build folder (the .mxo is kept)
