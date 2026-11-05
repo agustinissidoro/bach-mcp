@@ -101,7 +101,8 @@ class Hub:
     """Handles every line and sends every answer; answers prompts one at a time, on its own thread.
 
     bridge: the MaxBridge; status: Bach's state (utilities/status.py); make: builds a
-    conversation for an instance type, or None when Bach has no local model (Claude's door).
+    conversation for an instance type (the local model's, or Claude Code's: chat/headless.py),
+    or None when the host itself is the model (an MCP host that started Bach over stdio).
     Creating the hub connects it: the bridge offers it every line from Max, and the tools
     ask it which instance they serve."""
 
@@ -235,7 +236,12 @@ class Hub:
             if self.instances.get(name) not in (None, kind):
                 self._conversations.pop(name, None)  # another type: another way of working
             self.instances[name] = kind
+            first = self.active not in self.instances  # so that Claude's tools always have an instance
+            if first:
+                self.active = name
         self._send("add_instance_names_map", name, kind, to_max=echo)
+        if first:
+            self._send("set_active_instance", name, to_max=echo)
 
     def _set_active(self, name: str, echo: bool) -> None:
         with self._lock:
@@ -329,6 +335,9 @@ class Hub:
         with self._wake:
             self._running = False
             self._wake.notify_all()
+            conversation = self._conversations.get(self._answering)
+        if conversation is not None:
+            conversation.cancel()
         serve_targets(None)
 
     def _work(self) -> None:
@@ -434,7 +443,9 @@ class Hub:
         if conversation is None:
             assert self.make is not None
             conversation = self.make(target.kind)
-            conversation.history = [{k: v for k, v in m.items() if k != "prompt"} for m in self._saved(target.name)]
+            saved = self._saved(target.name)
+            conversation.history = [{k: v for k, v in m.items() if k not in ("prompt", "session")} for m in saved]
+            conversation.session = next((m["session"] for m in reversed(saved) if m.get("session")), "")  # Claude Code's
             self._conversations[target.name] = conversation
         return conversation
 

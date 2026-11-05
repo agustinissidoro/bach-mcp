@@ -1,5 +1,6 @@
 max oblist "bachmcp" bachmcp.server;
 max oblist "bachmcp" bachmcp.translate;
+max oblist "bachmcp" bachmcp.prompt;
 max oblist "bachmcp" bachmcp.algo.transform;
 max oblist "bachmcp" bachmcp.algo.select;
 max oblist "bachmcp" bachmcp.algo.generate;

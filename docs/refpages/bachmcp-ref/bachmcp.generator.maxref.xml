@@ -3,7 +3,7 @@
 
 <c74object name="bachmcp.generator" module="bachmcp" category="bachmcp">
 	<digest>Generator with its parameter panel</digest>
-	<description>Typed in a box, becomes a bpatcher of <o>bachmcp.bpatcher.generator</o>: <o>bachmcp.algo.generate</o> with its <o>bachmcp.gui.params</o> panel. The first argument is the instance's name.</description>
+	<description>Typed in a box, becomes a bpatcher of <o>bachmcp.bpatcher.generator</o>: <o>bachmcp.algo.generate</o> with its <o>bachmcp.gui.params</o> panel and two <o>bachmcp.translate</o>, ready to connect to a <o>bach.roll</o>. The first argument is the instance's name.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
@@ -12,4 +12,16 @@
 		<metadata name="tag">score</metadata>
 		<metadata name="tag">panel</metadata>
 	</metadatalist>
+	<objarglist>
+		<objarg name="name" optional="0" type="symbol">
+			<digest>Instance name</digest>
+			<description>The name the model and the server know this instance by. Unique across open patches.</description>
+		</objarg>
+	</objarglist>
+	<seealsolist>
+		<seealso name="bachmcp.bpatcher.generator" />
+		<seealso name="bachmcp.algo.generate" />
+		<seealso name="bachmcp.gui.params" />
+		<seealso name="bach.roll" />
+	</seealsolist>
 </c74object>

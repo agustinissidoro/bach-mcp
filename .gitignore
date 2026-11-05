@@ -216,3 +216,7 @@ sources/*
 playground/*
 !playground/.gitkeep
 /deprecated
+
+# Scores on their way to read_score, rewritten on every read
+/buffer.txt
+/buffer.json

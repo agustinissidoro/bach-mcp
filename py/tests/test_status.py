@@ -80,7 +80,7 @@ class AnswerTests(unittest.TestCase):
 
     def test_the_catalogue(self):
         said = self.ask("catalog")
-        self.assertTrue(said[0].startswith("server catalog qwen3.8-27b mlx 16.1 "), said[0])
+        self.assertTrue(said[0].startswith("server catalog qwen3.8-27b-4bit mlx 16.1 "), said[0])
         self.assertIn("mlx-community/Qwen3.8-27B-4bit", said[0])
         self.assertEqual(said[-1], f"server end catalog {len(load_catalog())}")
 

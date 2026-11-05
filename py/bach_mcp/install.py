@@ -10,7 +10,7 @@ the standard library, and only at the top. Two stages:
     outside the .venv   checks Python, makes the .venv, installs the requirements,
                         then runs this same command again with the .venv's Python
     inside the .venv    the Node path and Claude. Claude is registered from here so that
-                        its entry names the .venv's Python
+                        its entry names the .venv's Python; Claude Code's login is checked
 
 Every line goes to the console as `installation: ...`. What the user must still do comes
 at the end. Running it again repairs or adds; it never removes a Claude registration.
@@ -180,7 +180,22 @@ def setup_claude(config, todo: List[str]) -> bool:
         else:
             say("claude code not found")
             todo.append(f"install Claude Code, then run: {add_line}")
+    check_login(todo)
     return done
+
+
+def check_login(todo: List[str]) -> None:
+    """Prompts from Max run through Claude Code, which needs a login of its own, apart from Claude Desktop's."""
+    from bach_mcp import claude
+    command = claude.find_claude_code()
+    if command is None:
+        return  # setup_claude has already said to install it
+    state = claude.logged_in(command)
+    if state:
+        say("claude code logged in")
+        return
+    say("claude code not logged in" if state is False else "claude code login not checked")
+    todo.append(f"to prompt Claude from Max, log in to Claude Code, in a terminal: {claude.login_command(command)}")
 
 
 def command_line(arguments: str) -> str:

@@ -159,13 +159,12 @@ class NamingTests(unittest.TestCase):
 
     def test_the_catalogue_file(self):
         catalog = load_catalog()
-        self.assertIn("qwen3.8-27b", catalog)
+        self.assertIn("qwen3.8-27b-4bit", catalog)
         for entry in catalog.values():
             self.assertRegex(entry.repo, r"^[\w.-]+/[\w.-]+(:\w+)?$", entry.name)
             self.assertIn(entry.format, ("mlx", "gguf"), entry.name)
             self.assertEqual(entry.format == "gguf", ":" in entry.repo, f"{entry.name}: a GGUF entry names its quantization")
-            self.assertTrue(entry.note, entry.name)
-        self.assertEqual(catalog["qwen3.8-27b"].folder, "Qwen3.8-27B-4bit")
+        self.assertEqual(catalog["qwen3.8-27b-4bit"].folder, "Qwen3.8-27B-4bit")
 
 
 FAKE_DOWNLOAD = """

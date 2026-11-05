@@ -1,4 +1,4 @@
-"""The door for the local model. One conversation engine, one hub, three ways to use it.
+"""The hub and who answers it: the local model, or Claude Code (headless.py). One hub, three ways to use it.
 
     engine.py     one conversation: mode, skill part, docs, the tool loop -> events
     hub.py        every line from Max, the page and the terminal; one conversation per instance

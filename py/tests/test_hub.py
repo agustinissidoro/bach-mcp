@@ -179,9 +179,13 @@ class MapTests(HubTest):
     def test_the_tools_serve_the_active_instance(self):
         with self.assertRaisesRegex(NoTarget, "no playground"):
             target()
-        self.setup_patch()
+        self.bridge.from_max(f"set_playground {line(self.playground)}")
         with self.assertRaisesRegex(NoTarget, "no instance is active"):
             target()
+        self.bridge.from_max("add_instance_names_map notes1 writer")
+        self.assertEqual(target().name, "notes1", "the first instance is the active one")
+        self.bridge.from_max("add_instance_names_map scales1 generator")
+        self.assertEqual(target().name, "notes1", "a later one does not take over")
         self.hub.handle("set_active_instance scales1", "web")
         t = target()
         self.assertEqual((t.name, t.kind, t.algorithm_file), ("scales1", "generator",

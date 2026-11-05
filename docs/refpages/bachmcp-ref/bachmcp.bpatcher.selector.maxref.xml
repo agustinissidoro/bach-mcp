@@ -3,7 +3,7 @@
 
 <c74object name="bachmcp.bpatcher.selector" module="bachmcp" category="bachmcp">
 	<digest>Selector and panel, for a bpatcher</digest>
-	<description>The view of <o>bachmcp.selector</o>: load it in a <o>bpatcher</o> with the instance's name in @args.</description>
+	<description>The view of <o>bachmcp.selector</o>: load it in a <o>bpatcher</o> with the instance's name in @args. Scores come in and go out as lllls, so it connects directly to a <o>bach.roll</o>.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
@@ -11,4 +11,29 @@
 		<metadata name="tag">select</metadata>
 		<metadata name="tag">bpatcher</metadata>
 	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>A score as a llll (from bach.roll), and every message of bachmcp.algo.select</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>Selected notes as a llll (connect to another bach.roll)</digest>
+		</outlet>
+		<outlet id="1" type="">
+			<digest>To bach.roll: dump, clearselection, sel note</digest>
+		</outlet>
+	</outletlist>
+	<objarglist>
+		<objarg name="name" optional="0" type="symbol">
+			<digest>Instance name</digest>
+			<description>The name the model and the server know this instance by. Unique across open patches.</description>
+		</objarg>
+	</objarglist>
+	<seealsolist>
+		<seealso name="bachmcp.selector" />
+		<seealso name="bachmcp.algo.select" />
+		<seealso name="bachmcp.gui.params" />
+		<seealso name="bach.roll" />
+	</seealsolist>
 </c74object>

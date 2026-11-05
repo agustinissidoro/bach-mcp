@@ -18,7 +18,7 @@ Usage:
     python py/main.py install --claude true --local true
     python py/main.py run
     python py/main.py serve --stdio
-    python py/main.py download qwen3.8-27b --use
+    python py/main.py download qwen3.8-27b-4bit --use
     python py/main.py download unsloth/Qwen3.8-27B-GGUF:Q4_K_M
     python py/main.py download https://huggingface.co/mlx-community/Qwen3-8B-4bit
     python py/main.py eval --runs 3 --case neapolitan,trio

@@ -21,9 +21,8 @@ from bach_mcp.music.pitch import cents_to_name, name_to_cents  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-UNITS_JS = os.path.join(REPO, "max", "bach-mcp", "javascript", "algorithmic_core_library", "bachmcp.lib.units.js")
+UNITS_JS = os.path.join(REPO, "javascript", "algorithmic_core_library", "bachmcp.lib.units.js")
 SKILL = os.path.join(REPO, "py", "bach_mcp", "prompt", "BACH_SKILL.md")
-EXAMPLES = os.path.join(REPO, "max", "bach-mcp", "algorithms", "examples")
 NODE = shutil.which(os.getenv("BACH_NODE") or "node")
 
 needs_node = unittest.skipUnless(NODE, "Node.js is not installed")
@@ -264,26 +263,22 @@ class SelectorTests(PlaygroundTest):
 
 @needs_node
 class LibraryTests(unittest.TestCase):
-    def test_example_algorithms_pass_the_check(self):
-        folder = EXAMPLES
-        files = sorted(f for f in os.listdir(folder) if f.endswith(".js"))
-        self.assertGreaterEqual(len(files), 2)
-        for name in files:
-            result = check_algorithm(os.path.join(folder, name), node=NODE)
-            self.assertTrue(result.get("ok"), f"{name}: {result}")
-            normalize_score(result["score"])
-
-    def test_the_skill_examples_are_the_example_algorithms(self):
+    def test_the_skill_examples_pass_the_check(self):
         with open(SKILL, encoding="utf-8") as f:
             blocks = re.findall(r"```js\n(.*?)```", f.read(), re.S)
-        self.assertEqual(len(blocks), 3)
-        for block, name in zip(blocks, ("drift.js", "transpose-phrases.js", "answer-phrases.js")):
-            with open(os.path.join(EXAMPLES, name), encoding="utf-8") as f:
-                self.assertEqual(f.read(), block, name)
+        self.assertEqual(len(blocks), 4)
+        with tempfile.TemporaryDirectory() as folder:
+            for i, block in enumerate(blocks):
+                path = os.path.join(folder, f"example{i}.js")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(block)
+                result = check_algorithm(path, node=NODE)
+                self.assertTrue(result.get("ok"), f"example {i}: {result}")
+                self.assertEqual(result["kind"], ("producer", "transformer", "selector", "transformer")[i])
 
     def test_the_skill_names_every_library_function(self):
         program = "process.stdout.write(JSON.stringify(require(process.argv[1]).LIBRARY))"
-        index = os.path.join(REPO, "max", "bach-mcp", "javascript", "algorithmic_core_library", "bachmcp.lib.index.js")
+        index = os.path.join(REPO, "javascript", "algorithmic_core_library", "bachmcp.lib.index.js")
         names = json.loads(subprocess.run([NODE, "-e", program, index], capture_output=True, text=True, check=True).stdout)
         with open(SKILL, encoding="utf-8") as f:
             prose = re.sub(r"```.*?```", "", f.read(), flags=re.S)

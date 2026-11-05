@@ -1,6 +1,7 @@
-"""The installer's arguments and the Node path; quitting on signals and on closed input."""
+"""The installer's arguments, the Node path and Claude Code's login; quitting on signals and on closed input."""
 
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -9,10 +10,11 @@ import tempfile
 import textwrap
 import time
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from bach_mcp import install  # noqa: E402
+from bach_mcp import claude, install  # noqa: E402
 
 
 class ArgumentTests(unittest.TestCase):
@@ -110,6 +112,39 @@ class QuitTests(unittest.TestCase):
         self.assertIsNone(process.poll())
         process.send_signal(signal.SIGTERM)
         self.assert_all_gone(process, model)
+
+
+class LoginTests(unittest.TestCase):
+    def fake(self, body):
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        path = os.path.join(folder, "my claude")
+        with open(path, "w") as f:
+            f.write(f"#!/bin/sh\n{body}\n")
+        os.chmod(path, 0o755)
+        return path
+
+    def check(self, command):
+        todo = []
+        with mock.patch.object(claude, "find_claude_code", return_value=command), mock.patch("builtins.print"):
+            install.check_login(todo)
+        return todo
+
+    def test_logged_in_asks_nothing(self):
+        self.assertEqual(self.check(self.fake("""echo '{"loggedIn": true}'""")), [])
+
+    def test_logged_out_gives_the_command_of_this_computer(self):
+        command = self.fake("""echo '{"loggedIn": false}'; exit 1""")
+        todo = self.check(command)
+        self.assertEqual(len(todo), 1)
+        self.assertIn(f"{shlex.quote(command)} auth login", todo[0])
+
+    def test_an_answer_it_cannot_read_still_gives_the_command(self):
+        self.assertIsNone(claude.logged_in(self.fake("echo nonsense")))
+        self.assertEqual(len(self.check(self.fake("echo nonsense"))), 1)
+
+    def test_no_claude_code_leaves_it_to_setup_claude(self):
+        self.assertEqual(self.check(None), [])
 
 
 if __name__ == "__main__":

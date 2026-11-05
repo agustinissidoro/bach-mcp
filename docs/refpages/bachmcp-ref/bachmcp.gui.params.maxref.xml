@@ -3,7 +3,7 @@
 
 <c74object name="bachmcp.gui.params" module="bachmcp" category="bachmcp">
 	<digest>Parameter panel for a bach-mcp algorithm</digest>
-	<description>The panel of an algorithm's parameters (v8ui). Connect a runner's panel outlet to it and its outlet back to the runner. The first argument (or <m>set_name</m>) is the name shown while no algorithm is loaded.</description>
+	<description>The panel of an algorithm's parameters (v8ui), which builds itself from the file the runner loads: one card per parameter (slider, range, toggle, menu, seed, curve, list), plus the runner's options. Connect a runner's panel outlet to it and its outlet back to the runner. It is saved with the patch, and works with <o>pattr</o> and <o>pattrstorage</o> when given a scripting name.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
@@ -13,4 +13,53 @@
 		<metadata name="tag">algorithm</metadata>
 		<metadata name="tag">interface</metadata>
 	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>From a runner's panel outlet; reset, bang, clear, autosize, set_name</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>To the runner: param, bypass, repeat, snap, source_mode, capture_source, write_to_playground</digest>
+		</outlet>
+	</outletlist>
+	<objarglist>
+		<objarg name="name" optional="1" type="symbol">
+			<digest>Name shown</digest>
+			<description>Shown while no algorithm is loaded, like <m>set_name</m>.</description>
+		</objarg>
+	</objarglist>
+	<methodlist>
+		<method name="reset">
+			<arglist></arglist>
+			<digest>Back to the declared values</digest>
+			<description>Sets every parameter to its declared value. Double-clicking a control does this for one.</description>
+		</method>
+		<method name="bang">
+			<arglist></arglist>
+			<digest>Send every value</digest>
+			<description>Sends the current value of every parameter.</description>
+		</method>
+		<method name="clear">
+			<arglist></arglist>
+			<digest>Empty the panel</digest>
+			<description>Forgets the parameters.</description>
+		</method>
+		<method name="autosize">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Resize to the content</digest>
+			<description><m>1</m> (default): the panel resizes itself to its content.</description>
+		</method>
+		<method name="set_name">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Name shown</digest>
+			<description>Drawn while no algorithm is loaded.</description>
+		</method>
+	</methodlist>
+	<seealsolist>
+		<seealso name="bachmcp.algo.generate" />
+		<seealso name="bachmcp.algo.transform" />
+		<seealso name="bachmcp.algo.select" />
+		<seealso name="bachmcp.generator" />
+	</seealsolist>
 </c74object>

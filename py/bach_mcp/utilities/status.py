@@ -85,7 +85,7 @@ class Status:
 
     @property
     def ready(self) -> bool:
-        return self.state == "ready"
+        return self.state in ("ready", "claude")  # Claude brings its own model
 
     def as_dict(self) -> Dict[str, Any]:
         return {"state": self.state, "model": self.model, "message": self.message, "ready": self.ready}
@@ -121,7 +121,7 @@ class Status:
         what = words[1].strip('"').lower() if len(words) > 1 else "help"
         if what == "status":
             self._say("status", 1)
-            if self.ready:
+            if self.ready and self.model:
                 self._say("model", self.model)  # only a model that is loaded and answers
             if self.message:
                 self._say("warning", self.message)

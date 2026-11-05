@@ -150,5 +150,18 @@
       "generate",
       "bpatcher"
     ]
+  },
+  "bachmcp.prompt": {
+    "digest": "A chat-style prompt box",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "prompt",
+      "text",
+      "interface",
+      "chat"
+    ]
   }
 }

@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.prompt" module="bachmcp" category="bachmcp">
+	<digest>A chat-style prompt box</digest>
+	<description>Click it and type. Enter sends and Shift+Enter is a new line. The whole text leaves as one symbol, with commas, semicolons, quotes and new lines included, so it reaches an instance as one prompt whatever is typed. After sending, the text stays dimmed, and the box ignores keys until clicked again.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">prompt</metadata>
+		<metadata name="tag">text</metadata>
+		<metadata name="tag">interface</metadata>
+		<metadata name="tag">chat</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>bang, set, append, clear, paste</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>prompt &lt;text&gt;</digest>
+		</outlet>
+	</outletlist>
+	<methodlist>
+		<method name="bang">
+			<arglist></arglist>
+			<digest>Send</digest>
+			<description>Sends what is typed.</description>
+		</method>
+		<method name="set">
+			<arglist><arg name="text" optional="0" type="list" /></arglist>
+			<digest>Replace the text</digest>
+			<description>Replaces the text without sending it.</description>
+		</method>
+		<method name="append">
+			<arglist><arg name="text" optional="0" type="list" /></arglist>
+			<digest>Add to the text</digest>
+			<description>Adds to the end of the text.</description>
+		</method>
+		<method name="clear">
+			<arglist></arglist>
+			<digest>Empty the box</digest>
+			<description>Erases the text.</description>
+		</method>
+		<method name="paste">
+			<arglist></arglist>
+			<digest>Paste</digest>
+			<description>Pastes the clipboard at the caret.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="autoheight" get="1" set="1" type="int" size="1">
+			<digest>Grow with the text</digest>
+			<description><m>1</m>: the box grows downwards past the height you gave it, up to <at>maxheight</at>, and comes back after sending.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Grow With Text" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+		<attribute name="maxheight" get="1" set="1" type="float" size="1">
+			<digest>Height to grow to</digest>
+			<description>With <at>autoheight</at> 1, it grows to this height and then scrolls.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="400" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Maximum Height" />
+			</attributelist>
+		</attribute>
+		<attribute name="prepend_prompt_label" get="1" set="1" type="int" size="1">
+			<digest>Send the word prompt first</digest>
+			<description><m>1</m>: <m>prompt &lt;text&gt;</m>. <m>0</m>: the text alone.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Prepend prompt" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+		<attribute name="save_contents" get="1" set="1" type="int" size="1">
+			<digest>Save the text with the patch</digest>
+			<description>The text, and whether it was sent, come back on reopening.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Save Contents With Patcher" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+		<attribute name="placeholder" get="1" set="1" type="symbol" size="1">
+			<digest>Shown while empty</digest>
+			<description>The text shown while the box is empty.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="Type a prompt, Enter to send" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Placeholder" />
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<seealsolist>
+		<seealso name="bachmcp.generator" />
+		<seealso name="bachmcp.transformer" />
+		<seealso name="bachmcp.selector" />
+		<seealso name="bachmcp.server" />
+	</seealsolist>
+</c74object>

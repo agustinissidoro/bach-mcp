@@ -612,7 +612,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 0,
                                     "patching_rect": [ 30.0, 161.0, 620.0, 21.0 ],
-                                    "text": "algorithms/   one .js file per instance, and its .source.json"
+                                    "text": "algorithms/   one .js file per instance"
                                 }
                             },
                             {
@@ -821,7 +821,7 @@
                                     "numoutlets": 0,
                                     "patching_rect": [ 30.0, 119.0, 620.0, 36.0 ],
                                     "presentation_linecount": 2,
-                                    "text": "If you haven't done already, go through the package installation to set up the virtual environment (conda), register the MCP in Claude and place the folders correctly. Then return here :D"
+                                    "text": "If you haven't done already, go through the package installation to set up the virtual environment, register the MCP in Claude and place the folders correctly. Then return here :D"
                                 }
                             },
                             {

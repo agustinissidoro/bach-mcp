@@ -3,7 +3,7 @@
 
 <c74object name="bachmcp.server" module="bachmcp" category="bachmcp">
 	<digest>Run the bach-mcp server</digest>
-	<description>Starts and stops the bach-mcp server: a local model (<m>local</m>) or Claude (<m>claude</m>). One per patch, except one <m>local</m> and one <m>claude</m> together. Every <o>bachmcp.algo.transform</o> in Max talks to it. The attributes are written to <i>bachmcp.toml</i> when the object is created.</description>
+	<description>Starts and stops the bach-mcp server: a local model (<m>local</m>) or Claude (<m>claude</m>). One per patch, except one <m>local</m> and one <m>claude</m> together. Every instance in Max (<o>bachmcp.generator</o>, <o>bachmcp.transformer</o>, <o>bachmcp.selector</o>) talks to it. The attributes are written to <i>bachmcp.toml</i> when the object is created.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
@@ -13,15 +13,18 @@
 	</metadatalist>
 	<inletlist>
 		<inlet id="0" type="">
-			<digest>start, stop, map_refresh, model_catalog, download</digest>
+			<digest>start, stop, map_refresh, open, debug, install, model_catalog, download</digest>
 		</inlet>
 	</inletlist>
 	<outletlist>
-		<outlet id="0" type="int">
-			<digest>Server state: 1 running, 0 stopped</digest>
+		<outlet id="0" type="">
+			<digest>To bach.roll: writetxt, when a tool asks for the score</digest>
 		</outlet>
-		<outlet id="1" type="">
-			<digest>Server console output</digest>
+		<outlet id="1" type="dictionary">
+			<digest>Each answer, as a dictionary: instance, tokens, time, answer</digest>
+		</outlet>
+		<outlet id="2" type="">
+			<digest>Output of the server and the installer</digest>
 		</outlet>
 	</outletlist>
 	<objarglist>
@@ -51,6 +54,21 @@
 			<digest>Resend the instances</digest>
 			<description>Sends again the names and types of every bachmcp instance in Max.</description>
 		</method>
+		<method name="open">
+			<arglist></arglist>
+			<digest>Open the chat page</digest>
+			<description>Opens the chat page in the browser. Only for <m>local</m>.</description>
+		</method>
+		<method name="debug">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Print what Python sends</digest>
+			<description><m>1</m> prints every line from Python in the Max console.</description>
+		</method>
+		<method name="install">
+			<arglist><arg name="what" optional="1" type="symbol" /></arglist>
+			<digest>Install bach-mcp</digest>
+			<description>Makes the virtual environment and sets everything up: <m>install</m> for both hosts, <m>install local</m> or <m>install claude</m> for one. Follow it in the Max console. Running it again repairs or adds what is missing.</description>
+		</method>
 		<method name="model_catalog">
 			<arglist></arglist>
 			<digest>List downloadable models</digest>
@@ -77,6 +95,22 @@
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="int" size="1" value="3001" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Prompt Port" />
+			</attributelist>
+		</attribute>
+		<attribute name="url" get="1" set="1" type="symbol" size="1">
+			<digest>The server's address</digest>
+			<description>The chat page and <i>/mcp</i> are served here.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="127.0.0.1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="URL" />
+			</attributelist>
+		</attribute>
+		<attribute name="url_port" get="1" set="1" type="int" size="1">
+			<digest>The server's port</digest>
+			<description>The port of the chat page and <i>/mcp</i>.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="8090" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="URL Port" />
 			</attributelist>
 		</attribute>
 		<attribute name="playground" get="1" set="1" type="symbol" size="1">
@@ -213,7 +247,9 @@
 		</attribute>
 	</attributelist>
 	<seealsolist>
-		<seealso name="bachmcp.algo.transform" />
+		<seealso name="bachmcp.generator" />
+		<seealso name="bachmcp.transformer" />
+		<seealso name="bachmcp.selector" />
 		<seealso name="bachmcp.translate" />
 	</seealsolist>
 </c74object>

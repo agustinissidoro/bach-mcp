@@ -1,4 +1,4 @@
-# Bach configuration. Read by py/main.py: `run` (./run.command), `serve`, `agent`, `eval`, `claude`.
+# Bach configuration. Read by py/main.py: `run`, `serve`, `connect`, `agent`, `eval`, `claude`.
 # Claude's door (serve) only needs [server], [max] and [algo]; the model settings are for the local model.
 
 [model]

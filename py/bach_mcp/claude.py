@@ -8,7 +8,8 @@ Claude brings its own model; Bach gives it the tools, what to read, and Max.
                               the skill as the server's instructions, /score and /algo
                               as two prompts, the instrument docs as resources
     serve(config, stdio)      serves that app: over HTTP at [server] (bachmcp.server claude),
-                              or over stdio for a host that starts Bach itself
+                              where prompts from Max are answered by Claude Code
+                              (chat/headless.py), or over stdio for a host that starts Bach itself
     connect(config)           Claude Desktop's side: it can only launch a command, so this
                               answers it and passes the tool calls to the Bach Max started.
                               It holds no port, so opening Claude blocks nothing in Max
@@ -21,6 +22,7 @@ The local chat (`run`) does not serve Claude: with bachmcp.server local, Claude 
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import shlex
@@ -47,6 +49,7 @@ MAIN_PY = os.path.join(REPO_ROOT, "py", "main.py")
 CLAUDE_DESKTOP_CONFIG = os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
 CLAUDE_CODE_CONFIG = os.path.expanduser("~/.claude.json")
 CLAUDE_CODE_PLACES = ("~/.local/bin/claude", "~/.claude/local/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude")
+CLAUDE_DESKTOP_CODE = "~/Library/Application Support/Claude/claude-code/*/*/claude.app/Contents/MacOS/claude"
 
 _MODE_PROMPTS = {
     "score": "Work in /score mode: write the notes yourself as JSON, and get every pitch from the pitch tools. "
@@ -89,14 +92,19 @@ def _reader(text: str):
 def serve(config: Config, stdio: bool = False) -> None:
     """Serve the tools for an MCP host until it stops (stdio) or Ctrl-C (HTTP). Max can ask
     `bach status` meanwhile (status.py): it answers "claude". The hub takes the patch's
-    playground and instances, so the tools work for the active instance; it answers
-    no prompts (there is no local model)."""
+    playground and instances, so the tools work for the instance being answered, else the
+    active one. Over HTTP it answers prompts with Claude Code; over stdio the host is the
+    one Claude is talking to, so it answers none."""
+    from .chat.headless import ClaudeConversation
     from .chat.hub import Hub
     bridge, status = start_bridge(config, "serve")
     quit_on_signals(status)
     try:
         mcp = mcp_app(config, bridge)
-        Hub(bridge, status)
+        command = None if stdio else find_claude_code()
+        make = None if stdio else lambda kind: ClaudeConversation(command, config, kind)
+        hub = Hub(bridge, status, make)
+        status.on_quit(hub.close)
         status.started()
         if stdio:
             mcp.run(transport="stdio")
@@ -172,12 +180,37 @@ def claude_code_commands(config: Config) -> List[str]:
 
 
 def find_claude_code() -> Optional[str]:
-    """The `claude` command: on the PATH, or where its installers put it."""
+    """The `claude` command: on the PATH, where its installers put it, or the newest one
+    that came with Claude Desktop."""
     found = shutil.which("claude")
     if found:
         return found
-    places = (os.path.expanduser(p) for p in CLAUDE_CODE_PLACES)
+    places = [os.path.expanduser(p) for p in CLAUDE_CODE_PLACES]
+    places += sorted(glob.glob(os.path.expanduser(CLAUDE_DESKTOP_CODE)), key=_version, reverse=True)
     return next((p for p in places if os.access(p, os.X_OK)), None)
+
+
+def login_command(command: str) -> str:
+    """The line a person runs to log this Claude Code in."""
+    return f"{shlex.quote(command)} auth login"
+
+
+def logged_in(command: str) -> Optional[bool]:
+    """Whether this Claude Code can answer on its own, as it would when Max starts it: without what
+    a parent Claude Code session passes down. None if it cannot tell."""
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE" and not k.startswith("CLAUDE_CODE_")}
+    try:
+        done = subprocess.run([command, "auth", "status"], capture_output=True, text=True, timeout=20, env=env)
+        answer = json.loads(done.stdout).get("loggedIn")
+    except (OSError, subprocess.TimeoutExpired, ValueError, AttributeError):
+        return None
+    return answer if isinstance(answer, bool) else None
+
+
+def _version(path: str) -> List[int]:
+    """claude-code/2.1.309/... -> [2, 1, 309]"""
+    folder = path.split("/claude-code/")[1].split("/")[0]
+    return [int(n) for n in folder.split(".") if n.isdigit()]
 
 
 def register_code(config: Config, command: Optional[str] = None, path: str = CLAUDE_CODE_CONFIG) -> bool:
@@ -204,4 +237,5 @@ def register_code(config: Config, command: Optional[str] = None, path: str = CLA
 
 
 __all__ = ["mcp_app", "serve", "connect", "register_desktop", "register_code", "find_claude_code",
+           "login_command", "logged_in",
            "claude_code_commands", "desktop_entry", "SERVER_NAME"]

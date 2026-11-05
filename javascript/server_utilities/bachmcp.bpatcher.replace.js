@@ -1,22 +1,3 @@
-/*
-bachmcp.bpatcher.replace.js — an abstraction that turns into a bpatcher.
-
-A package mapping (max definesubstitution) can make a name a bpatcher, but
-cannot pass what is typed after the name into @args. So the name is an
-abstraction instead (bachmcp.transformer.maxpat), where typed arguments arrive
-as usual, holding:
-
-  [patcherargs] -> [v8 bachmcp.bpatcher.replace.js <patcher> <width> <height>]
-
-On load the script puts a bpatcher of <patcher> where the abstraction's box
-is, with the box's arguments as @args, and deletes the box:
-
-  [bachmcp.transformer t1]  ->  [bpatcher @name bachmcp.bpatcher.transformer @args t1]
-
-The parent patcher then saves the bpatcher, so this happens once. Opened on its
-own (not inside a patcher), the abstraction does nothing.
-*/
-
 autowatch = 1;
 inlets = 1;
 outlets = 0;

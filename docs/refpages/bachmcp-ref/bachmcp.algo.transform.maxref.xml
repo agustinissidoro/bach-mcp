@@ -3,7 +3,7 @@
 
 <c74object name="bachmcp.algo.transform" module="bachmcp" category="bachmcp">
 	<digest>Transform a score with an algorithm</digest>
-	<description>Runs an algorithm written by the model (or by hand) on a score. Scores come in and go out as <o>dict</o> (bachjson); use <o>bachmcp.translate</o> to and from <o>bach.roll</o>. With <at>source_mode</at> 1 it holds the score it received and every output starts again from it. With <at>source_mode</at> 0 every score it receives replaces the source, and is transformed by the next <m>bang</m> or parameter change.</description>
+	<description>Runs a transformer algorithm (<m>function transform(source, p)</m>) on a score. Scores come in and go out as <o>dict</o> (bachjson); use <o>bachmcp.translate</o> to and from <o>bach.roll</o>. With <at>source_mode</at> 1 it holds the score it received and every output starts again from it. With <at>source_mode</at> 0 every run asks the roll for its score. It talks to the <o>bachmcp.server</o> open in any patch.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
@@ -13,15 +13,15 @@
 	</metadatalist>
 	<inletlist>
 		<inlet id="0" type="">
-			<digest>dictionary, bang, param, source_mode, auto_dump, name, write, open</digest>
+			<digest>dictionary, prompt, bang, param, load, open, name, source_mode, capture_source, write_to_playground, snap, bypass, repeat</digest>
 		</inlet>
 	</inletlist>
 	<outletlist>
 		<outlet id="0" type="dictionary">
 			<digest>Score out (dictionary)</digest>
 		</outlet>
-		<outlet id="1" type="bang">
-			<digest>Asks for a score: connect to bach.roll (through bachmcp.translate)</digest>
+		<outlet id="1" type="">
+			<digest>dump: asks for a score (connect to bach.roll)</digest>
 		</outlet>
 		<outlet id="2" type="">
 			<digest>To bachmcp.gui.params</digest>
@@ -33,76 +33,128 @@
 	<objarglist>
 		<objarg name="name" optional="0" type="symbol">
 			<digest>Instance name</digest>
-			<description>The name the model and the server know this instance by. Unique in the patch.</description>
+			<description>The name the model and the server know this instance by. Unique across open patches.</description>
 		</objarg>
 	</objarglist>
 	<methodlist>
-		<method name="dictionary">
-			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
-			<digest>Score in</digest>
-			<description>A score as a dictionary. With <at>source_mode</at> 1 the first one becomes the source; with <at>source_mode</at> 0 each one becomes the source, without being transformed.</description>
+		<method name="prompt">
+			<arglist><arg name="text" optional="0" type="list" /></arglist>
+			<digest>Prompt the model</digest>
+			<description>Sends the text to this instance's conversation. The model, local or Claude, answers by writing the algorithm, which loads by itself.</description>
 		</method>
 		<method name="bang">
 			<arglist></arglist>
-			<digest>Output a score</digest>
-			<description>Transforms the source with the current parameters and outputs it.</description>
+			<digest>Run</digest>
+			<description>Runs the algorithm with the current parameters. Same as <m>dump</m> and <m>run</m>.</description>
 		</method>
 		<method name="param">
 			<arglist><arg name="name" optional="0" type="symbol" /><arg name="value" optional="0" type="list" /></arglist>
 			<digest>Set a parameter</digest>
-			<description>Sets a parameter of the algorithm, e.g. <m>param shift 700</m>. Pitch parameters also take note names.</description>
+			<description>Sets a parameter of the algorithm, e.g. <m>param shift 700</m>. Pitch parameters also take note names. <m>&lt;name&gt; &lt;value&gt;</m> does the same.</description>
 		</method>
-		<method name="source_mode">
-			<arglist><arg name="mode" optional="0" type="int" /></arglist>
-			<digest>Destructive (0) or non-destructive (1)</digest>
-			<description>See <at>source_mode</at>.</description>
+		<method name="load">
+			<arglist><arg name="path" optional="0" type="symbol" /></arglist>
+			<digest>Load an algorithm file</digest>
+			<description>Loads and runs a file. <m>load_algo</m> does the same, and <m>try_load_algo</m> is silent if the file cannot be loaded.</description>
 		</method>
-		<method name="auto_dump">
-			<arglist><arg name="on" optional="0" type="int" /></arglist>
-			<digest>Output on every parameter change</digest>
-			<description>See <at>auto_dump</at>.</description>
-		</method>
-		<method name="name">
-			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
-			<digest>Rename the instance</digest>
-			<description>Sets a new instance name.</description>
-		</method>
-		<method name="write">
+		<method name="reload">
 			<arglist></arglist>
-			<digest>Save the source</digest>
-			<description>Writes the source to <i>playground/algorithms/&lt;name&gt;.source.json</i>.</description>
+			<digest>Read the file again</digest>
+			<description>Reads the algorithm file again. It also happens by itself when the file changes (see <m>watch</m>).</description>
 		</method>
 		<method name="open">
 			<arglist></arglist>
 			<digest>Open the algorithm</digest>
 			<description>Opens the algorithm's code.</description>
 		</method>
+		<method name="name">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Rename the instance</digest>
+			<description>Sets a new instance name.</description>
+		</method>
+		<method name="write_to_playground">
+			<arglist></arglist>
+			<digest>Save the last score</digest>
+			<description>Writes the last score sent to <i>playground/scores/&lt;name&gt;.json</i>.</description>
+		</method>
+		<method name="snap">
+			<arglist><arg name="mode" optional="0" type="int" /></arglist>
+			<digest>Round the output's pitches</digest>
+			<description><m>0</m> semitones, <m>1</m> quarter tones, <m>3</m> free (default).</description>
+		</method>
+		<method name="bypass">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Bypass</digest>
+			<description><m>1</m>: runs do nothing, and a score at the inlet goes straight out.</description>
+		</method>
+		<method name="repeat">
+			<arglist></arglist>
+			<digest>Output again</digest>
+			<description>Sends the last output again.</description>
+		</method>
+		<method name="verbose">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Say what happens</digest>
+			<description><m>1</m>: says in the Max console what happens. Default <m>0</m>: only errors.</description>
+		</method>
+		<method name="watch">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Reload on file changes</digest>
+			<description><m>1</m> (default): reloads the file when it changes on disk.</description>
+		</method>
+		<method name="dictionary">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Score in</digest>
+			<description>A score as a dictionary. It becomes the source according to <at>source_mode</at>, and never runs the algorithm by itself, so there is no loop through a roll.</description>
+		</method>
+		<method name="capture_source">
+			<arglist></arglist>
+			<digest>Take a new source</digest>
+			<description>Asks the roll for its score: the next score in becomes the source.</description>
+		</method>
+		<method name="process_only_selection">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Work on the selected notes</digest>
+			<description><m>1</m>: only the notes flagged in the slot <m>selection_slot</m>, which a selector writes. Default <m>0</m>: the whole score.</description>
+		</method>
+		<method name="selection_slot">
+			<arglist><arg name="slot" optional="0" type="int" /></arglist>
+			<digest>The selection's slot</digest>
+			<description>The slot that flags the selected notes. Default 11.</description>
+		</method>
 	</methodlist>
 	<attributelist>
-		<attribute name="source_mode" get="1" set="1" type="int" size="1">
-			<digest>Destructive (0) or non-destructive (1)</digest>
-			<description><m>1</m>: the first score received is the source; every output starts again from it. <m>0</m>: every score received becomes the source; after an output, parameter changes wait (up to 3 s) for the next score to come back.</description>
-			<attributelist>
-				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
-				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Source Mode" />
-				<attribute name="enumvals" get="1" set="1" type="atom" size="2">
-					<enum name="0" />
-					<enum name="1" />
-				</attribute>
-			</attributelist>
-		</attribute>
 		<attribute name="auto_dump" get="1" set="1" type="int" size="1">
 			<digest>Output on every parameter change</digest>
-			<description><m>1</m>: every parameter change outputs a score. <m>0</m>: only <m>bang</m> does.</description>
+			<description><m>1</m>: every parameter change runs the algorithm. <m>0</m>: only <m>bang</m> does.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Auto Dump" />
 				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
 			</attributelist>
 		</attribute>
+		<attribute name="source_mode" get="1" set="1" type="int" size="1">
+			<digest>Destructive (0) or non-destructive (1)</digest>
+			<description><m>1</m>: only the first run asks for a score, which is held as the source; every later run starts again from it. <m>0</m>: every run asks for the score, so it works on what the roll holds now.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Source Mode" />
+			</attributelist>
+		</attribute>
+		<attribute name="input_mode" get="1" set="1" type="int" size="1">
+			<digest>Whole score (0) or flagged notes (1)</digest>
+			<description><m>0</m>: the whole score. <m>1</m>: only the notes flagged in the slot named <i>selected</i>.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Input Mode" />
+			</attributelist>
+		</attribute>
 	</attributelist>
 	<seealsolist>
+		<seealso name="bachmcp.transformer" />
+		<seealso name="bachmcp.gui.params" />
 		<seealso name="bachmcp.translate" />
+		<seealso name="bachmcp.algo.select" />
 		<seealso name="bachmcp.server" />
 		<seealso name="bach.roll" />
 	</seealsolist>

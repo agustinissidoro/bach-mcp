@@ -244,7 +244,7 @@
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
                                     "patching_rect": [ 30.0, 300.0, 45.5, 23.0 ],
-                                    "text": "write"
+                                    "text": "write_to_playground"
                                 }
                             },
                             {
@@ -269,7 +269,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 0,
                                     "patching_rect": [ 270.0, 195.0, 231.0, 40.0 ],
-                                    "text": "save the source / open the code"
+                                    "text": "write the last score to scores/ / open the code"
                                 }
                             },
                             {

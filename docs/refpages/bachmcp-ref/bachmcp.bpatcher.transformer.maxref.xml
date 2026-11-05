@@ -3,7 +3,7 @@
 
 <c74object name="bachmcp.bpatcher.transformer" module="bachmcp" category="bachmcp">
 	<digest>Transformer and panel, for a bpatcher</digest>
-	<description>The view of <o>bachmcp.transformer</o>: load it in a <o>bpatcher</o> with the instance's name in @args.</description>
+	<description>The view of <o>bachmcp.transformer</o>: load it in a <o>bpatcher</o> with the instance's name in @args. Scores come in and go out as lllls, so it connects directly to a <o>bach.roll</o>.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
@@ -11,4 +11,26 @@
 		<metadata name="tag">transform</metadata>
 		<metadata name="tag">bpatcher</metadata>
 	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>A score as a llll (from bach.roll), and every message of bachmcp.algo.transform</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>To bach.roll: the score as a llll, and dump</digest>
+		</outlet>
+	</outletlist>
+	<objarglist>
+		<objarg name="name" optional="0" type="symbol">
+			<digest>Instance name</digest>
+			<description>The name the model and the server know this instance by. Unique across open patches.</description>
+		</objarg>
+	</objarglist>
+	<seealsolist>
+		<seealso name="bachmcp.transformer" />
+		<seealso name="bachmcp.algo.transform" />
+		<seealso name="bachmcp.gui.params" />
+		<seealso name="bach.roll" />
+	</seealsolist>
 </c74object>
