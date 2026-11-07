@@ -1793,8 +1793,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.playground.js",
@@ -2412,8 +2410,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.download.js",
@@ -2672,8 +2668,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.modelcheck.js",
@@ -2905,7 +2899,6 @@
                         },
                         "classnamespace": "box",
                         "rect": [ 34.0, 95.0, 1025.0, 853.0 ],
-                        "visible": 1,
                         "boxes": [
                             {
                                 "box": {
@@ -2914,8 +2907,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 137.0, 67.0, 179.0, 47.0 ],
-                                    "presentation_linecount": 3,
+                                    "patching_rect": [ 191.5, 66.0, 179.0, 47.0 ],
                                     "text": "TRACKS THIS VERY SAME OBJECT TO GET THE PACKAGE'S FOLDER PATH"
                                 }
                             },
@@ -4797,8 +4789,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.config.js",
