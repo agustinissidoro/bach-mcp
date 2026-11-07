@@ -10,17 +10,18 @@
 		}
 ,
 		"classnamespace" : "box",
-		"rect" : [ 377.0, 149.0, 937.0, 780.0 ],
+		"rect" : [ 277.0, 118.0, 937.0, 780.0 ],
 		"gridsize" : [ 15.0, 15.0 ],
 		"boxes" : [ 			{
 				"box" : 				{
 					"id" : "obj-2",
-					"linecount" : 5,
+					"linecount" : 9,
 					"maxclass" : "comment",
 					"numinlets" : 1,
 					"numoutlets" : 0,
-					"patching_rect" : [ 448.0, 421.0, 318.0, 87.0 ],
-					"text" : "If installing for Claude, you might need to run an authorisation. This is the only step in which you need to use the terminal. The rest (downloading models, starting the server, etc.) can be done in Max through bachmcp.server\n"
+					"patching_rect" : [ 448.0, 421.0, 318.0, 141.0 ],
+					"presentation_linecount" : 9,
+					"text" : "When installing for Claude, you need to have the Claude App installed. Claude Code is also necessary to prompt directly from Max (instead of prompting from Claude app), but currently Claude Code doesn't have a free version.\nIf installing for Claude, you might need to run an authorisation. This is the only step in which you need to use the terminal. The rest (downloading models, starting the server, etc.) can be done in Max through bachmcp.server\n"
 				}
 
 			}
