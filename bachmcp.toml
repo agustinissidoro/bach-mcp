@@ -35,4 +35,4 @@ send_port = 3000          # Python -> Max: [udpreceive 3000] in the patch
 receive_port = 3001       # Max -> Python: [udpsend 127.0.0.1 3001] in the patch. One Bach at a time can hold it.
 
 [algo]
-node = "/usr/local/bin/node"             # Node.js, to check each algorithm before it is loaded in Max (name on PATH or absolute path)
+node = "/Applications/Max.app/Contents/Resources/C74/packages/Node for Max/source/bin/osx/node/node"             # Node.js, to check each algorithm before it is loaded in Max (name on PATH or absolute path)

@@ -1,0 +1,14 @@
+{
+  "chromatic_rallentando": {
+    "intent": "Piano piece: descending chromatic scale (C6 → E♭4) in rallentando, each note displaced by a different octave (-2, -1, 0, +1, +2 and back), all within piano range.",
+    "workflow": "1-voice FG grand-staff piano. Wrote 15 single-note chords via addchord (one per semitone, onsets 200..10840, durations 760ms, final 1200). Rallentando via 6 tempo markers 60→30 in 120ths (addmarker role tempo). Octave displacement noted in annotation slot 24.",
+    "notes": "Voice = Piano (FG clef). Tempo markers: 60@0, 56@2500, 50@5000, 44@7500, 38@10000, 30@11200. Pitches (midicents): 8400 8300 7800 7400 7100 6900 6700 6500 6200 6000 5900 5600 5300 5100 4900. NOTE: dump() responses can come back asynchronously out of sync; use subroll() or get_length() to verify state. Saved as chromatic_rallentando.llll.",
+    "updated_at": "2026-10-19T09:53:51.896123+00:00"
+  },
+  "piano_chromatic": {
+    "intent": "A single-voice piano study: descending chromatic line in rallentando, each note displaced by an oscillating number of octaves (within ±2 octaves), all inside the piano range (A0–C8).",
+    "workflow": "1 voice, FG grand-staff clef (orchestral piano, Approach A). Layout via new_default_score() then clefs FG + voicenames Piano. Notes added with addchords (one llll for voice 1, [] for voice 2) — more reliable than send_score_to_max for many chords (send dropped one). Rallentando via a tempo marker (addmarker role tempo, exponential curve 500→700) + exponential deceleration of note durations + rf>f hairpin. Verify with dump(mode body).",
+    "notes": "Final pitches (cents): 7100,8200,9300,8000,6700,5400,4300,5200,6300,7400,8500 → B♭5,A6,A♭7,G6,F♯5,F4,E3,E♭4,D5,D♭6,C7(held 2600ms). Displacement pattern 0,+1,+2,+1,0,−1,−2,−1,0,+1,+2. Dynamics slot 20: rf > r > ... > f. Rallentando marker at 0. Tempo base ~500 (120bpm).",
+    "updated_at": "2026-10-22T10:43:39.027857+00:00"
+  }
+}
