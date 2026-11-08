@@ -35,6 +35,6 @@ harmonic is a stopped note S with a second finger touching above it: touching a
 fourth above sounds S + 2400 (the usual one), a fifth above S + 1902, a major
 third above S + 2786. Harmonics are soft, pure and glassy.
 
-Write the sounding pitch with "art": "harmonic"; bach plays the written pitch,
+Write the sounding pitch with articulation harmonic; bach plays the written pitch,
 so the score sounds right. A harmonic glissando (the finger sliding lightly
 along the string) is a fast run of these partials, about 40–80 ms apart.

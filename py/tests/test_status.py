@@ -93,6 +93,10 @@ class AnswerTests(unittest.TestCase):
     def test_claudes_door(self):
         status = Status(Config(), self.max, "serve")
         self.assertEqual(status.state, "claude")
+        self.assertEqual(status.model, "account default, effort default")
+        config = Config()
+        config.claude.claude_model, config.claude.claude_effort = "opus", ""
+        self.assertEqual(Status(config, self.max, "serve").model, "opus, effort default")
 
 
 class DownloadTests(unittest.TestCase):

@@ -74,7 +74,7 @@ class Status:
         self.bridge = bridge
         self.door = door  # "run", "agent" or "serve"
         self.state = "claude" if door == "serve" else "starting"
-        self.model = ""
+        self.model = claude_label(config) if door == "serve" else ""  # [claude], for the page and Max
         self.message = ""
         self.job: Optional[DownloadJob] = None
         self._on_quit: List[Callable[[], None]] = []  # what to stop before exiting, in order
@@ -317,6 +317,12 @@ def settings(config: Config) -> List[Tuple[str, Word]]:
     return rows
 
 
+def claude_label(config: Config) -> str:
+    """[claude] claude_model and claude_effort, as the chat page shows them: "opus, effort medium"."""
+    c = config.claude
+    return f"{c.claude_model or 'account default'}, effort {c.claude_effort or 'default'}"
+
+
 ALREADY_RUNNING = "Another bach server is already running"
 
 
@@ -336,4 +342,4 @@ def start_bridge(config: Config, door: str) -> Tuple[MaxBridge, Status]:
     return bridge, status
 
 
-__all__ = ["Status", "start_bridge", "watch_input", "quit_on_signals", "settings", "INFO", "REQUESTS"]
+__all__ = ["Status", "start_bridge", "watch_input", "quit_on_signals", "settings", "claude_label", "INFO", "REQUESTS"]

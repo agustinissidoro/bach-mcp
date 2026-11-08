@@ -14,7 +14,7 @@ The panel builds itself from the spec the runner sends when it loads a file
               reset all; a source's process sel. ("process_only_selection 0|1"); bypass ("bypass 0|1"), repeat; a pitch card's snap toggle ½ | ¼ | free ("snap 0|1|3"),
               a time card's 100ms | 10ms | free;
               a transformer's source: notes, write
-              (write_to_playground), capture (capture_source) and its mode,
+              (write_to_playground), capture and its mode,
               non-destructive | destructive (sends "source_mode 1|0");
               a selector's: the same, and whole score | selection only (sends "dump_selection_only 0|1")
   parameters  one card each. Moving a control sends "param <name> <value...>".
@@ -66,7 +66,7 @@ if (!panel) post("bachmcp.gui.params: cannot load bachmcp.gui.params.panel.js; t
 let autosizing = true;
 
 setinletassist(0, "from a runner's middle outlet: spec, set, status, source, source_mode; one_line_description <text>; prompt <stage> [detail]");
-setoutletassist(0, "to the runner: param <name> <value...>; capture_source, write_to_playground, source_mode, set_as_active_instance");
+setoutletassist(0, "to the runner: param <name> <value...>; capture, write_to_playground, source_mode, set_as_active_instance");
 
 function emit(messages) {
   for (const m of messages) outlet(0, m);
@@ -117,7 +117,7 @@ function source(notes, from) {
   mgraphics.redraw();
 }
 
-// the runner's request for a score (capture_source), meant for the roll beside the panel
+// the runner's request for a score (capture), meant for the roll beside the panel
 function dump() {}
 
 function source_mode(flag) {

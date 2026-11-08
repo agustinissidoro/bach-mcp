@@ -14,7 +14,7 @@ clefs: F8vb; G8vb for high solo passages and harmonics
 techniques: the string-family techniques (strings/_family.md), plus:
 - open strings 2800 3300 3800 4300, tuned in fourths
 - pizz. is natural and resonant, ringing about 1–3 s in the low register
-- slap pizz., the string slapped against the fingerboard: "text": "slap pizz."
+- slap pizz., the string slapped against the fingerboard: annotation "slap pizz."
 - double stops are limited: mostly an open string with a stopped note
 - low notes take time to speak: fast passages are clearer in the upper register
 
@@ -36,6 +36,6 @@ are playable. The 7th partial sounds 31 cents below the tempered note. Artificia
 harmonics are rare; natural ones are preferred. Harmonics are soft and pure, and
 much lighter than the stopped notes.
 
-Write the sounding pitch with "art": "harmonic"; bach plays the written pitch,
+Write the sounding pitch with articulation harmonic; bach plays the written pitch,
 so the score sounds right. A harmonic glissando (the finger sliding lightly
 along the string) is a fast run of these partials, about 40–80 ms apart.

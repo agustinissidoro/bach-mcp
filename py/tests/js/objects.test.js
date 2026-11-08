@@ -159,7 +159,7 @@ function inputFrom(m, pitch) {
   m.send("input", "dictionary", d.name);
 }
 
-test("nondestructive: the first score at the inlet is held in memory; later ones are ignored until capture_source", () => {
+test("nondestructive: the first score at the inlet is held in memory; later ones are ignored until capture", () => {
   const file = tempFile(TRANSFORMER);
   const m = load("bachmcp.runner.transformer.js");
   m.send("load", file);
@@ -172,11 +172,11 @@ test("nondestructive: the first score at the inlet is held in memory; later ones
   m.send("shift", 200);
   m.flush();
   assert.deepEqual(scorePitches(m), [[3800]], "still the original");
-  m.send("capture_source");
+  m.send("capture");
   assert.deepEqual(last(m.out, 1, "dump"), [1, "dump"], "asks the roll for its score");
   inputFrom(m, 4800);
   m.flush();
-  assert.deepEqual(scorePitches(m), [[5000]], "capture_source: the next input is the new source");
+  assert.deepEqual(scorePitches(m), [[5000]], "capture: the next input is the new source");
 });
 
 test("write_to_playground writes the last score sent to the playground's scores folder", () => {
@@ -346,7 +346,7 @@ test("a selector outputs the selected notes flagged 16, then clearselection and 
   assert.deepEqual(last(m.out, 3).slice(0, 4), [3, "s1", "algo_done", 2]);
   m.send("dump_selection_only", 0);
   assert.deepEqual(last(m.out, 2, "dump_selection_only"), [2, "dump_selection_only", 0]);
-  m.send("capture_source");
+  m.send("capture");
   const marked = JSON.parse(JSON.stringify(THREE));
   marked.voices[0].chords[0].flag = 16;            // a chord selected in the roll: cleared, written on notes
   marked.voices[0].chords[0].notes[1].flag = 2;    // muted: kept
@@ -498,7 +498,7 @@ test("a non-destructive selector (default) asks once, then selects again in the 
   m.flush();
   const bach = m.out.filter((o) => o[0] === 1).map((o) => o.slice(1).join(" "));
   assert.deepEqual(bach, ["dump", "clearselection", "sel note [ 1 1 2 ] [ 1 2 1 ]", "clearselection", "sel note [ 1 2 1 ]"]);
-  m.send("capture_source");
+  m.send("capture");
   assert.deepEqual(last(m.out, 1), [1, "dump"]);
   assert.deepEqual(last(m.out, 2, "source_mode"), null);
   m.send("source_mode", 0);

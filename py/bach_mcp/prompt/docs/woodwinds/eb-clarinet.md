@@ -14,7 +14,7 @@ clefs: G
 techniques: the woodwind techniques (woodwinds/_family.md), plus:
 - agile like the B♭ clarinet
 - soft playing is harder than on the B♭ clarinet, especially high
-- glissando upward in the upper register ("gliss"); elsewhere bends of about a semitone
+- glissando upward in the upper register (a glissando); elsewhere bends of about a semitone
 
 ## Harmonics
 The cylindrical bore overblows at the twelfth and gives only the odd partials.
@@ -22,4 +22,4 @@ Partial n sounds at the fingered note + 1200·log2(n): 3 → +1902, 5 → +2786,
 7 → +3369. From the low fingerings 5500–6900; from 5500: 7402 8286 8869. The
 real pitch can differ by a few cents.
 
-Write the sounding pitch with "art": "harmonic".
+Write the sounding pitch with articulation harmonic.

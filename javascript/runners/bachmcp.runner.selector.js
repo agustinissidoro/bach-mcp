@@ -17,7 +17,7 @@ values. If nothing comes in within 3 seconds: <name> timeout 1, then
 processing 0. The source modes are the transformer's:
   source_mode 1   non-destructive (default). Only the first run asks for the
                   score: it becomes the source, held, and every later run
-                  selects in it again, without a dump. capture_source asks
+                  selects in it again, without a dump. capture asks
                   for a new one. An input that arrives unasked becomes the
                   source only when there is none yet.
   source_mode 0   destructive. Every run asks for the score, so it selects in
@@ -49,7 +49,7 @@ Messages:
   <param> <value...>      set a parameter
   param <param> <value...>  the same, as bachmcp.gui.params sends it
   input dictionary <n>    the source; input clear forgets it
-  capture_source          "dump" out of outlet 1; the next input becomes the source
+  capture                 "dump" out of outlet 1; the next input becomes the source
   source_mode 0/1         0 destructive, 1 non-destructive (see above)
   involutive 0/1          kept for later; ignored for now (every run is clearselection, sel)
   dump_selection_only 0/1 the score out of outlet 0: the selected notes only (1, default) or the whole source
@@ -208,7 +208,7 @@ function source_mode(flag) {
   outlet(PANEL, "source_mode", m);
 }
 
-function capture_source() {
+function capture() {
   source.open = true;
   outlet(PANEL, "status", "ok", "the next score at the inlet becomes the source");
   outlet(BACH, "dump");
@@ -253,7 +253,7 @@ function input(what, name) {
   if (engine.state.bypass) return engine.passThrough(name);
   const asked = source.processing;
   const first = !source.score || source.open;
-  if (!source.destructive && !first && !asked) return;  // the source stays until capture_source
+  if (!source.destructive && !first && !asked) return;  // the source stays until capture
   if (source.destructive || first) {
     source.score = score;
     source.from = "inlet";

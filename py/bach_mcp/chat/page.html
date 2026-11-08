@@ -371,7 +371,7 @@ function render() {
   $("dot").classList.toggle("problem", model.state === "no_model" || model.state === "stopped");
   const labels = { ready: model.model, loading: `${model.model} — loading…`, starting: "starting…",
                    no_model: model.message, stopped: `the model stopped: ${model.message}`,
-                   claude: "Claude (Claude Code on your account)" };
+                   claude: `Claude — ${model.model || "Claude Code on your account"}` };
   $("label").textContent = labels[model.state] || model.state || "connecting…";
   $("label").title = model.message || model.model || "";
   $("playground").textContent = playground ? `playground: ${playground}` : "no playground";

@@ -26,7 +26,7 @@ timeout 1, then processing 0. What happens depends on the source mode:
 
   source_mode 1   non-destructive (default). Only the first run asks for the
                   score: it becomes the source, held, and every later run
-                  starts again from it, without a dump. capture_source asks
+                  starts again from it, without a dump. capture asks
                   for a new one. An input that arrives unasked becomes the
                   source only when there is none yet.
   source_mode 0   destructive. Every run asks for the score, so it works on
@@ -53,7 +53,7 @@ Messages:
   <param> <value...>      set a parameter, e.g. "shift 700"
   param <param> <value...>  the same, as bachmcp.gui.params sends it
   input dictionary <n>    a source score; input clear forgets it
-  capture_source          "dump" out of outlet 1; the next input becomes the source
+  capture                 "dump" out of outlet 1; the next input becomes the source
   source_mode 0/1         0 destructive, 1 non-destructive (see above)
   input_mode 0/1          the same as process_only_selection (kept for old patches)
   process_only_selection 0/1  0 the whole score (default), 1 only the selected notes (see above)
@@ -93,7 +93,7 @@ const source = {
   score: null,
   from: "",                 // "inlet"
   destructive: false,       // source_mode 0: see the top
-  open: false,              // capture_source: the next input becomes the source
+  open: false,              // capture: the next input becomes the source
   processing: false,        // a dump went out, the score has not come in yet
   selectedOnly: false,      // process_only_selection 1: only the notes with flag 16 (on the note or its chord)
   rest: null,               // process_only_selection 1: the notes left out of the run, put back after it
@@ -123,9 +123,9 @@ const engine = createEngine(
 );
 
 try {
-  setinletassist(0, "load_algo <path>, run, [param] <param> <value>, input dictionary <name>, capture_source");
+  setinletassist(0, "load_algo <path>, run, [param] <param> <value>, input dictionary <name>, capture");
   setoutletassist(0, "dictionary <name>: the score (bachjson-complete)");
-  setoutletassist(1, "to the parameter panel (bachmcp.gui.params.v8ui.js); dump (capture_source)");
+  setoutletassist(1, "to the parameter panel (bachmcp.gui.params.v8ui.js); dump (capture)");
   setoutletassist(2, "<name> algo_loaded / algo_done / algo_error / processing 0|1 / timeout 1");
 } catch (e) {
   // assist strings are optional
@@ -203,7 +203,7 @@ function notifydeleted() {
 }
 
 /** Ask for the score (a roll answers "dump"); the next input becomes the source, in either mode. */
-function capture_source() {
+function capture() {
   source.open = true;
   outlet(1, "status", "ok", "the next score at the inlet becomes the source");
   outlet(1, "dump");
@@ -233,7 +233,7 @@ function input(what, name) {
   if (engine.state.bypass) return engine.passThrough(name);
   const asked = source.processing;
   const first = !source.score || source.open;
-  if (!source.destructive && !first && !asked) return;  // the source stays until capture_source
+  if (!source.destructive && !first && !asked) return;  // the source stays until capture
   if (source.destructive || first) {
     source.score = score;
     source.from = "inlet";

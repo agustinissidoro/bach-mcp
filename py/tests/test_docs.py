@@ -13,6 +13,16 @@ from bach_mcp.prompt.docs import DocLibrary  # noqa: E402
 CLEFS = ["G", "F", "FG", "FGG", "FFG", "FFGG", "G8va", "G15ma", "G8vb", "G15mb", "F8va", "F15ma", "F8vb", "F15mb",
          "Soprano", "Mezzo", "Alto", "Tenor", "Barytone", "Percussion", "None"]
 MAX_CENTS = 12700
+# bach.roll's names for articulations and noteheads (its symbol tables, read from the external).
+ARTICULATIONS = {"staccato", "staccatissimo", "portato", "accent", "martellato", "fermata", "trill", "harmonic",
+                 "accentstaccato", "accentportato", "portatostaccato", "martellatostaccato", "upmordent", "mordent",
+                 "downmordent", "doublemordent", "gruppetto", "lefthandpizzicato", "upbowing", "downbowing",
+                 "tremolo1", "tremolo2", "tremolo3"}
+NOTEHEADS = {"white", "black", "cross", "diamond", "square", "blacksquare", "whitesquare", "rhombus", "blackrhombus",
+             "whiterhombus", "triangle", "blacktriangle", "whitetriangle", "doublewhole", "none"}
+# A doc names a mark in words (articulation harmonic, annotation "pizz.", notehead cross, glissando 700),
+# which the skill says how to write in each mode: never a JSON key, which belongs to one mode only.
+JSON_KEY = re.compile(r'"\w+"\s*:')
 
 DOCS = os.path.join(os.path.dirname(__file__), "..", "bach_mcp", "prompt", "docs")
 CORE_FIELDS = ("register", "expanded_register", "transposing", "clefs", "techniques")
@@ -81,6 +91,25 @@ class DocsTests(unittest.TestCase):
             self.assertRegex(field(core, "transposing"), r"^(no|yes: )", path)
             main = field(core, "clefs").split(";")[0].strip()
             self.assertIn(main, CLEFS, f"{path}: unknown main clef {main!r}")
+
+
+    def test_marks_are_named_in_words_bach_knows(self):
+        for path in doc_files():
+            text = parse(path)[3]
+            self.assertIsNone(JSON_KEY.search(text), f"{path}: name the mark in words, not as a JSON key")
+            for first, second in re.findall(r"\barticulation (\w+)(?:\s*(?:/|or)\s*(\w+))?", text):
+                for name in filter(None, (first, second)):
+                    self.assertIn(name, ARTICULATIONS, f"{path}: bach has no articulation {name!r}")
+            for name in re.findall(r"\bnotehead (\w+)", text):
+                self.assertIn(name, NOTEHEADS, f"{path}: bach has no notehead {name!r}")
+
+    def test_the_skill_names_only_marks_bach_knows(self):
+        from bach_mcp.prompt.skill import read_skill
+        skill = read_skill()
+        listed = re.search(r'`"articulations"`: (.*?)one, or a list', skill, re.S).group(1)
+        self.assertEqual(set(re.findall(r'"(\w+)"', listed)) - ARTICULATIONS, set())
+        listed = re.search(r'`"notehead"`: (.*?)\.\n', skill, re.S).group(1)
+        self.assertEqual(set(re.findall(r'"(\w+)"', listed)) - NOTEHEADS, set())
 
 
 class LibraryTests(unittest.TestCase):

@@ -14,7 +14,7 @@ clefs: F; Tenor for passages around 6000–7000
 techniques: the woodwind techniques (woodwinds/_family.md), plus:
 - crisp, effective staccato, also in the low register
 - wide leaps are idiomatic
-- bends of about a quarter-tone ("gliss": ±50)
+- bends of about a quarter-tone (glissando ±50)
 - multiphonics: many
 
 ## Harmonics
@@ -24,4 +24,4 @@ sounds at the fingered note + 1200·log2(n): 2 → +1200, 3 → +1902, 4 → +24
 The real pitch can differ by a few cents. Harmonic (flageolet) fingerings are
 also part of the normal technique of the high register.
 
-Write the sounding pitch with "art": "harmonic".
+Write the sounding pitch with articulation harmonic.

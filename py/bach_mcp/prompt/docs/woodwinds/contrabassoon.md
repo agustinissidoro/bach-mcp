@@ -21,4 +21,4 @@ sounds at the fingered note + 1200·log2(n): 2 → +1200, 3 → +1902, 4 → +24
 5 → +2786. From the low fingerings; from 2200: 3400 4102 4600 4986. The real
 pitch can differ by a few cents. Rarely used.
 
-Write the sounding pitch with "art": "harmonic".
+Write the sounding pitch with articulation harmonic.

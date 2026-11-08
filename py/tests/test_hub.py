@@ -459,6 +459,34 @@ class PromptTests(HubTest):
         self.assertTrue(files[0].startswith("notes1-"))
         self.assertEqual([t for t in self.hub.snapshot() if " history " in t], [])
 
+    def test_an_instance_that_changes_type_starts_a_new_conversation(self):
+        self.setup_patch()
+        self.replies = [text_reply("One.")]
+        self.hub.handle('notes1 prompt "first"', "web")
+        self.answered("notes1")
+        self.bridge.from_max("add_instance_names_map notes1 generator")
+        files = os.listdir(os.path.join(self.playground, "prompts"))
+        self.assertEqual(len(files), 1)
+        self.assertTrue(files[0].startswith("notes1-"), "the writer's conversation is kept aside")
+        history = [words(t) for t in self.heard(web_only=True) if t.startswith("notes1 history")]
+        self.assertEqual(json.loads(history[-1][2]), [], "the page clears it")
+        self.replies = [text_reply("Two.")]
+        self.clients.clear()
+        self.hub.handle('notes1 prompt "second"', "web")
+        self.answered("notes1")
+        messages = self.client.requests[0]["messages"]
+        self.assertEqual([m["content"] for m in messages[1:]], ["second"])
+        self.assertIn("You are writing for a generator", messages[0]["content"])
+
+    def test_the_same_map_again_keeps_the_conversation(self):
+        self.setup_patch()
+        self.replies = [text_reply("One.")]
+        self.hub.handle('notes1 prompt "first"', "web")
+        self.answered("notes1")
+        self.bridge.from_max("add_instance_names_map notes1 writer")
+        self.bridge.from_max("instances scales1 generator notes1 writer")
+        self.assertEqual(os.listdir(os.path.join(self.playground, "prompts")), ["notes1.jsonl"])
+
     def test_one_answer_at_a_time_and_a_waiting_prompt_can_be_stopped(self):
         self.setup_patch()
         self.go.clear()  # scales1's answer is held

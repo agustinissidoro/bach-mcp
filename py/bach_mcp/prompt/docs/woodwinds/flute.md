@@ -13,11 +13,11 @@ transposing: no
 clefs: G
 techniques: the woodwind techniques (woodwinds/_family.md), plus:
 - the most agile woodwind: fast scales, arpeggios and wide leaps; double and triple tonguing for very fast repeated notes
-- bends of about a quarter-tone to a semitone ("gliss": ±50 to ±100)
-- whistle tones, very soft high partials: "text": "whistle tones"
-- jet whistle, a loud rush of air sweeping in pitch: "text": "jet whistle"
-- tongue pizzicato, a short percussive pop: "text": "pizz."
-- tongue ram, embouchure closed with the tongue: "text": "tongue ram"; sounds about 1100 below the fingered note, so write that sounding pitch
+- bends of about a quarter-tone to a semitone (glissando ±50 to ±100)
+- whistle tones, very soft high partials: annotation "whistle tones"
+- jet whistle, a loud rush of air sweeping in pitch: annotation "jet whistle"
+- tongue pizzicato, a short percussive pop: annotation "pizz."
+- tongue ram, embouchure closed with the tongue: annotation "tongue ram"; sounds about 1100 below the fingered note, so write that sounding pitch
 - uses air fast in the low register: shorter phrases there
 
 ## Harmonics
@@ -28,4 +28,4 @@ The real pitch can differ by a few cents from these values. Harmonics are
 softer and more veiled than the normal notes of the same pitch; very high
 partials played very softly are the whistle tones.
 
-Write the sounding pitch with "art": "harmonic".
+Write the sounding pitch with articulation harmonic.

@@ -9,12 +9,14 @@ message from the user it:
        conversation is with an instance, whose type fixes the mode
     2. appends the instrument docs the message names (prompt/docs.py)
     3. sends the conversation to the model, with the mode's part of the skill as
-       system prompt and the mode's tools (model/client.py). Algorithm files that a
-       later send_algorithm replaced are sent as a short placeholder (without_old_code);
-       the history itself, and the saved conversation, keep them whole
+       system prompt and the mode's tools (model/client.py). An algorithm or a score
+       that a later call replaced, and an outdated read_score answer, are sent as a
+       short placeholder (without_replaced); the history itself, and the saved
+       conversation, keep them whole
     4. runs the tools the model calls, here in this process (tools/inprocess.py),
        and sends their answers back, until the model answers without a tool
-       call or max_tool_rounds is reached
+       call: after max_tool_rounds rounds of tools it has one more request to
+       answer, as Claude Code has (--max-turns, chat/headless.py)
 
 and reports each step as an event, as it happens:
 
@@ -39,7 +41,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Dict, Iterator, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -110,7 +112,7 @@ class Conversation:
         self.history.append({"role": "user", "content": text})
 
         seen_calls: Set[str] = set()
-        for _ in range(self.max_tool_rounds):
+        for _ in range(self.max_tool_rounds + 1):  # the rounds of tools, then the answer
             reply = yield from self._ask(max_tokens)
             if reply is None:
                 return
@@ -127,7 +129,7 @@ class Conversation:
 
     def _ask(self, max_tokens: Optional[int]) -> Iterator[Event]:
         """One request to the model, streamed as events; returns its Reply (None after an error)."""
-        messages = [{"role": "system", "content": self.system_prompt()}] + without_old_code(self.history)
+        messages = [{"role": "system", "content": self.system_prompt()}] + without_replaced(self.history)
         tools = self.mode_tools()
         for attempt in range(1 + LOOP_RETRIES):
             started = time.time()
@@ -166,40 +168,104 @@ class Conversation:
 
 
 OLD_CODE = "(an earlier version of the file: a later send_algorithm replaced it)"
+OLD_SCORE = "(an earlier score: a later write_score or clear_score replaced it)"
+OLD_READ = "(an earlier answer: a later read_score of the same part replaced it)"
+READ_DEFAULTS = {"voice": 0, "from_ms": -1.0, "to_ms": -1.0}
 
 
-def without_old_code(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """The history as the model reads it: the code of every send_algorithm call but the last
-    one, and the last one that loaded (its answer starts with OK), becomes OLD_CODE. A
-    conversation is one instance and so one file: an older version is never needed again.
-    It depends only on the history, so a request changes the prefix the model server has
-    cached only from the version just replaced on."""
-    calls = [(i, k, call) for i, m in enumerate(history) if m.get("role") == "assistant"
-             for k, call in enumerate(m.get("tool_calls") or []) if call["function"]["name"] == "send_algorithm"]
+def without_replaced(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The history as the local model reads it, without what a later call replaced. A
+    conversation is one instance, so one file and one roll: an older version is never needed again.
+
+        send_algorithm  the code of every call but the last, and the last that loaded (its answer
+                        starts with OK), becomes OLD_CODE
+        write_score     the score of every call before the last that replaced the roll ("OK. Score
+                        written") or cleared it becomes OLD_SCORE; later add=true calls stay
+        read_score      an answer becomes OLD_READ when a later call with the same arguments
+                        answered the score again ("Unchanged ..." points back to it, so it stays)
+
+    The history itself, and the saved conversation, keep everything. It depends only on the
+    history, so a request changes the prefix the model server has cached only from the version
+    just replaced on. Claude Code keeps its own history (chat/headless.py): this is the local path's."""
+    return _old_reads(_old_scores(_old_code(history)))
+
+
+def _calls(history: List[Dict[str, Any]], *names: str) -> List[Tuple[int, int, Dict[str, Any]]]:
+    """(message index, call index, call) of every call of these tools, in order."""
+    return [(i, k, call) for i, m in enumerate(history) if m.get("role") == "assistant"
+            for k, call in enumerate(m.get("tool_calls") or []) if call["function"]["name"] in names]
+
+
+def _answers(history: List[Dict[str, Any]]) -> Dict[str, str]:
+    return {m.get("tool_call_id"): str(m.get("content", "")) for m in history if m.get("role") == "tool"}
+
+
+def _arguments(call: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    try:
+        arguments = json.loads(call["function"]["arguments"])
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return arguments if isinstance(arguments, dict) else None
+
+
+def _replace_argument(out: List[Dict[str, Any]], i: int, k: int, key: str, value: str) -> bool:
+    """out[i] with argument `key` of its call k set to value, as a copy; False if there was nothing to replace."""
+    call = out[i]["tool_calls"][k]
+    arguments = _arguments(call)
+    if arguments is None or arguments.get(key) in (None, value):
+        return False
+    arguments[key] = value
+    message = dict(out[i])
+    message["tool_calls"] = [dict(c) for c in message["tool_calls"]]
+    message["tool_calls"][k] = {**call, "function": {**call["function"], "arguments": json.dumps(arguments, ensure_ascii=False)}}
+    out[i] = message
+    return True
+
+
+def _old_code(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    calls = _calls(history, "send_algorithm")
     if len(calls) < 2:
         return history
-    loaded = {m.get("tool_call_id") for m in history
-              if m.get("role") == "tool" and str(m.get("content", "")).startswith("OK")}
+    answers = _answers(history)
     keep = {calls[-1][2]["id"]}
-    last_loaded = [c["id"] for _, _, c in calls if c["id"] in loaded]
-    if last_loaded:
-        keep.add(last_loaded[-1])
+    loaded = [c["id"] for _, _, c in calls if answers.get(c["id"], "").startswith("OK")]
+    if loaded:
+        keep.add(loaded[-1])
     out = list(history)
-    for i, k, call in calls:
-        if call["id"] in keep:
+    changed = [_replace_argument(out, i, k, "code", OLD_CODE) for i, k, call in calls if call["id"] not in keep]
+    return out if any(changed) else history
+
+
+def _old_scores(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    calls = _calls(history, "write_score", "clear_score")
+    answers = _answers(history)
+    replacing = [n for n, (_, _, call) in enumerate(calls)
+                 if answers.get(call["id"], "").startswith(("OK. Score written", "Score cleared"))]
+    if not replacing:
+        return history
+    out = list(history)
+    changed = [_replace_argument(out, i, k, "score", OLD_SCORE) for i, k, call in calls[:replacing[-1]]
+               if call["function"]["name"] == "write_score"]
+    return out if any(changed) else history
+
+
+def _old_reads(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    last: Dict[str, int] = {}  # the same arguments -> the index of the latest whole answer
+    old: List[int] = []
+    ids = {call["id"]: json.dumps({**READ_DEFAULTS, **(_arguments(call) or {})}, sort_keys=True)
+           for _, _, call in _calls(history, "read_score")}
+    for j, m in enumerate(history):
+        same = ids.get(m.get("tool_call_id")) if m.get("role") == "tool" else None
+        if same is None or str(m.get("content", "")).startswith(("Unchanged", "ERROR", OLD_READ)):
             continue
-        try:
-            arguments = json.loads(call["function"]["arguments"])
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if not isinstance(arguments, dict) or arguments.get("code") in (None, OLD_CODE):
-            continue
-        arguments["code"] = OLD_CODE
-        message = dict(out[i])
-        message["tool_calls"] = [dict(c) for c in message["tool_calls"]]
-        message["tool_calls"][k] = {**call, "function": {**call["function"],
-                                                         "arguments": json.dumps(arguments, ensure_ascii=False)}}
-        out[i] = message
+        if same in last:
+            old.append(last[same])
+        last[same] = j
+    if not old:
+        return history
+    out = list(history)
+    for j in old:
+        out[j] = {**out[j], "content": OLD_READ}
     return out
 
 

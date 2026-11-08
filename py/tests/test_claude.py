@@ -44,6 +44,12 @@ class AppTests(unittest.TestCase):
         cello = list(asyncio.run(self.app.read_resource("bach://docs/strings/cello")))[0].content
         self.assertTrue(cello.startswith("# Cello"))
 
+    def test_without_docs_there_are_no_doc_resources(self):
+        config = Config()
+        config.chat.docs = False
+        uris = {str(r.uri) for r in asyncio.run(claude.mcp_app(config, OfflineBridge()).list_resources())}
+        self.assertEqual(uris, {"bach://skill"})
+
 
 class RegisterTests(unittest.TestCase):
     def setUp(self):

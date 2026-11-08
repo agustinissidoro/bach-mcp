@@ -921,7 +921,7 @@
                                     "outlettype": [
                                         ""
                                     ],
-                                    "text": "capture_source",
+                                    "text": "capture",
                                     "id": "obj-20",
                                     "patching_rect": [
                                         30.0,

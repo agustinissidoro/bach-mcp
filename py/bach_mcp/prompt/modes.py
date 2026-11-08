@@ -15,8 +15,9 @@ The local chat applies the mode to every request (chat/engine.py). Claude gets
 the whole skill and every tool, and the modes as two prompts (claude.py).
 
 A conversation with an instance of the patch has no prefixes: the instance's
-type fixes the mode (KIND_MODE), and a line added to the skill says which kind
-of answer this instance takes (KIND_NOTE).
+type fixes the mode (KIND_MODE), it reads only the parts of the skill for its
+type (skill.py), and a line added to the skill says which kind of answer this
+instance takes (KIND_NOTE).
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..tools.algo_tools import ALGO_TOOLS
 from ..tools.pitch_tools import PITCH_TOOLS
 from ..tools.score_tools import SCORE_TOOLS
-from .skill import skill_for
+from .skill import MODE_KINDS, skill_for
 
 MODES = ("score", "algo")
 DEFAULT_MODE = "score"
@@ -37,12 +38,7 @@ MODE_TOOLS = {
     "algo": ALGO_TOOLS,
 }
 
-KIND_MODE = {
-    "generator": "algo",
-    "transformer": "algo",
-    "selector": "algo",
-    "writer": "score",
-}
+KIND_MODE = {kind: mode for mode, kinds in MODE_KINDS.items() for kind in kinds}  # generator -> algo ...
 
 KIND_NOTE = {
     "generator": "You are writing for a generator: it makes music from nothing. Write a producer, "
@@ -71,7 +67,7 @@ def instance_skill(skill: str, mode: str, kind: Optional[str] = None) -> str:
     """The system prompt for one conversation: the skill's part for this mode and, for an
     instance, the line on what it takes. The one place it is made: the local model
     (chat/engine.py) and the Claude Code Bach starts (chat/headless.py) read the same text."""
-    text = skill_for(skill, mode)
+    text = skill_for(skill, mode, kind=kind)
     return f"{text}\n{KIND_NOTE[kind]}\n" if kind else text
 
 

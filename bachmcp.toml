@@ -1,5 +1,6 @@
 # Bach configuration. Read by py/main.py: `run`, `serve`, `connect`, `agent`, `eval`, `claude`.
-# Claude's door (serve) only needs [server], [max] and [algo]; the model settings are for the local model.
+# [model] and [generation] are for the local model (run), [claude] for the Claude that serve starts;
+# [chat], [server], [max] and [algo] are for both, so both read the same skill, tools and docs.
 
 [model]
 # The runtime follows from the model: .safetensors weights (MLX) run on mlx_lm.server,
@@ -8,7 +9,8 @@ model = "qwen3.8-27b-4bit" # the name of a folder in models/ (python py/main.py 
                           # or any path, or a Hugging Face repo (downloaded by the model server on its first start).
                           # Your Qwen as MLX: python py/main.py download mlx-community/Qwen3.8-27B-4bit --use (16 GB)
 context_size = 65536      # gguf: tokens of conversation it reserves memory for (~64 KB each for Qwen 27B).
-                          # mlx grows as needed. Skill + tools use about 3,200 (/algo) to 4,700 (/score).
+                          # mlx grows as needed. Skill + tools: about 3,500 tokens (generator), 3,900 (selector),
+                          # 4,500 (transformer), 5,400 (writer); each instrument named adds about 700-1,400.
 extra_args = []           # more flags for the model server, e.g. ["--prompt-cache-size", "4"]
 
 [generation]
@@ -21,16 +23,23 @@ reasoning = "off"         # "off" or "on". Off: Qwen with reasoning on spends mi
 
 [chat]
 skill_file = ""           # system prompt. Empty = the built-in skill (py/bach_mcp/prompt/BACH_SKILL.md)
-max_tool_rounds = 8       # tool calls the model may chain in one answer (pitch tools, then the score)
+max_tool_rounds = 8       # rounds of tool calls in one answer (pitch tools, then the score), then one more reply
+                          # to answer. A round is one reply of the model with all the calls it makes at once
 docs = true               # add the instrument docs (py/bach_mcp/prompt/docs) to each message that names an instrument
 open_browser = false      # open the chat page when the model is ready
-system_prompt = true      # Claude answering prompts from Max (bachmcp.server claude, claude -p) keeps Claude Code's
-                          # own system prompt, the skill added to it. false: the skill replaces it, so Claude reads
-                          # what the local model reads (about 7,000-8,000 fewer tokens per request; to be tried)
+
+[claude]
+# The Claude that answers prompts from Max and the chat page (bachmcp.server claude).
+claude_model = "sonnet"   # "" = your account's default; an alias ("opus", "sonnet", "haiku") or a full name ("claude-opus-5-5")
+claude_effort = "medium"  # "" = the model's default; "low", "medium", "high", "xhigh" or "max" (more thinking: slower, more tokens)
+claude_code_prompt = true # true: Claude Code's own system prompt, with the skill added to it.
+                          # false: the skill alone, as the local model reads it: about 2,300 fewer tokens per request
+                          # (3,000 on Haiku). Measured 2026-11-08, generator: Opus 7,160 -> 4,870, Sonnet 7,090 -> 4,880,
+                          # Haiku 7,920 -> 4,890; a writer about 300 less each. Quality not yet compared.
 
 [server]
 host = "127.0.0.1"
-port = 8090               # the chat page at http://127.0.0.1:8090, the tools for Claude Code at /mcp (not 8080: browsers keep llama.cpp's old page there)
+port = 8090               # the chat page at http://127.0.0.1:8090
 tool_log = true           # print each tool call in the terminal
 
 [max]

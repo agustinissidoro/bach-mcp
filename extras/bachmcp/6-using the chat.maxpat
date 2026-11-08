@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 95.0, 1100.0, 853.0 ],
+        "rect": [ 420.0, 101.0, 1100.0, 853.0 ],
         "boxes": [
             {
                 "box": {
@@ -19,7 +19,6 @@
                     "numinlets": 1,
                     "numoutlets": 0,
                     "patching_rect": [ 239.0, 408.0, 622.0, 47.0 ],
-                    "presentation_linecount": 3,
                     "text": "You can combine both uses, bachmcp.chat and bachmcp.prompt, depending on your workflow and vibe ;)\nA full history will be kept in your playground in the /prompts folder, so the chat is constantly updated even if you prompt using the bachmcp.prompt object "
                 }
             },

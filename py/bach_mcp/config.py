@@ -7,6 +7,7 @@ no other module reads bachmcp.toml or the environment for its settings.
     [model]       which model runs locally; its runtime (mlx or gguf) follows from the model
     [generation]  reply limit, sampling, reasoning: sent with every request
     [chat]        the skill, tool rounds per answer, instrument docs, the browser
+    [claude]      the Claude that answers prompts from Max (claude -p): model, effort, prompt
     [server]      Bach's own address: the chat page and /mcp; tool logging
     [max]         the UDP ports of the patch
     [algo]        the Node.js that checks algorithms; the explanation after one
@@ -35,6 +36,7 @@ MODELS_DIR = os.path.join(REPO_ROOT, "models")
 
 BACKENDS = ("mlx", "gguf")
 REASONING = ("off", "on")
+EFFORTS = ("", "low", "medium", "high", "xhigh", "max")  # Claude Code's --effort; "" = the model's default
 
 
 class ConfigError(ValueError):
@@ -64,8 +66,13 @@ class ChatConfig:
     max_tool_rounds: int = 8
     docs: bool = True
     open_browser: bool = True
-    system_prompt: bool = True  # claude -p keeps Claude Code's own system prompt (the skill is added to it);
-                                # false: the skill replaces it
+
+
+@dataclass
+class ClaudeConfig:
+    claude_model: str = ""           # Claude Code's --model: an alias ("opus", "sonnet") or a full name; "" = the account's default
+    claude_effort: str = ""          # Claude Code's --effort (EFFORTS); "" = the model's default
+    claude_code_prompt: bool = True  # keep Claude Code's own system prompt and add the skill to it; false: the skill alone
 
 
 @dataclass
@@ -93,6 +100,7 @@ _REMOVED = {
     ("max", "buffer"): "each instance has its own file in the playground (set_playground from the patch)",
     ("algo", "dir"): "algorithms go to the playground (set_playground from the patch)",
     ("algo", "one_line_description"): "send_algorithm always asks for the // comment that opens the file",
+    ("chat", "system_prompt"): "it is [claude] claude_code_prompt now",
 }
 
 
@@ -101,6 +109,7 @@ class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     generation: GenerationConfig = field(default_factory=GenerationConfig)
     chat: ChatConfig = field(default_factory=ChatConfig)
+    claude: ClaudeConfig = field(default_factory=ClaudeConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     max: MaxConfig = field(default_factory=MaxConfig)
     algo: AlgoConfig = field(default_factory=AlgoConfig)
@@ -262,6 +271,8 @@ def load_config(path: str = "") -> Config:
 
     if config.generation.reasoning not in REASONING:
         raise ConfigError(f"[generation] reasoning must be \"off\" or \"on\", got {config.generation.reasoning!r}")
+    if config.claude.claude_effort not in EFFORTS:
+        raise ConfigError(f"[claude] claude_effort must be one of {', '.join(repr(e) for e in EFFORTS)}, got {config.claude.claude_effort!r}")
     return config
 
 

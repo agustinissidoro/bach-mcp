@@ -17,7 +17,8 @@ Into the hub:
 
     set_playground <path>                     the folder for everything the model makes
     clear_instance_names_map                  empty the map
-    add_instance_names_map <name> <type>      generator | transformer | selector | writer
+    add_instance_names_map <name> <type>      generator | transformer | selector | writer; an instance
+                                              that changes type starts a new conversation, as with `new`
     set_active_instance <name> [<type>]       with the type, the instance joins the map if new
     instances <name> <type> ...               Max's answer to `server get_instances`: the whole map
     <name> prompt <text>                      to that instance's conversation
@@ -264,7 +265,7 @@ class Hub:
             return
         with self._lock:
             if self.instances.get(name) not in (None, kind):
-                self._conversations.pop(name, None)  # another type: another way of working
+                self._start_over(name)
             self.instances[name] = kind
             first = not self.active  # so that Claude's tools always have an instance
             if first:
@@ -284,7 +285,8 @@ class Hub:
             with self._lock:
                 joins = self.instances.get(name) != kind
                 if joins:
-                    self._conversations.pop(name, None)  # another type: another way of working
+                    if name in self.instances:
+                        self._start_over(name)
                     self.instances[name] = kind
             if joins:
                 self._send("add_instance_names_map", name, kind, to_max=echo)
@@ -308,8 +310,10 @@ class Hub:
         with self._lock:
             fresh = {name: kind for name, kind in pairs if kind in KINDS}
             for name, kind in self.instances.items():
-                if fresh.get(name) != kind:
-                    self._conversations.pop(name, None)
+                if fresh.get(name) not in (None, kind):
+                    self._start_over(name)
+                elif name not in fresh:
+                    self._conversations.pop(name, None)  # gone from the patch: its file stays for its return
             self.instances = fresh
             moved = self.active not in fresh
             if moved:
@@ -407,16 +411,29 @@ class Hub:
 
     def _new(self, name: str, echo: bool) -> None:
         with self._lock:
-            busy = self._answering == name or any(item[0] == name for item in self._queue)
+            busy = self._busy(name)
             if not busy:
-                self._conversations.pop(name, None)
-                path = self._history_file(name)
+                self._start_over(name)
         if busy:
             self._send(name, "error", "an answer is still being written: stop it first")
             return
-        if path and os.path.exists(path):
-            os.replace(path, path[:-len(".jsonl")] + time.strftime("-%Y%m%d-%H%M%S.jsonl"))
         self._send(name, "new", to_max=echo)
+
+    def _busy(self, name: str) -> bool:
+        """Being answered, or waiting for its turn. Call with the lock held."""
+        return self._answering == name or any(item[0] == name for item in self._queue)
+
+    def _start_over(self, name: str) -> None:
+        """The instance's next prompt starts a new conversation: the one in memory goes, and its
+        file is kept beside it with the time (prompts/<name>-<date>-<time>.jsonl). Also when the
+        instance changes type: a writer's scores are no use to a generator, and Claude Code must
+        not resume a session made with the other type's skill. While the instance is answered
+        or waiting, only the conversation in memory goes: the answer still saves into its file.
+        Call with the lock held."""
+        self._conversations.pop(name, None)
+        path = self._history_file(name)
+        if path and os.path.exists(path) and not self._busy(name):
+            os.replace(path, path[:-len(".jsonl")] + time.strftime("-%Y%m%d-%H%M%S.jsonl"))
 
     # ── The tools' instance ────────────────────────────────────────────── #
 
@@ -526,7 +543,7 @@ class Hub:
             self._report(name, "stopped")
             return
         cut = {"length": "the answer reached the reply limit ([generation] max_tokens)",
-               "rounds": "stopped after [chat] max_tool_rounds tool calls"}.get(finish)
+               "rounds": "stopped: more rounds of tools than [chat] max_tool_rounds"}.get(finish)
         if cut:
             self._send(name, "error", cut)
             self._report(name, "error", cut)

@@ -20,7 +20,7 @@
 	</inletlist>
 	<outletlist>
 		<outlet id="0" type="">
-			<digest>To the runner: param, bypass, repeat, snap, source_mode, capture_source, write_to_playground</digest>
+			<digest>To the runner: param, bypass, repeat, snap, source_mode, capture, write_to_playground</digest>
 		</outlet>
 	</outletlist>
 	<objarglist>

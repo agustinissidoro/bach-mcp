@@ -12,6 +12,18 @@ says which instance the tools serve while it answers (tools/session.py). The
 next message resumes the same Claude session: its id is kept with the assistant's
 messages in prompts/<name>.jsonl.
 
+What it is given, all from bachmcp.toml ([claude], [chat]):
+
+    --model, --effort        [claude] claude_model and claude_effort, when set; else the account's defaults
+    --system-prompt          the instance's part of the skill (instance_skill, as the local model);
+    or --append-system-prompt  appended to Claude Code's own prompt when [claude] claude_code_prompt
+    --system-prompt-snapshot off   the prompt is sent anew with every message: Claude Code would
+                             otherwise keep the one of a conversation's first message on every
+                             --resume, so a changed skill or setting would reach only new conversations
+    --tools "" --allowedTools  no Claude Code tools, only this mode's Bach tools (MODE_TOOLS)
+    --setting-sources ""     none of the user's Claude Code settings, hooks or memory
+    --max-turns              [chat] max_tool_rounds rounds of tools, then the answer
+
 Claude Code's lines (--output-format stream-json) become engine.py's events. With
 --include-partial-messages it also says when it sends a request (system status
 requesting) and when each block starts, before the block is whole: those become
@@ -56,7 +68,7 @@ class ClaudeConversation:
         self.docs = DocLibrary() if config.chat.docs else None
         self.max_tool_rounds = config.chat.max_tool_rounds
         self.kind = kind
-        self.keep_claude_prompt = config.chat.system_prompt  # [chat] system_prompt
+        self.claude = config.claude  # [claude] claude_model, claude_effort, claude_code_prompt
         self.mode = KIND_MODE[kind]
         self.url = config.headless_mcp_url(self.mode)  # this mode's tools, no instructions
         self.history: List[Dict[str, Any]] = []
@@ -79,8 +91,12 @@ class ClaudeConversation:
         line = [self.command or "claude", "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                 "--mcp-config", json.dumps(config), "--strict-mcp-config", "--setting-sources", "",
                 "--tools", "", "--allowedTools", *[PREFIX + tool for tool in MODE_TOOLS[self.mode]],
-                "--append-system-prompt" if self.keep_claude_prompt else "--system-prompt", self.system_prompt(),
-                "--max-turns", str(self.max_tool_rounds + 1)]
+                "--append-system-prompt" if self.claude.claude_code_prompt else "--system-prompt", self.system_prompt(),
+                "--system-prompt-snapshot", "off", "--max-turns", str(self.max_tool_rounds + 1)]
+        if self.claude.claude_model:
+            line += ["--model", self.claude.claude_model]
+        if self.claude.claude_effort:
+            line += ["--effort", self.claude.claude_effort]
         return line + ["--resume", self.session] if self.session else line
 
     def send(self, text: str, max_tokens: Optional[int] = None) -> Iterator[Event]:
@@ -138,6 +154,13 @@ class ClaudeConversation:
         yield {"type": "error", "message": f"Claude Code stopped: {words[-300:] or f'exit code {process.returncode}'}"}
         yield {"type": "done", "finish": "stop"}
         return False
+
+
+def settings_line(config: Config) -> str:
+    """[claude] as Claude Code gets it, for the terminal."""
+    c = config.claude
+    prompt = "Claude Code's system prompt + the skill" if c.claude_code_prompt else "the skill as its whole system prompt"
+    return f"model {c.claude_model or '(account default)'}, effort {c.claude_effort or '(default)'}, {prompt}"
 
 
 def _events(said: Dict[str, Any], names: Dict[str, str], answer: List[str], chat: ClaudeConversation) -> Iterator[Event]:
@@ -205,4 +228,4 @@ def _text(content: Any) -> str:
     return text
 
 
-__all__ = ["ClaudeConversation"]
+__all__ = ["ClaudeConversation", "settings_line"]

@@ -6,7 +6,7 @@ Claude brings its own model; Bach gives it the tools, what to read, and Max.
 
     mcp_app(config, bridge)   the 15 tools (tools/registry.py) plus what Claude reads:
                               the skill as the server's instructions, /score and /algo
-                              as two prompts, the instrument docs as resources
+                              as two prompts, the instrument docs as resources ([chat] docs)
     headless_apps(config, bridge)  one per mode at /mcp/headless/<mode>: only that mode's tools
                               and no instructions, for the `claude -p` Bach starts
                               (chat/headless.py). It gets its instance's part of the skill as
@@ -77,10 +77,10 @@ def mcp_app(config: Config, bridge: Any) -> FastMCP:
     for mode, text in _MODE_PROMPTS.items():
         mcp.prompt(name=mode, description=f"Compose in /{mode} mode.")(_mode_prompt(text.format(tools=", ".join(MODE_TOOLS[mode]))))
 
-    for doc in DocLibrary().docs.values():
+    for doc in DocLibrary().docs.values() if config.chat.docs else []:  # [chat] docs = false: none
         title = doc.text.splitlines()[0].lstrip("# ").strip()
         mcp.resource(f"bach://docs/{doc.key}", name=doc.key, mime_type="text/markdown",
-                     description=f"{title}: ranges, techniques and their JSON spellings, in midicents.")(_reader(doc.text))
+                     description=f"{title}: ranges, techniques and how to mark them, in midicents.")(_reader(doc.text))
     return mcp
 
 
@@ -109,10 +109,14 @@ def serve(config: Config, stdio: bool = False) -> None:
     playground and instances, so the tools work for the instance being answered, else the
     active one. Over HTTP it answers prompts with Claude Code; over stdio the host is the
     one Claude is talking to, so it answers none."""
-    from .chat.headless import ClaudeConversation
+    from .chat.headless import ClaudeConversation, settings_line
     from .chat.hub import Hub
     bridge, status = start_bridge(config, "serve")
     quit_on_signals(status)
+    if not stdio:  # over stdio, the output is the host's channel
+        print(f"Bach — config: {config.source}")
+        print(f"  claude    {settings_line(config)}")
+        print(f"  docs      {'added to messages that name an instrument' if config.chat.docs else 'off'}", flush=True)
     try:
         mcp = mcp_app(config, bridge)
         headless = [] if stdio else headless_apps(config, bridge)

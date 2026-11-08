@@ -39,10 +39,18 @@ class LoadTests(unittest.TestCase):
                             ('[ollama]\nurl = "x"\n', "unknown section [ollama]"),
                             ('[model]\nbackend = "mlx"\n', "Bach reads it from the model. Remove that line"),
                             ('[max]\nbuffer = "b.txt"\n', "[max] buffer is no longer set: each instance has its own file"),
-                            ('[algo]\ndir = "x"\n', "[algo] dir is no longer set: algorithms go to the playground")]:
+                            ('[algo]\ndir = "x"\n', "[algo] dir is no longer set: algorithms go to the playground"),
+                            ('[claude]\nclaude_effort = "huge"\n', "[claude] claude_effort must be one of"),
+                            ('[chat]\nsystem_prompt = false\n', "it is [claude] claude_code_prompt now")]:
             with self.assertRaises(ConfigError, msg=text) as ctx:
                 self.load(text)
             self.assertIn(words, str(ctx.exception))
+
+    def test_claude_settings(self):
+        config = self.load('[claude]\nclaude_model = "sonnet"\nclaude_effort = "high"\nclaude_code_prompt = false\n')
+        self.assertEqual((config.claude.claude_model, config.claude.claude_effort, config.claude.claude_code_prompt),
+                         ("sonnet", "high", False))
+        self.assertEqual((Config().claude.claude_model, Config().claude.claude_effort), ("", ""), "unset: the account's defaults")
 
     def test_an_explicit_file_must_exist(self):
         with self.assertRaises(ConfigError):

@@ -36,10 +36,10 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
-from .. import claude
 from ..config import Config, ConfigError
 from ..model.backends import ModelServer
 from ..model.client import ModelClient
+from ..tools.registry import create_tools
 from ..utilities.status import Status, quit_on_signals, start_bridge, watch_input
 from .engine import build_conversation
 from .hub import Hub, Message
@@ -156,7 +156,7 @@ def run(config: Config) -> None:
     print(f"Bach — config: {config.source}")
     server: Optional[ModelServer] = None
     try:
-        mcp = claude.mcp_app(config, bridge)
+        mcp = create_tools(bridge, config.algo.node, log_calls=config.server.tool_log)  # run here, for the local model
         make = None
         try:
             server = ModelServer(config)  # checks [model]

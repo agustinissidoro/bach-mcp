@@ -327,7 +327,7 @@ test("a transformer's panel shows its source and a capture button", () => {
   assert.ok(texts.includes("SOURCE · 893 NOTES · FILE"));
   const b = m.ctx.panel.captureRect(320);
   m.ctx.onclick(b.x + 5, b.y + 5, 1, 0, 0, 0, 0, 0);
-  assert.deepEqual(sent(m), [["capture_source"]]);
+  assert.deepEqual(sent(m), [["capture"]]);
   const w = m.ctx.panel.writeRect(320);
   m.ctx.onclick(w.x + 5, w.y + 5, 1, 0, 0, 0, 0, 0);
   assert.deepEqual(sent(m), [["write_to_playground"]]);

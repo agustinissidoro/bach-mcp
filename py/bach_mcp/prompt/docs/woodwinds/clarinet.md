@@ -15,8 +15,8 @@ clefs: G
 techniques: the woodwind techniques (woodwinds/_family.md), plus:
 - the widest dynamic range of the woodwinds: it can begin from and fade into silence in every register
 - very agile: fast scales, arpeggios and wide leaps across the registers
-- real glissando upward in the clarion and high registers (above about 7000), up to an octave or more ("gliss"); elsewhere bends of about a semitone ("gliss": ±100)
-- slap tongue: "text": "slap"
+- real glissando upward in the clarion and high registers (above about 7000), up to an octave or more (a glissando); elsewhere bends of about a semitone (glissando ±100)
+- slap tongue: annotation "slap"
 - multiphonics: many, softer than the oboe's
 
 ## Harmonics
@@ -27,4 +27,4 @@ Partial n sounds at the fingered note + 1200·log2(n): 3 → +1902, 5 → +2786,
 register. The real pitch can differ by a few cents. Harmonic fingerings give
 softer, hollower versions of these pitches.
 
-Write the sounding pitch with "art": "harmonic".
+Write the sounding pitch with articulation harmonic.

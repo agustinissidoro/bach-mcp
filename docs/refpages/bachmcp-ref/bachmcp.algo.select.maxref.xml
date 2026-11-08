@@ -14,7 +14,7 @@
 	</metadatalist>
 	<inletlist>
 		<inlet id="0" type="">
-			<digest>dictionary, prompt, bang, param, load, open, name, source_mode, capture_source, dump_selection, clear_selection, snap, bypass, repeat</digest>
+			<digest>dictionary, prompt, bang, param, load, open, name, source_mode, capture, dump_selection, clear_selection, snap, bypass, repeat</digest>
 		</inlet>
 	</inletlist>
 	<outletlist>
@@ -108,7 +108,7 @@
 			<digest>Score in</digest>
 			<description>A score as a dictionary. It becomes the source according to <at>source_mode</at>, and never runs the algorithm by itself, so there is no loop through a roll.</description>
 		</method>
-		<method name="capture_source">
+		<method name="capture">
 			<arglist></arglist>
 			<digest>Take a new source</digest>
 			<description>Asks the roll for its score: the next score in becomes the source.</description>

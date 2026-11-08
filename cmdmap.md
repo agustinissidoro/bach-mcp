@@ -90,7 +90,7 @@ Messages to the inlet of `bachmcp.algo.generate`, `.transform` and `.select`, an
 | `verbose 0/1` · `watch 0/1` | ✓ | ✓ | ✓ | say what happens · reload when the file changes |
 | `dictionary <dict>` · `input clear` | | ✓ | ✓ | a score in · forget the source |
 | `source_mode 0/1` | | ✓ | ✓ | 0 destructive, 1 non-destructive |
-| `capture_source` | | ✓ | ✓ | the next score in becomes the source |
+| `capture` | | ✓ | ✓ | the next score in becomes the source |
 | `process_only_selection 0/1` · `selection_slot <n>` | | ✓ | ✓ | work on the notes flagged in that slot |
 | `dump_selection_only 0/1` · `dump_selection` · `clear_selection` | | | ✓ | what the selection outputs |
 
@@ -103,7 +103,7 @@ Messages to the inlet of `bachmcp.algo.generate`, `.transform` and `.select`, an
 
 `timeout` and `algo_error` are printed in the Max console instead. These status lines stay in Max: Python does not get them.
 
-**The panel.** `bachmcp.gui.params` takes `spec`, `set`, `status`, `source`, `source_mode` and more from a runner's panel outlet, and sends `param <name> <value...>`, `bypass`, `repeat`, `snap`, `source_mode`, `capture_source` and `write_to_playground` back to its inlet. By hand: `set_name <name>`, `reset`, `bang`, `clear`, `autosize 0/1`.
+**The panel.** `bachmcp.gui.params` takes `spec`, `set`, `status`, `source`, `source_mode` and more from a runner's panel outlet, and sends `param <name> <value...>`, `bypass`, `repeat`, `snap`, `source_mode`, `capture` and `write_to_playground` back to its inlet. By hand: `set_name <name>`, `reset`, `bang`, `clear`, `autosize 0/1`.
 
 **The prompt box.** `bachmcp.prompt` sends `prompt <text>` on Enter, the whole text as one symbol. By hand: `set <text>`, `append <text>`, `clear`, `bang`, `paste`.
 

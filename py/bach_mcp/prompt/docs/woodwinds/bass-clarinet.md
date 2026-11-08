@@ -14,7 +14,7 @@ clefs: F; G for passages that stay above about 6500
 techniques: the woodwind techniques (woodwinds/_family.md), plus:
 - wide dynamic range, from silence to loud in the low register
 - agile, slower to speak in the lowest notes
-- slap tongue: "text": "slap"; strong and percussive in the low register
+- slap tongue: annotation "slap"; strong and percussive in the low register
 - key clicks are clearly audible in the low register
 - multiphonics: many
 
@@ -25,4 +25,4 @@ Partial n sounds at the fingered note + 1200·log2(n): 3 → +1902, 5 → +2786,
 7169 7604; from 3400 (low C extension): 5302 6186 6769. The real pitch can
 differ by a few cents.
 
-Write the sounding pitch with "art": "harmonic".
+Write the sounding pitch with articulation harmonic.

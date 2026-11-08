@@ -8,7 +8,7 @@ the // comment that opens the file), then two sections.
 Left of the kind, one animated icon follows the instance's prompt (setPrompt).
 Drags land on each slider's grid; alt lets one through. "Options": reset
 all; then bypass ("bypass 0|1"), repeat ("repeat"); pitch cards toggle ½ | ¼ | free ("snap 0|1|3"), time cards 100ms | 10ms | free; a transformer adds its source card: how many notes, write
-(write_to_playground), capture (capture_source) and the source mode as two
+(write_to_playground), capture and the source mode as two
 segments, non-destructive (the source is held; every output starts again from
 it) or destructive (every score at the runner's inlet becomes the source), sent
 as "source_mode 1|0". A selector has the same card, and under the mode
@@ -667,7 +667,7 @@ Panel.prototype.mouseDown = function (x, y, mods) {
   var p = this.width ? this.ui(this.width) : {};
   this.active = null;
   if (p.setActive && inside(p.setActive, x, y)) return [["set_as_active_instance"]];
-  if (p.capture && inside(p.capture, x, y)) return [["capture_source"]];
+  if (p.capture && inside(p.capture, x, y)) return [["capture"]];
   if (p.write && inside(p.write, x, y)) return [["write_to_playground"]];
   if (p.within && inside(p.within, x, y)) {
     this.withinSelection = !this.withinSelection;

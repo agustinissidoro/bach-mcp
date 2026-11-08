@@ -141,10 +141,16 @@ class ToolLoopTests(EngineTest):
         self.assertEqual(events[-1], {"type": "done", "finish": "length"})
 
     def test_tool_rounds_are_limited(self):
-        conversation = self.chat(*[tool_reply("p2mc", {"pitches": [f"C{i}"]}, call_id=f"c{i}") for i in range(3)], rounds=2)
+        conversation = self.chat(*[tool_reply("p2mc", {"pitches": [f"C{i}"]}, call_id=f"c{i}") for i in range(4)], rounds=2)
         events = list(conversation.send("go"))
-        self.assertEqual(self.kinds(events).count("tool_call"), 2)
+        self.assertEqual(self.kinds(events).count("round"), 3, "two rounds of tools, then one request to answer")
         self.assertEqual(events[-1], {"type": "done", "finish": "rounds"})
+
+    def test_after_the_last_round_of_tools_the_model_answers(self):
+        conversation = self.chat(*[tool_reply("p2mc", {"pitches": [f"C{i}"]}, call_id=f"c{i}") for i in range(2)],
+                                 text_reply("Done."), rounds=2)
+        events = list(conversation.send("go"))
+        self.assertEqual(events[-1], {"type": "done", "finish": "stop"}, "it reads the last round's results")
 
     def test_a_model_error_is_an_event(self):
         conversation = self.chat()  # no reply scripted: the client raises
@@ -160,7 +166,7 @@ class KindTests(EngineTest):
         self.assertNotIn("mode", [e["type"] for e in events], "no prefix switches an instance's mode")
         request = self.client.requests[0]
         self.assertEqual(request["messages"][1]["content"], "/score a canon")
-        self.assertTrue(request["messages"][0]["content"].startswith(skill_for(RAW, "algo").rstrip()))
+        self.assertTrue(request["messages"][0]["content"].startswith(skill_for(RAW, "algo", kind="transformer").rstrip()))
         self.assertIn("You are writing for a transformer", request["messages"][0]["content"])
         self.assertEqual(self.tool_names(request), ["send_algorithm"])
         writer = Conversation(self.client, self.tools, RAW, None, 8, kind="writer")
@@ -189,17 +195,62 @@ class OldCodeTests(unittest.TestCase):
         return [json.loads(c["function"]["arguments"])["code"] for m in history for c in m.get("tool_calls") or []]
 
     def test_only_the_last_and_the_last_loaded_stay(self):
-        from bach_mcp.chat.engine import OLD_CODE, without_old_code
+        from bach_mcp.chat.engine import OLD_CODE, without_replaced
         history = [{"role": "user", "content": "a canon"}, self.call(1, "one"), self.result(1, True),
                    {"role": "user", "content": "slower"}, self.call(2, "two"), self.result(2, True),
                    {"role": "user", "content": "denser"}, self.call(3, "three"), self.result(3, False)]
-        sent = without_old_code(history)
+        sent = without_replaced(history)
         self.assertEqual(self.codes(sent), [OLD_CODE, "two", "three"], "two is what Max has loaded")
         self.assertEqual(self.codes(history), ["one", "two", "three"], "the history itself keeps every file")
         self.assertEqual(json.loads(sent[1]["tool_calls"][0]["function"]["arguments"])["one_line_description"], "v1")
         history += [self.call(4, "four"), self.result(4, True)]
-        self.assertEqual(self.codes(without_old_code(history)), [OLD_CODE, OLD_CODE, OLD_CODE, "four"])
-        self.assertEqual(without_old_code(history)[:4], without_old_code(history[:4] + history[4:])[:4],
+        self.assertEqual(self.codes(without_replaced(history)), [OLD_CODE, OLD_CODE, OLD_CODE, "four"])
+        self.assertEqual(without_replaced(history)[:4], without_replaced(history[:4] + history[4:])[:4],
                          "a pure function of the history")
         one = history[:3]
-        self.assertIs(without_old_code(one), one, "a single version is left alone")
+        self.assertIs(without_replaced(one), one, "a single version is left alone")
+
+
+class OldScoreTests(unittest.TestCase):
+    """Scores a later write_score replaced, and read_score answers read again, reach the model as a placeholder."""
+
+    @staticmethod
+    def call(n, name, **arguments):
+        return {"role": "assistant", "content": "", "tool_calls": [{"id": f"c{n}", "type": "function", "function": {
+            "name": name, "arguments": json.dumps(arguments)}}]}
+
+    @staticmethod
+    def result(n, text):
+        return {"role": "tool", "tool_call_id": f"c{n}", "content": text}
+
+    @staticmethod
+    def scores(history):
+        return [json.loads(c["function"]["arguments"]).get("score") for m in history for c in m.get("tool_calls") or []
+                if c["function"]["name"] == "write_score"]
+
+    def test_scores_before_the_last_that_replaced_the_roll_go(self):
+        from bach_mcp.chat.engine import OLD_SCORE, without_replaced
+        history = [self.call(1, "write_score", score="one"), self.result(1, "OK. Score written.\n..."),
+                   self.call(2, "write_score", score="two", add=True), self.result(2, "OK. Added to the score.\n..."),
+                   self.call(3, "write_score", score="three"), self.result(3, "OK. Score written.\n..."),
+                   self.call(4, "write_score", score="four", add=True), self.result(4, "OK. Added to the score.\n..."),
+                   self.call(5, "write_score", score="five"), self.result(5, "ERROR: not JSON. Nothing was written.")]
+        self.assertEqual(self.scores(without_replaced(history)), [OLD_SCORE, OLD_SCORE, "three", "four", "five"],
+                         "three and four are what the roll holds; five failed, the model may fix it")
+        self.assertEqual(self.scores(history), ["one", "two", "three", "four", "five"])
+        cleared = history + [self.call(6, "clear_score"), self.result(6, "Score cleared.")]
+        self.assertEqual(self.scores(without_replaced(cleared)), [OLD_SCORE] * 5)
+        self.assertEqual(self.scores(without_replaced(history[:4])), ["one", "two"], "chords added stay with their score")
+        alone = history[:2]
+        self.assertIs(without_replaced(alone), alone, "one score is left alone")
+
+    def test_a_read_goes_when_the_same_part_is_read_again(self):
+        from bach_mcp.chat.engine import OLD_READ, without_replaced
+        history = [self.call(1, "read_score"), self.result(1, "the whole score A"),
+                   self.call(2, "read_score", from_ms=8000), self.result(2, "from 8000, A"),
+                   self.call(3, "read_score", voice=0), self.result(3, "Unchanged since your previous read_score."),
+                   self.call(4, "read_score"), self.result(4, "the whole score B")]
+        sent = [m["content"] for m in without_replaced(history) if m["role"] == "tool"]
+        self.assertEqual(sent, [OLD_READ, "from 8000, A", "Unchanged since your previous read_score.", "the whole score B"],
+                         "another part of the score stays; the same part read again replaces the first answer")
+        self.assertEqual(without_replaced(history[:6]), history[:6], "an Unchanged answer keeps the one it points to")

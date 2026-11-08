@@ -10,9 +10,13 @@ Rules for every file:
 - Every pitch is **sounding pitch in midicents** (6000 = middle C = C4), every
   time in milliseconds. Never written pitch, even for transposing instruments.
 - Facts and possibilities, not advice: what the instrument can do, how it
-  sounds and how to write it in the JSON score.
-- JSON spellings (`"art"`, `"head"`) must be ones the translator accepts.
-  `"text"` is free. `py/tests/test_docs.py` checks this.
+  sounds and how to mark it.
+- Marks are named in words, never as JSON: articulation `harmonic`,
+  annotation `"pizz."`, notehead `cross`, dynamics `p<`, glissando `700`,
+  vel `1`. The same doc serves /score and /algo, which write marks
+  differently; the skill says how each mode writes them. Articulation and
+  notehead names must be bach.roll's; an annotation's text is free.
+  `py/tests/test_docs.py` checks this.
 
 ## Instrument file
 
@@ -28,7 +32,7 @@ expanded_register: ...              # wider range, each part with its condition
 transposing: no                     # or "yes: sounds 200 below written"
 clefs: F; Tenor ..., G ...          # main clef; others and when they apply
 techniques: the family techniques (strings/_family.md), plus:
-- what is specific to this instrument, with its JSON spelling
+- what is specific to this instrument, with its mark (articulation trill, annotation "pizz.")
 
 ## Harmonics
 How they work, how to calculate them, the values, how to write them.
@@ -45,5 +49,5 @@ How they work, how to calculate them, the values, how to write them.
 ## Family file
 
 `_family.md` has the same front matter. Its core holds what all members share:
-the techniques with their JSON spellings, how articulations are produced, and
+the techniques with their marks, how articulations are produced, and
 the constraints common to the family.

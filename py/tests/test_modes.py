@@ -56,6 +56,26 @@ class SkillTests(unittest.TestCase):
         self.assertLess(len(algo), 0.7 * len(FULL))
         self.assertLess(len(score), 0.7 * len(FULL))
 
+    def test_an_instance_reads_only_its_types_part(self):
+        parts = {kind: skill_for(RAW, "algo", kind=kind) for kind in ("generator", "transformer", "selector")}
+        own = {"generator": "function produce(p) {\n", "transformer": "function transform(source, p) {\n",
+               "selector": "function select(source, p) {\n"}
+        for kind, text in parts.items():
+            for other, example in own.items():
+                (self.assertIn if other == kind else self.assertNotIn)(example, text, f"{kind} and {other}'s example")
+            self.assertNotIn("<!--", text)
+            self.assertNotRegex(text, r"\n\n\n")
+            self.assertIn("**Parameters.**", text)
+            self.assertIn("## Marks", text)
+        self.assertNotIn("Reading music", parts["generator"])
+        self.assertIn("Reading music", parts["selector"])
+        self.assertIn("Read the music before you change it", parts["transformer"])
+        self.assertNotIn("Read the music before you change it", parts["selector"])
+        algo = skill_for(RAW, "algo")
+        self.assertTrue(all(example in algo for example in own.values()), "no instance: every type's part")
+        self.assertLess(len(parts["generator"]), 0.75 * len(algo))
+        self.assertEqual(skill_for(RAW, "score", kind="writer"), skill_for(RAW, "score"))
+
     def test_a_skill_without_markers_is_the_same_in_every_mode(self):
         text = "# My own skill\n\nWrite music.\n"
         for mode in ("algo", "score", None):

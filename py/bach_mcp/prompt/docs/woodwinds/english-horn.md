@@ -14,7 +14,7 @@ clefs: G
 techniques: the woodwind techniques (woodwinds/_family.md), plus:
 - like the oboe: little air, long phrases with gaps to breathe out and in
 - slow, expressive melody is its strength; less agile than the oboe
-- bends of about a quarter-tone ("gliss": ±50)
+- bends of about a quarter-tone (glissando ±50)
 
 ## Harmonics
 The conical bore overblows at the octave and gives all partials. Partial n
@@ -22,4 +22,4 @@ sounds at the fingered note + 1200·log2(n): 2 → +1200, 3 → +1902, 4 → +24
 From low fingerings 5200–5800; from 5200: 6400 7102 7600. The real pitch can
 differ by a few cents. Rare; softer and more veiled than the normal notes.
 
-Write the sounding pitch with "art": "harmonic".
+Write the sounding pitch with articulation harmonic.

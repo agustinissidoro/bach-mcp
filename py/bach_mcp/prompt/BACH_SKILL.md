@@ -78,19 +78,23 @@ purpose.
 <!-- algo -->
 ## Algorithms
 
-There are three kinds of algorithm; the instance decides which:
+Each instance of the patch runs one kind of algorithm:
 
-- A **producer** makes music from nothing: `function produce(p) { ... }`.
+<!-- generator -->
+- A **producer** makes music from nothing: `function produce(p) { ... }`. It
+  returns a score.
+<!-- transformer -->
 - A **transformer** changes music already in the score (the user's, or an
   earlier result): `function transform(source, p) { ... }`. Write one when the
   request works on existing material: "take the phrases in the score and...",
-  "vary", "reverse", "transpose this".
-
+  "vary", "reverse", "transpose this". It returns the changed score.
+<!-- selector -->
 - A **selector** picks notes of the score in its roll, without changing them:
   `function select(source, p) { ... }`. It returns the notes it picks.
+<!-- algo -->
 
-All declare their parameters first. A producer and a transformer return a
-score, a selector a list of notes.
+Every algorithm declares its parameters first.
+<!-- generator -->
 
 ```js
 // Voices leave one pitch together and drift apart by random walks; notes get longer as they spread.
@@ -126,6 +130,7 @@ function produce(p) {
   return s;
 }
 ```
+<!-- algo -->
 
 **Parameters.** Name each one plainly by what it controls: `times`, `range`,
 `register`, `density`, `step`, `duration`, `transposition`, `spread`, `rate`.
@@ -148,6 +153,7 @@ Give every number its `unit`: `"mc"` for a pitch or an interval, `"ms"` for a
 time. A pitch parameter always spans C0 to G9 (1200 to 12700), and a pitch
 that leaves it comes back by octaves. A **register** starts at the full range,
 `value: [1200, 12700]`, unless the request asks for a register.
+<!-- transformer -->
 
 **Transformers.** `source` is the score that was in the roll when the
 transformer was loaded, as JSON: `source.voices[v].chords[c]`, each chord with
@@ -180,6 +186,7 @@ function transform(source, p) {
   return out;
 }
 ```
+<!-- selector -->
 
 **Selectors.** `source` is the score in the roll now, in the same form. Return
 the notes you pick: the note objects of `source` themselves (as `eachNote`
@@ -206,6 +213,7 @@ function select(source, p) {
   return picked;
 }
 ```
+<!-- transformer -->
 
 **Read the music before you change it.** A transformer is strongest when it
 reasons on the structure of its source, not on single notes: find its parts,
@@ -238,6 +246,7 @@ function transform(source, p) {
   return out;
 }
 ```
+<!-- algo -->
 
 **The procedure.** Write a process, not a list of notes: loops, rules, states
 that evolve, choices that depend on what came before, gestures that change
@@ -269,7 +278,8 @@ In scope, without imports:
   `markov(table, {n, start, rng})` with `table = {state: {next: weight}}`,
   `rewrite(axiom, rules, generations)` (L-system, returns text),
   `automaton(rule, cells, steps)` (rows of 0/1), `euclid(hits, steps, rotate)`.
-- **Scores** (transformers): `copy(x)` (a deep copy), `eachNote(score, fn)`
+<!-- transformer selector -->
+- **Scores**: `copy(x)` (a deep copy), `eachNote(score, fn)`
   with `fn(note, chord, voice)`.
 - **Reading music.** `x` is any music: a score, a voice, a chord or a list of
   chords. The chords these return are the score's own, so read `copy(source)`
@@ -297,6 +307,7 @@ In scope, without imports:
     to 1; a transposed, faster or slower repeat still counts as alike),
     `classify(passages, threshold)` (a letter per passage:
     `["A", "B", "A"]`).
+<!-- algo -->
 - None of this limits you: the file is plain JavaScript. Write your own
   functions, classes, recursion and data structures whenever the idea needs
   them.
@@ -330,12 +341,18 @@ A score is written directly in its final form. The `fields` of `v.note` and
   - `22` articulations: `["staccato"]`, `["accent", "staccato"]`. Names:
     `"staccato" "staccatissimo" "accent" "portato" (tenuto) "martellato"
     (marcato) "fermata" "trill" "tremolo3" "harmonic" "upbowing" "downbowing"`.
-  - `24` an instruction above the note: `["pizz."]`; `21` a syllable below it.
+  - `24` annotation, an instruction above the note: `["pizz."]`; `21` a
+    syllable below it.
   - `23` notehead: `["diamond"]`, `"cross" "white" "black" "square"
     "triangle" "rhombus" "none"`.
 - `breakpoints`: a glissando, `[[0, 0, 0], [1, 700, 0]]`: points
   `[position 0 to 1, midicents from the pitch, slope]`, the first always
   `[0, 0, 0]`, the last at position 1.
+
+Instrument references name these marks in words: articulation `harmonic` is
+`22: ["harmonic"]`, annotation `"pizz."` is `24: ["pizz."]`, notehead `cross`
+is `23: ["cross"]`, dynamics `p` is `20: ["p"]`, a glissando of 700 is
+`breakpoints: [[0, 0, 0], [1, 700, 0]]`.
 
 `v.note(0, 6000, 500, { vel: 55, slots: { 20: ["p<"], 22: ["staccato"] } })`
 
@@ -414,6 +431,11 @@ A single line:
   midicents from its pitch: `700` up a fifth, `-1200` down an octave. A bent
   path is points `[position, midicents]`, position 0 to 1, the last at 1:
   `[[0.5, 300], [1, -200]]`.
+
+Instrument references name these marks in words: articulation `harmonic` is
+`"articulations": "harmonic"`, annotation `"pizz."` is `"annotation": "pizz."`,
+notehead `cross` is `"notehead": "cross"`, dynamics `p` is `"dynamics": "p"`, a
+glissando of 700 is `"gliss": 700`.
 
 Two instruments, with a three-note chord, a silence (2000 to 3000 in the
 piano), dynamics and articulations:

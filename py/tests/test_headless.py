@@ -100,15 +100,31 @@ class HeadlessTests(unittest.TestCase):
                          {"mcpServers": {"bach": {"type": "http", "url": Config().headless_mcp_url("algo")}}})
         self.assertNotIn("--resume", args)
 
-    def test_system_prompt_false_replaces_claude_codes_own(self):
+    def test_claude_code_prompt_false_replaces_claude_codes_own(self):
         args = self.chat.command_line()
         self.assertIn("--append-system-prompt", args, "by default Claude Code keeps its own prompt")
         self.assertNotIn("--system-prompt", args)
         config = Config()
-        config.chat.system_prompt = False
+        config.claude.claude_code_prompt = False
         args = ClaudeConversation(self.command, config, "writer").command_line()
         self.assertNotIn("--append-system-prompt", args)
         self.assertIn("You are writing for a writer", args[args.index("--system-prompt") + 1])
+
+    def test_the_prompt_is_sent_anew_on_every_resume(self):
+        self.chat.session = "s1"
+        args = self.chat.command_line()
+        self.assertEqual(args[args.index("--system-prompt-snapshot") + 1], "off",
+                         "else Claude Code resends the first message's prompt and a changed skill never arrives")
+
+    def test_model_and_effort_only_when_set(self):
+        args = self.chat.command_line()
+        self.assertNotIn("--model", args, "unset: the account's default")
+        self.assertNotIn("--effort", args)
+        config = Config()
+        config.claude.claude_model, config.claude.claude_effort = "sonnet", "low"
+        args = ClaudeConversation(self.command, config, "writer").command_line()
+        self.assertEqual(args[args.index("--model") + 1], "sonnet")
+        self.assertEqual(args[args.index("--effort") + 1], "low")
 
     def test_the_next_message_resumes_the_session(self):
         list(self.chat.send("one"))

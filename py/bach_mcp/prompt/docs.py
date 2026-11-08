@@ -111,7 +111,7 @@ class DocLibrary:
                 continue
             text, _, previous = message_text(msg).partition(_HEADER)
             if previous:
-                # Already augmented upstream (the terminal agent does it itself): keep it as it is.
+                # Already augmented (augment_text, as the conversations do it): keep it as it is.
                 seen.update(d.key for d in self.find(text))
                 out.append(msg)
                 last_added = []
