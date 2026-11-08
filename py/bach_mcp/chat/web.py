@@ -13,7 +13,9 @@ run() starts the bridge to Max, the hub and the model server (model/backends.py)
 serves the page, opens it in the browser once the model is ready, and stops
 everything on Ctrl-C, a signal or `bach quit`. Without a model it still runs: the
 page and Max (bach status) say what is missing. Claude has no way in here: it
-works with `serve` (bachmcp.server claude), which loads no model.
+works with `serve` (bachmcp.server claude), which loads no model and serves this
+same page next to /mcp (create_app with an mcp app), its prompts answered by
+Claude Code.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ import sys
 import threading
 import time
 import webbrowser
-from typing import Optional
+from typing import Any, AsyncIterator, Optional
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -50,8 +52,8 @@ def event(text: str) -> bytes:
     return ("".join(f"data: {row}\n" for row in text.split("\n")) + "\n").encode("utf-8")
 
 
-def create_app(hub: Hub, status: Status) -> Starlette:
-    """The chat page and the two ends of the hub."""
+def create_app(hub: Hub, status: Status, mcp: Optional[Any] = None) -> Starlette:
+    """The chat page and the two ends of the hub; with an MCP app (FastMCP), its tools at /mcp too."""
 
     async def page(request: Request) -> Response:
         with open(PAGE, encoding="utf-8") as f:
@@ -97,7 +99,11 @@ def create_app(hub: Hub, status: Status) -> Starlette:
 
     routes = [Route("/", page), Route("/api/state", get_state), Route("/api/events", events),
               Route("/api/line", post_line, methods=["POST"])]
-    return Starlette(routes=routes)
+    if mcp is None:
+        return Starlette(routes=routes)
+    app = mcp.streamable_http_app()  # /mcp, and the lifespan its sessions need
+    app.router.routes.extend(routes)
+    return app
 
 
 def _port_free(host: str, port: int) -> bool:

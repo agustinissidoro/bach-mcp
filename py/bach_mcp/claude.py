@@ -8,8 +8,9 @@ Claude brings its own model; Bach gives it the tools, what to read, and Max.
                               the skill as the server's instructions, /score and /algo
                               as two prompts, the instrument docs as resources
     serve(config, stdio)      serves that app: over HTTP at [server] (bachmcp.server claude),
-                              where prompts from Max are answered by Claude Code
-                              (chat/headless.py), or over stdio for a host that starts Bach itself
+                              with the chat page beside it (chat/web.py), where prompts from
+                              Max and the page are answered by Claude Code (chat/headless.py),
+                              or over stdio for a host that starts Bach itself
     connect(config)           Claude Desktop's side: it can only launch a command, so this
                               answers it and passes the tool calls to the Bach Max started.
                               It holds no port, so opening Claude blocks nothing in Max
@@ -105,17 +106,46 @@ def serve(config: Config, stdio: bool = False) -> None:
         make = None if stdio else lambda kind: ClaudeConversation(command, config, kind)
         hub = Hub(bridge, status, make)
         status.on_quit(hub.close)
-        status.started()
         if stdio:
+            status.started()
             mcp.run(transport="stdio")
             return
-        import uvicorn
-        watch_input(status)
-        print(f"Bach tools for MCP hosts at {config.mcp_url}", flush=True)
-        uvicorn.run(mcp.streamable_http_app(), host=config.server.host, port=config.server.port, log_level="warning")
+        _serve_http(config, hub, status, mcp)
     finally:
         status.off()
         bridge.stop()
+
+
+def _serve_http(config: Config, hub: Any, status: Any, mcp: FastMCP) -> None:
+    """The tools at /mcp and the chat page at / on one port: the page shows every instance's
+    conversation with Claude Code, and prompts written there are answered like Max's."""
+    import threading
+    import time
+    import webbrowser
+
+    import uvicorn
+
+    from .chat.web import close_page_tabs, create_app
+    http = uvicorn.Server(uvicorn.Config(create_app(hub, status, mcp), host=config.server.host,
+                                         port=config.server.port, log_level="warning",
+                                         timeout_graceful_shutdown=1))  # the pages' streams never end
+
+    def when_started() -> None:
+        while not http.started and not http.should_exit:
+            time.sleep(0.05)
+        if http.started:
+            status.started()
+            print(f"Bach tools for MCP hosts at {config.mcp_url}\nChat with Claude: {config.url}", flush=True)
+            if config.chat.open_browser:
+                webbrowser.open(config.url)
+
+    status.on_quit(lambda: close_page_tabs(config.url))
+    threading.Thread(target=when_started, daemon=True).start()
+    watch_input(status)
+    try:
+        http.run()
+    finally:
+        close_page_tabs(config.url)
 
 
 def connect(config: Config) -> None:
@@ -138,11 +168,13 @@ def connect(config: Config) -> None:
 
 
 def _why_unreachable(config: Config) -> str:
-    """What Claude should say when the tools cannot be reached. Only the chat page has /api/state."""
+    """What Claude should say when the tools cannot be reached. Both Bachs answer /api/state;
+    only the one that serves Claude says "claude"."""
     try:
-        if httpx.get(f"{config.url}/api/state", timeout=2).status_code == 200:
+        reply = httpx.get(f"{config.url}/api/state", timeout=2)
+        if reply.status_code == 200 and reply.json().get("state") != "claude":
             return "Bach is running in local mode, which does not serve Claude. Start [bachmcp.server claude] in Max."
-    except httpx.HTTPError:
+    except (httpx.HTTPError, ValueError):
         pass
     return f"Bach is not running at {config.mcp_url}. Start [bachmcp.server claude] in Max."
 

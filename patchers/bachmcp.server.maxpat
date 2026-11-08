@@ -1730,7 +1730,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 306.0, 287.0, 1000.0, 759.0 ],
+                        "rect": [ 306.0, 189.0, 1000.0, 759.0 ],
                         "boxes": [
                             {
                                 "box": {
@@ -1803,7 +1803,7 @@
                                                     "numinlets": 2,
                                                     "numoutlets": 2,
                                                     "outlettype": [ "", "" ],
-                                                    "patching_rect": [ 50.0, 177.0, 122.0, 22.0 ],
+                                                    "patching_rect": [ 50.0, 181.0, 122.0, 22.0 ],
                                                     "text": "zl.reg"
                                                 }
                                             },
@@ -2337,6 +2337,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.playground.js",
@@ -2954,6 +2956,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.download.js",
@@ -3212,6 +3216,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.modelcheck.js",
@@ -3972,6 +3978,40 @@
                         "classnamespace": "box",
                         "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
                         "boxes": [
+                            {
+                                "box": {
+                                    "id": "obj-19",
+                                    "maxclass": "newobj",
+                                    "numinlets": 2,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 466.8888888888889, 516.0, 123.2222222222224, 22.0 ],
+                                    "text": "join"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "id": "obj-14",
+                                    "maxclass": "newobj",
+                                    "numinlets": 2,
+                                    "numoutlets": 2,
+                                    "outlettype": [ "", "" ],
+                                    "patching_rect": [ 466.88888888888897, 479.21428571428567, 123.22222222222229, 22.0 ],
+                                    "text": "buddy"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "color": [ 1.0, 0.0, 0.0, 1.0 ],
+                                    "id": "obj-13",
+                                    "maxclass": "newobj",
+                                    "numinlets": 1,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 466.8888888888889, 550.0, 106.0, 22.0 ],
+                                    "text": "value bachmcp.url"
+                                }
+                            },
                             {
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
@@ -5093,16 +5133,44 @@
                         "lines": [
                             {
                                 "patchline": {
-                                    "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 476.38888888888897, 465.0, 789.0555555555554, 465.0 ],
+                                    "destination": [ "obj-14", 0 ],
+                                    "order": 1,
                                     "source": [ "obj-11", 0 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 580.6111111111112, 465.0, 789.0555555555554, 465.0 ],
+                                    "midpoints": [ 476.38888888888897, 465.0, 789.0555555555554, 465.0 ],
+                                    "order": 0,
+                                    "source": [ "obj-11", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-14", 1 ],
+                                    "order": 1,
                                     "source": [ "obj-12", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-57", 0 ],
+                                    "midpoints": [ 580.6111111111112, 465.0, 789.0555555555554, 465.0 ],
+                                    "order": 0,
+                                    "source": [ "obj-12", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-19", 1 ],
+                                    "source": [ "obj-14", 1 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-19", 0 ],
+                                    "source": [ "obj-14", 0 ]
                                 }
                             },
                             {
@@ -5123,6 +5191,12 @@
                                 "patchline": {
                                     "destination": [ "obj-37", 1 ],
                                     "source": [ "obj-18", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-13", 0 ],
+                                    "source": [ "obj-19", 0 ]
                                 }
                             },
                             {
@@ -5648,6 +5722,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.config.js",
@@ -5781,7 +5857,7 @@
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 440.0, 614.0, 150.0, 74.0 ],
+                    "patching_rect": [ 199.0, 593.0, 150.0, 74.0 ],
                     "text": "SENDS TO ALL BACHMCP.WRITE\nBACHMCP.SELECT\nBACHMCP.GENERATE\nBACHMCP.TRANSFORM"
                 }
             },
@@ -6618,7 +6694,7 @@
                     "maxclass": "inlet",
                     "numinlets": 0,
                     "numoutlets": 1,
-                    "outlettype": [ "" ],
+                    "outlettype": [ "int" ],
                     "patching_rect": [ 740.0, 48.0, 30.0, 30.0 ]
                 }
             }

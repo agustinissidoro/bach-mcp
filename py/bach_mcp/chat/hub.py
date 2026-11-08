@@ -70,7 +70,9 @@ Only to the page (Max does not need them):
     <name> note <text>                        docs added, a reply asked again
     <name> tool_call <tool> <arguments as JSON>
     <name> tool_result <tool> <its answer>
-    <name> history <JSON>                     a saved conversation, when a page connects
+    <name> history <JSON>                     its saved conversation (maybe []): when a page connects,
+                                              with each instance in a map, and for every instance
+                                              when the playground changes; not while it is answered
 
 An echo never goes back to Max when Max sent it. Lines the hub does not know
 (an instance's answers to the tools, such as `<name> algo_loaded`) are left to
@@ -243,10 +245,14 @@ class Hub:
             self._warn(f"playground: {exc}")
             return
         with self._lock:
-            if root != self.playground:
+            moved = root != self.playground
+            if moved:
                 self._conversations.clear()  # theirs are saved in the other playground
             self.playground = root
+            names = list(self.instances)
         self._send("set_playground", root, to_max=echo)
+        if moved:
+            self._histories(names)
 
     def _add_instance(self, args: List[str], echo: bool) -> None:
         if len(args) < 2:
@@ -264,6 +270,7 @@ class Hub:
             if first:
                 self.active = name
         self._send("add_instance_names_map", name, kind, to_max=echo)
+        self._histories([name])
         if first:
             self._send("set_active_instance", name, to_max=echo)
 
@@ -281,6 +288,7 @@ class Hub:
                     self.instances[name] = kind
             if joins:
                 self._send("add_instance_names_map", name, kind, to_max=echo)
+                self._histories([name])
         with self._lock:
             known = name in self.instances
             if known:
@@ -310,6 +318,7 @@ class Hub:
         self._send("clear_instance_names_map", to_max=False)
         for name, kind in fresh.items():
             self._send("add_instance_names_map", name, kind, to_max=False)
+        self._histories(list(fresh))
         if moved and active:
             self._send("set_active_instance", active, to_max=False)
         self._map_answered.set()
@@ -548,6 +557,16 @@ class Hub:
                 except json.JSONDecodeError:
                     continue  # a line cut by a crash: the rest is still the conversation
         return out
+
+    def _histories(self, names: List[str]) -> None:
+        """Send the pages each named instance's saved conversation, from the playground as it
+        is now; an empty one clears the page's. An instance being answered, or waiting, is left
+        alone: the page is drawing that answer."""
+        with self._lock:
+            busy = {self._answering, *(name for name, _ in self._queue)}
+            shown = [(name, self._saved(name)[-HISTORY_SHOWN:]) for name in names if name not in busy]
+        for name, saved in shown:
+            self._send(name, "history", json.dumps(saved, ensure_ascii=False), web_only=True)
 
     def _conversation(self, target: Target) -> Conversation:
         """The instance's conversation: in memory, else the saved one, else a new one."""

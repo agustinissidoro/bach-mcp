@@ -150,7 +150,8 @@ class MapTests(HubTest):
         self.bridge.from_max("clear_instance_names_map")
         self.bridge.from_max("add_instance_names_map scales1 transformer")
         self.assertEqual(self.hub.instances, {"scales1": "transformer"})
-        self.assertEqual(self.heard(), ["clear_instance_names_map", "add_instance_names_map scales1 transformer"])
+        self.assertEqual(self.heard(), ["clear_instance_names_map", "add_instance_names_map scales1 transformer",
+                                        "scales1 history []"])
         self.assertEqual(self.bridge.sent, [], "Max is not told what it said")
 
     def test_the_active_instance_from_the_page_goes_to_max_and_the_pages(self):
@@ -232,7 +233,8 @@ class ActiveInstanceTests(HubTest):
         self.setup_patch()
         self.bridge.from_max("set_active_instance chords1 selector")
         self.assertEqual((self.hub.active, self.hub.instances["chords1"]), ("chords1", "selector"))
-        self.assertEqual(self.heard(), ["add_instance_names_map chords1 selector", "set_active_instance chords1"])
+        self.assertEqual(self.heard(), ["add_instance_names_map chords1 selector", "chords1 history []",
+                                        "set_active_instance chords1"])
         self.assertEqual(self.bridge.sent, [], "Max is not told what it said")
         self.bridge.from_max("set_active_instance notes1 writer")
         self.assertEqual(self.heard()[-1], "set_active_instance notes1", "known: only the active one changes")
@@ -256,7 +258,8 @@ class ActiveInstanceTests(HubTest):
         self.assertEqual(self.hub.instances, {"scales1": "generator", "chords1": "selector"})
         self.assertEqual(self.hub.active, "scales1", "the active one went: the first takes its place")
         self.assertEqual(self.heard(), ["clear_instance_names_map", "add_instance_names_map scales1 generator",
-                                        "add_instance_names_map chords1 selector", "set_active_instance scales1"])
+                                        "add_instance_names_map chords1 selector", "scales1 history []",
+                                        "chords1 history []", "set_active_instance scales1"])
         self.bridge.from_max("instances")
         self.assertEqual((self.hub.instances, self.hub.active), ({}, ""))
 
@@ -376,6 +379,51 @@ class PromptTests(HubTest):
         sent = [m["content"] for m in self.client.requests[0]["messages"][1:]]
         self.assertEqual(sent, ["first", "One.", "second"])
 
+    def histories(self):
+        """The conversations the pages were sent: {name: [prompts]}, the last one for each."""
+        out = {}
+        for text in self.heard():
+            said = words(text)
+            if len(said) == 3 and said[1] == "history":
+                out[said[0]] = [m["prompt"] for m in json.loads(said[2]) if m["role"] == "user"]
+        return out
+
+    def test_each_map_and_playground_sends_the_saved_conversations_again(self):
+        self.setup_patch()
+        self.replies = [text_reply("One.")]
+        self.hub.handle('notes1 prompt "first"', "web")
+        self.answered("notes1")
+        self.clients.clear()
+        self.bridge.from_max("clear_instance_names_map")
+        self.bridge.from_max("add_instance_names_map scales1 generator")
+        self.bridge.from_max("add_instance_names_map notes1 writer")
+        self.assertEqual(self.histories(), {"scales1": [], "notes1": ["first"]})
+
+        self.clients.clear()
+        other = os.path.join(self.folder, "other")
+        self.bridge.from_max(f"set_playground {line(other)}")
+        self.assertEqual(self.histories(), {"scales1": [], "notes1": []}, "the other playground has none")
+        self.clients.clear()
+        self.bridge.from_max(f"set_playground {line(other)}")
+        self.assertEqual(self.histories(), {}, "the same playground again: nothing to reload")
+        self.bridge.from_max(f"set_playground {line(self.playground)}")
+        self.assertEqual(self.histories(), {"scales1": [], "notes1": ["first"]})
+
+        self.clients.clear()
+        self.assertTrue(self.bridge.from_max("instances notes1 writer"))
+        self.assertEqual(self.histories(), {"notes1": ["first"]})
+
+    def test_a_map_leaves_the_answer_being_drawn_alone(self):
+        self.setup_patch()
+        self.go.clear()
+        self.replies = [text_reply("One.")]
+        self.hub.handle('notes1 prompt "first"', "web")
+        self.bridge.from_max("add_instance_names_map notes1 writer")
+        self.bridge.from_max("add_instance_names_map scales1 generator")
+        self.assertEqual(self.histories(), {"scales1": []})
+        self.go.set()
+        self.answered("notes1")
+
     def test_new_keeps_the_old_conversation_aside(self):
         self.setup_patch()
         self.replies = [text_reply("One.")]
@@ -436,6 +484,23 @@ class WebTests(HubTest):
         self.assertEqual(self.bridge.sent, ["set_active_instance scales1"])
         bad = client.post("/api/line", content="dance now")
         self.assertEqual((bad.status_code, bad.json()["error"]), (400, "unknown command: dance now"))
+
+    def test_serve_has_the_page_beside_the_tools(self):
+        """bachmcp.server claude: the page, the hub's two ends and /mcp on one port."""
+        from starlette.testclient import TestClient
+        from bach_mcp.chat.web import create_app
+        self.status.set("claude")
+        with TestClient(create_app(self.hub, self.status, FastMCP("bach")), base_url="http://127.0.0.1:8090") as client:
+            self.assertIn("<title>Bach</title>", client.get("/").text)
+            self.assertEqual(client.get("/api/state").json()["state"], "claude")
+            self.assertTrue(client.get("/api/state").json()["ready"])
+            self.setup_patch()
+            self.assertEqual(client.post("/api/line", content="set_active_instance scales1").json(), {"ok": True})
+            mcp = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}},
+                headers={"Accept": "application/json, text/event-stream"})
+            self.assertEqual(mcp.status_code, 200)
+            self.assertIn('"serverInfo"', mcp.text)
 
     def test_an_event_holds_a_line_with_newlines(self):
         from bach_mcp.chat.web import event
