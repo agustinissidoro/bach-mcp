@@ -577,6 +577,9 @@ class Hub:
             saved = self._saved(target.name)
             conversation.history = [{k: v for k, v in m.items() if k not in ("prompt", "session")} for m in saved]
             conversation.session = next((m["session"] for m in reversed(saved) if m.get("session")), "")  # Claude Code's
+            if getattr(conversation, "docs", None) is not None:  # the docs it already has are not added again
+                conversation.seen_docs = conversation.docs.seen_in(
+                    m.get("prompt", "") for m in saved if m.get("role") == "user")
             self._conversations[target.name] = conversation
         return conversation
 

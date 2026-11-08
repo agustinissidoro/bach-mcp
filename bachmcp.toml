@@ -24,6 +24,9 @@ skill_file = ""           # system prompt. Empty = the built-in skill (py/bach_m
 max_tool_rounds = 8       # tool calls the model may chain in one answer (pitch tools, then the score)
 docs = true               # add the instrument docs (py/bach_mcp/prompt/docs) to each message that names an instrument
 open_browser = false      # open the chat page when the model is ready
+system_prompt = true      # Claude answering prompts from Max (bachmcp.server claude, claude -p) keeps Claude Code's
+                          # own system prompt, the skill added to it. false: the skill replaces it, so Claude reads
+                          # what the local model reads (about 7,000-8,000 fewer tokens per request; to be tried)
 
 [server]
 host = "127.0.0.1"
@@ -36,3 +39,5 @@ receive_port = 3001       # Max -> Python: [udpsend 127.0.0.1 3001] in the patch
 
 [algo]
 node = "/Applications/Max.app/Contents/Resources/C74/packages/Node for Max/source/bin/osx/node/node"             # Node.js, to check each algorithm before it is loaded in Max (name on PATH or absolute path)
+verbose = true              # after sending an algorithm the model explains it and its parameters;
+                            # false: at most one sentence (fewer tokens, a faster reply)

@@ -23,19 +23,28 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tempfile
 from typing import Any, Dict, Iterator, List, Optional, Set
 
 from ..claude import login_command
-from ..config import REPO_ROOT, Config
+from ..config import Config
 from ..prompt.docs import DocLibrary
-from ..prompt.modes import KIND_MODE, KIND_NOTE, MODE_TOOLS
-from ..prompt.skill import skill_for
+from ..prompt.modes import KIND_MODE, MODE_TOOLS, instance_skill
 from ..tools.session import new_conversation, use_conversation
 from .engine import Event
 
 SERVER = "bach"  # its name in the MCP configuration given to Claude Code: mcp__bach__<tool>
 PREFIX = f"mcp__{SERVER}__"
+# Where claude -p runs: a folder of its own, outside any git repository. In the repository
+# Claude Code adds its git status and the developer's notes on the code (its memory for
+# that folder) to the context; here it adds neither. Its sessions are kept under this path.
+WORKDIR = os.path.join(tempfile.gettempdir(), "bach-mcp-claude")
 NO_SESSION = "No conversation found"
+
+
+def _workdir() -> str:
+    os.makedirs(WORKDIR, exist_ok=True)
+    return WORKDIR
 
 
 class ClaudeConversation:
@@ -43,12 +52,13 @@ class ClaudeConversation:
 
     def __init__(self, command: Optional[str], config: Config, kind: str) -> None:
         self.command = command
-        self.url = config.mcp_url
         self.skill = config.skill_source()
         self.docs = DocLibrary() if config.chat.docs else None
         self.max_tool_rounds = config.chat.max_tool_rounds
         self.kind = kind
+        self.keep_claude_prompt = config.chat.system_prompt  # [chat] system_prompt
         self.mode = KIND_MODE[kind]
+        self.url = config.headless_mcp_url(self.mode)  # this mode's tools, no instructions
         self.history: List[Dict[str, Any]] = []
         self.seen_docs: Set[str] = set()
         self.session = ""  # Claude Code's session: the hub restores it from the saved conversation
@@ -62,14 +72,14 @@ class ClaudeConversation:
             process.terminate()
 
     def system_prompt(self) -> str:
-        return f"{skill_for(self.skill, self.mode)}\n{KIND_NOTE[self.kind]}\n"
+        return instance_skill(self.skill, self.mode, self.kind)
 
     def command_line(self) -> List[str]:
         config = {"mcpServers": {SERVER: {"type": "http", "url": self.url}}}
         line = [self.command or "claude", "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                 "--mcp-config", json.dumps(config), "--strict-mcp-config", "--setting-sources", "",
                 "--tools", "", "--allowedTools", *[PREFIX + tool for tool in MODE_TOOLS[self.mode]],
-                "--append-system-prompt", self.system_prompt(),
+                "--append-system-prompt" if self.keep_claude_prompt else "--system-prompt", self.system_prompt(),
                 "--max-turns", str(self.max_tool_rounds + 1)]
         return line + ["--resume", self.session] if self.session else line
 
@@ -100,7 +110,7 @@ class ClaudeConversation:
         env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}  # also when Bach itself runs inside Claude Code
         try:
             process = subprocess.Popen(self.command_line(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                       stderr=subprocess.STDOUT, text=True, cwd=REPO_ROOT, env=env)
+                                       stderr=subprocess.STDOUT, text=True, cwd=_workdir(), env=env)
         except OSError as exc:
             yield {"type": "error", "message": f"Claude Code did not start: {exc}"}
             yield {"type": "done", "finish": "stop"}

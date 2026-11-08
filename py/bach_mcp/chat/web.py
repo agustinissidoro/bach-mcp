@@ -21,6 +21,7 @@ Claude Code.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import socket
 import subprocess
@@ -28,7 +29,7 @@ import sys
 import threading
 import time
 import webbrowser
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional, Sequence
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -52,8 +53,9 @@ def event(text: str) -> bytes:
     return ("".join(f"data: {row}\n" for row in text.split("\n")) + "\n").encode("utf-8")
 
 
-def create_app(hub: Hub, status: Status, mcp: Optional[Any] = None) -> Starlette:
-    """The chat page and the two ends of the hub; with an MCP app (FastMCP), its tools at /mcp too."""
+def create_app(hub: Hub, status: Status, mcp: Optional[Any] = None, headless: Sequence[Any] = ()) -> Starlette:
+    """The chat page and the two ends of the hub; with an MCP app (FastMCP), its tools at /mcp too,
+    and the headless ones (claude.headless_apps) at their own paths, /mcp/headless/<mode>."""
 
     async def page(request: Request) -> Response:
         with open(PAGE, encoding="utf-8") as f:
@@ -103,6 +105,20 @@ def create_app(hub: Hub, status: Status, mcp: Optional[Any] = None) -> Starlette
         return Starlette(routes=routes)
     app = mcp.streamable_http_app()  # /mcp, and the lifespan its sessions need
     app.router.routes.extend(routes)
+    if headless:
+        for other in headless:
+            app.router.routes.extend(other.streamable_http_app().router.routes)
+        first = app.router.lifespan_context
+
+        @contextlib.asynccontextmanager
+        async def all_of_them(app_: Any):
+            async with contextlib.AsyncExitStack() as stack:
+                await stack.enter_async_context(first(app_))
+                for other in headless:
+                    await stack.enter_async_context(other.session_manager.run())
+                yield
+
+        app.router.lifespan_context = all_of_them
     return app
 
 

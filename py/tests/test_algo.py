@@ -189,6 +189,23 @@ class SendAlgorithmTests(PlaygroundTest):
         self.bridge.answer = None
         self.assertIn('and sent to Max (turn)', self.send(code=GOOD))
 
+    def test_the_tool_asks_for_the_opening_comment_and_sends_only_the_load(self):
+        import inspect
+        send = self.send
+        self.assertEqual(list(inspect.signature(send).parameters), ["code"])
+        self.assertIn("Open the file with a // comment", send.__doc__)
+        answer = send(code=GOOD)
+        self.assertIn("and sent to Max (turn)", answer)
+        self.assertIn('Shown above its panel: "a scale that turns around"', answer)
+        self.assertEqual(self.bridge.sent, ["turn load_algo turn.js"], "the description travels in the file")
+
+    def test_the_tool_refuses_a_file_without_the_comment(self):
+        send = self.send
+        bare = GOOD.split("\n", 1)[1]
+        self.assertIn("must open with a // comment", send(code=bare))
+        self.assertEqual(self.bridge.sent, [], "nothing loaded")
+        self.assertFalse(os.path.exists(os.path.join(self.folder, "algorithms", "turn.js")))
+
 TRANSFORMER = """// move every note
 const params = { shift: { type: "slider", range: [-1200, 1200], value: 100, unit: "mc" } };
 function transform(source, p) {

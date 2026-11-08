@@ -245,3 +245,16 @@ function produce(p) { const s = score(); s.voice("Flute").note(0, ${pitch}, 500)
   assert.equal(at("p.base"), 6000);
   assert.equal(at("60"), 60, "a MIDI number is left as it is");
 });
+
+test("the comment that opens the file is its description, one line", () => {
+  const body = 'const params = {};\nfunction produce(p) { return score(); }\n';
+  assert.equal(loader.compile(body).description, "");
+  assert.equal(loader.compile("\n// Notes that climb,\n//   then fall.\n" + body).description, "Notes that climb, then fall.");
+  assert.equal(loader.compile("//A canon   whose voices\n// drift apart\n" + body).description, "A canon whose voices drift apart");
+  assert.equal(loader.compile(body + "\n// a comment further down is not a description").description, "");
+  assert.equal(loader.compile("/* a block comment */\n" + body).description, "", "only // lines");
+  assert.equal(loader.compile("// " + "x".repeat(300) + "\n" + body).description.length, 200, "at most 200 characters");
+  // a shortDescription() function is no longer read: the file is just the file
+  assert.equal(loader.compile("// The comment\n" + body + 'function shortDescription() { return "The function"; }').description,
+    "The comment");
+});

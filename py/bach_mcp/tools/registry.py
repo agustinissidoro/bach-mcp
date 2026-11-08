@@ -16,7 +16,7 @@ call is for, and so where its files go, the tools ask session.py.
 
 import functools
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -50,14 +50,16 @@ def _format_call_args(kwargs: Dict[str, Any]) -> str:
 
 
 def create_tools(bridge: Any, node: str = "node", log_calls: bool = True,
-                 instructions: Optional[str] = None) -> FastMCP:
+                 instructions: Optional[str] = None,
+                 path: str = "/mcp", only: Optional[Iterable[str]] = None) -> FastMCP:
     """The MCP app with every tool registered.
 
     bridge: the MaxBridge (an OfflineBridge when the tools are only listed); node: [algo] node
     in bachmcp.toml; log_calls: [server] tool_log; instructions: the skill, for hosts that
-    read them (Claude). The local chat sends its own.
+    read them (Claude). The local chat sends its own. path: where it is served over HTTP.
+    only: the names of the tools to keep (a mode's, prompt/modes.py MODE_TOOLS); None: all.
     """
-    mcp = FastMCP("bach", instructions=instructions, log_level="WARNING")
+    mcp = FastMCP("bach", instructions=instructions, log_level="WARNING", streamable_http_path=path)
 
     # Wrap mcp.tool so every registered tool logs its name, arguments, and result
     # in a human-readable form.
@@ -90,4 +92,9 @@ def create_tools(bridge: Any, node: str = "node", log_calls: bool = True,
     register_score_tools(mcp, bridge)
     register_algo_tools(mcp, bridge, node)
     register_instance_tools(mcp)
+    if only is not None:
+        keep = set(only)
+        for tool in mcp._tool_manager.list_tools():
+            if tool.name not in keep:
+                mcp.remove_tool(tool.name)
     return mcp

@@ -10,6 +10,12 @@ The file marks its parts with lines of their own:
     <!-- both -->    for both (the default at the top of the file)
 A mode gets its own part and the shared one (see modes.py); without a mode,
 the whole file is used. The markers themselves never reach the model.
+
+A second pair says how much the model says after it sends an algorithm,
+chosen by [algo] verbose in bachmcp.toml (with_verbosity, applied first):
+    <!-- verbose -->   what follows is kept when verbose = true
+    <!-- quiet -->     kept when verbose = false
+    <!-- /verbose -->  back to what is always kept
 """
 
 from __future__ import annotations
@@ -29,8 +35,29 @@ def read_skill(path: str = SKILL_PATH) -> str:
         return f.read()
 
 
-def skill_for(text: str, mode: Optional[str] = None) -> str:
-    """The parts of a skill text for this mode (None: all of it), markers removed."""
+_VERBOSITY = re.compile(r"^<!--\s*(verbose|quiet|/verbose)\s*-->[ \t]*\n?", re.M)
+
+
+def with_verbosity(text: str, verbose: bool) -> str:
+    """The text with only the verbose (or only the quiet) wording, those markers removed."""
+    out: List[str] = []
+    current, pos = "", 0
+    keep = "verbose" if verbose else "quiet"
+    for m in _VERBOSITY.finditer(text):
+        if current in ("", keep):
+            out.append(text[pos:m.start()])
+        current = "" if m.group(1) == "/verbose" else m.group(1)
+        pos = m.end()
+    if current in ("", keep):
+        out.append(text[pos:])
+    return "".join(out)
+
+
+def skill_for(text: str, mode: Optional[str] = None, verbose: bool = True) -> str:
+    """The parts of a skill text for this mode (None: all of it), markers removed.
+    Verbosity markers still in it are resolved with `verbose` (Config.skill_source
+    resolves them first with [algo] verbose, so then there are none left)."""
+    text = with_verbosity(text, verbose)
     out: List[str] = []
     current = "both"
     pos = 0
@@ -43,10 +70,11 @@ def skill_for(text: str, mode: Optional[str] = None) -> str:
     return re.sub(r"\n{3,}", "\n\n", "".join(out)).strip() + "\n"
 
 
-def load_skill(mode: Optional[str] = None, raw: bool = False, path: str = SKILL_PATH) -> str:
+def load_skill(mode: Optional[str] = None, raw: bool = False, path: str = SKILL_PATH,
+               verbose: bool = True) -> str:
     """The skill for a mode ("score" or "algo"), all of it (None), or the file as it is (raw)."""
     text = read_skill(path)
-    return text if raw else skill_for(text, mode)
+    return text if raw else skill_for(text, mode, verbose)
 
 
-__all__ = ["SKILL_PATH", "read_skill", "skill_for", "load_skill"]
+__all__ = ["SKILL_PATH", "read_skill", "with_verbosity", "skill_for", "load_skill"]

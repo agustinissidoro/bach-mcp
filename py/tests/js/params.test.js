@@ -379,18 +379,35 @@ test("a pitch shows as a name; clicking its value text switches to midicents, MI
   assert.deepEqual(sent(m), []);
 });
 
-test("drags snap to the grid; alt lets them through", () => {
+test("free is free: a drag lands anywhere, alt snaps it to the card's grid; ½ snaps, alt lets it through", () => {
   const m = panelWith(KINDS);
+  const alt = (name, fx) => {
+    const [x, y] = at(m, name, fx);
+    m.ctx.onclick(x, y, 1, 0, 0, 0, 1, 0);
+    const [[, v]] = sent(m);
+    release(m);
+    return v;
+  };
+  // pitches start free
   click(m, "target", 0.5513);  // about 7001 cents
-  assert.deepEqual(sent(m), [["target", 7000]]);
-  release(m);
-  const [x, y] = at(m, "target", 0.5037);
-  m.ctx.onclick(x, y, 1, 0, 0, 0, 1, 0);  // alt
   const [[, free]] = sent(m);
-  assert.notEqual(free % 100, 0, `alt drag is free: ${free}`);
+  assert.notEqual(free % 100, 0, `a free drag is free: ${free}`);
   release(m);
-  click(m, "register", 0.01);
-  assert.equal(sent(m)[0][1] % 100, 0);
+  assert.equal(alt("target", 0.5513) % 100, 0, "alt snaps it to semitones");
+  click(m, "register", 0.0137);
+  assert.notEqual(sent(m)[0][1] % 100, 0, "a free range too");
+  release(m);
+  // ½: snapped; alt lets it through
+  m.send("snap", 0);
+  click(m, "target", 0.6013);  // about 7637 cents
+  assert.deepEqual(sent(m), [["target", 7600]]);
+  release(m);
+  assert.notEqual(alt("target", 0.5037) % 100, 0, "alt drag is free");
+  // a time card starts free: no grid either
+  const gap = m.ctx.panel.rows.find((r) => r.item.name === "gap");
+  assert.equal(m.ctx.panel.snapState(gap.item)[1], "free");
+  click(m, "gap", 0.3011);
+  assert.notEqual(sent(m)[0][1] % 10, 0, "a free time is free");
   release(m);
   click(m, "gap", 0);
   assert.deepEqual(sent(m), [["gap", 50]], "the ends of the range stay reachable");
@@ -522,4 +539,103 @@ test("process sel. toggles process_only_selection on a transformer's and a selec
   }
   const g = panelWith(SPEC);
   assert.equal(g.ctx.panel.ui(g.ctx.panel.width).within, null, "a generator has no source row");
+});
+
+test("the prompt's progress: prompt <stage> draws one icon in the title row", () => {
+  const m = panelWith();
+  const panel = m.ctx.panel;
+  let now = 1000;
+  panel.clock = () => now;
+  const arcs = () => m.ctx.mgraphics.calls.filter((c) => c[0] === "arc" && c[2] < M_TITLE).length;
+  const paint = () => { m.ctx.mgraphics.calls.length = 0; m.ctx.paint(); };
+
+  paint();
+  const idle = arcs();
+  m.send("prompt", "thinking");
+  assert.equal(panel.prompt.stage, "thinking");
+  paint();
+  assert.ok(arcs() > idle, "the icon is drawn in the title row");
+  assert.ok(panel.promptMoving(), "and it moves");
+  m.send("prompt", "calling", "get_chord");
+  assert.deepEqual([panel.prompt.stage, panel.prompt.detail], ["calling", "get_chord"]);
+  m.send("prompt", "done", 120, 3400);
+  assert.ok(panel.promptShown());
+  now += 5000;
+  assert.ok(!panel.promptShown() && !panel.promptMoving(), "done fades out");
+  m.send("prompt", "error", "the", "model", "is", "not", "ready");
+  now += 60000;
+  assert.ok(panel.promptShown() && !panel.promptMoving(), "an error stays, still");
+  m.send("prompt", "idle");
+  assert.ok(!panel.promptShown());
+  for (const stage of ["received", "queued", "starting", "sent", "writing", "running", "stopped", "whatever"]) {
+    m.send("prompt", stage);
+    paint();
+  }
+});
+
+test("the description comes with the spec, is drawn under the title and is kept with the patch", () => {
+  const m = panelWith(Object.assign({}, SPEC, { description: "  Random walks,\n in a narrow range " }));
+  const panel = m.ctx.panel;
+  assert.equal(panel.description, "Random walks, in a narrow range");
+  m.ctx.paint();
+  assert.ok(m.ctx.mgraphics.calls.some((c) => c[0] === "show_text" && String(c[1]).indexOf("Random walks") === 0));
+  m.ctx.save();
+  const fresh = loadPanel({ width: 320, height: 100 });
+  fresh.send("restore", m.embedded[m.embedded.length - 1][1]);
+  assert.equal(fresh.ctx.panel.description, "Random walks, in a narrow range");
+  m.send("spec", JSON.stringify(SPEC));
+  assert.equal(panel.description, "", "a file without one clears it");
+});
+
+test("a wider panel draws bigger, as far as its height holds it; height left over goes to lists and curves", () => {
+  const panel = loadPanel({ width: 320, height: 100 }).ctx.panel;
+  panel.setSpec(SPEC);
+  const natural = panel.layout(300);
+  assert.equal(panel.scale, 1);
+  const small = panel.rows.find((r) => r.item.name === "amount").control;
+  // twice as wide, height to spare: everything twice as big
+  panel.layout(600, natural * 3);
+  assert.equal(panel.scale, 2);
+  const big = panel.rows.find((r) => r.item.name === "amount").control;
+  assert.ok(big.h === small.h * 2 && big.w >= small.w * 2, "controls grow with the panel");
+  // the rest grows less: the title row and its buttons a third as much
+  assert.equal(panel.chrome, 1 + 0.33);
+  assert.ok(Math.abs(panel.places.setActive.h - 20 * 1.33) < 1e-9, "set active grows a third as much");
+  assert.ok(panel.places.repeat.w < 50 * 2, "so do the output buttons");
+  // twice as wide, the same height: as big as the height holds (here, scale 1)
+  panel.layout(600, natural);
+  assert.equal(panel.scale, 1);
+  // as wide, much taller: the list and the curve take the height, the slider does not
+  panel.layout(300, natural + 200);
+  assert.equal(panel.scale, 1);
+  const list = panel.rows.find((r) => r.item.name === "durs").control;
+  const curve = panel.rows.find((r) => r.item.name === "shape").control;
+  assert.equal(panel.rows.find((r) => r.item.name === "amount").control.h, small.h);
+  assert.ok(Math.abs(list.h - (58 + 100)) < 0.01 && Math.abs(curve.h - (76 + 100)) < 0.01, "the spare 200 px shared");
+  // capped: a list at most M.tallGrow times its height
+  panel.layout(300, natural + 5000);
+  assert.ok(panel.rows.find((r) => r.item.name === "durs").control.h <= 58 * 4 + 0.01);
+});
+
+test("bigger controls are more precise: finer marks, free values to the pixel", () => {
+  const base = legacyRequire("bachmcp.gui.params.base.js");
+  // a semitone grid over 8 octaves: octave marks when narrow, semitones when wide enough
+  assert.equal(base.tickStep(9600, 200, 100, 6, true), 1200);
+  assert.equal(base.tickStep(9600, 700, 100, 6, true), 100);
+  assert.equal(base.tickStep(100, 300, 1, 6, false), 2);
+  assert.equal(base.tickStep(100, 600, 1, 6, false), 1);
+  assert.equal(base.tickStep(1e6, 10, 1, 6, false), 0, "nothing when even the coarsest step does not fit");
+  const panel = loadPanel({ width: 320, height: 100 }).ctx.panel;
+  panel.setSpec(SPEC);
+  const amount = panel.find("amount");
+  amount.accept([0.123456]);
+  panel.layout(300);
+  const narrow = amount.text();
+  panel.layout(300 * 20);  // far wider than scale 2: a pixel is worth a finer step
+  assert.ok(amount.text().length >= narrow.length, `${amount.text()} vs ${narrow}`);
+  assert.ok(amount.resolution < 0.001);
+  // drawing at scale 2 works for every element
+  const g = loadPanel({ width: 600, height: 2000 });
+  g.send("spec", JSON.stringify(SPEC));
+  g.ctx.paint();
 });

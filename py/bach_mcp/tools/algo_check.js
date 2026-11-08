@@ -152,6 +152,7 @@ function main() {
   reply({
     ok: true,
     kind: compiled.kind,
+    description: compiled.description,
     source: source ? { notes: countNotes(source), given: Boolean(sourceFile) } : null,
     params: compiled.specs,
     describe: paramspec.describe(compiled.specs),

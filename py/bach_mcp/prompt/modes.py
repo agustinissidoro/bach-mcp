@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..tools.algo_tools import ALGO_TOOLS
 from ..tools.pitch_tools import PITCH_TOOLS
 from ..tools.score_tools import SCORE_TOOLS
+from .skill import skill_for
 
 MODES = ("score", "algo")
 DEFAULT_MODE = "score"
@@ -66,9 +67,17 @@ def split_prefix(text: str) -> Tuple[Optional[str], str]:
     return m.group(1).lower(), rest if rest.strip() else text
 
 
+def instance_skill(skill: str, mode: str, kind: Optional[str] = None) -> str:
+    """The system prompt for one conversation: the skill's part for this mode and, for an
+    instance, the line on what it takes. The one place it is made: the local model
+    (chat/engine.py) and the Claude Code Bach starts (chat/headless.py) read the same text."""
+    text = skill_for(skill, mode)
+    return f"{text}\n{KIND_NOTE[kind]}\n" if kind else text
+
+
 def tools_for(tools: List[Dict[str, Any]], mode: str) -> List[Dict[str, Any]]:
     """The tools of this mode, from tools in the OpenAI format."""
     return [t for t in tools if t["function"]["name"] in MODE_TOOLS[mode]]
 
 
-__all__ = ["MODES", "DEFAULT_MODE", "MODE_TOOLS", "KIND_MODE", "KIND_NOTE", "split_prefix", "tools_for"]
+__all__ = ["MODES", "DEFAULT_MODE", "MODE_TOOLS", "KIND_MODE", "KIND_NOTE", "instance_skill", "split_prefix", "tools_for"]

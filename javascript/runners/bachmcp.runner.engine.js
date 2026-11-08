@@ -263,26 +263,39 @@ function createEngine(max, kind, hooks = {}) {
     state.compiled = next;
     const params = next.specs.map((s) => Object.assign({}, s, { value: state.values[s.name] }));
     max.outlet(PANEL, "spec", JSON.stringify(Object.assign({
-      title: basename(state.path).replace(/\.js$/, ""), path: state.path, kind: next.kind, params,
+      title: basename(state.path).replace(/\.js$/, ""), description: next.description || "", path: state.path,
+      kind: next.kind, params,
     }, hooks.spec ? hooks.spec() : {})));
     say(`loaded ${basename(state.path)}: ${paramspec.describe(next.specs, state.values).join("; ")}`);
     if (!(hooks.loaded && hooks.loaded())) return runNow();
     state.fresh = false;  // no run, so no algo_loaded: the first run is algo_done
   }
 
-  /** The values for a new version of the file: a parameter that keeps its name and type keeps its value. */
+  /**
+   * The values for a new version of the file (saved while watched, or reloaded).
+   * A value the user set (it differs from the old default) carries over when the
+   * parameter still means the same: same name, type, kind and unit; clamped to the
+   * new range, a menu's only if its option is still there (by name, never by
+   * position). Everything else takes the file's (possibly new) default, so a
+   * default edited in the file shows at once.
+   */
   function keptValues(next) {
     const kept = {};
     const before = state.compiled;
     for (const spec of next.specs) {
-      const old = before && before.specs.find((s) => s.name === spec.name && s.type === spec.type);
       kept[spec.name] = copy(spec.default);
-      if (old && state.values[spec.name] !== undefined) {
-        try {
-          kept[spec.name] = paramspec.coerce(spec, paramspec.valueAtoms(old, state.values[spec.name]));
-        } catch (e) {
-          // out of the new options: back to the default
-        }
+      const old = before && before.specs.find((s) => paramspec.sameMeaning(s, spec));
+      const value = state.values[spec.name];
+      if (!old || value === undefined || JSON.stringify(value) === JSON.stringify(old.default)) continue;
+      if (spec.type === "menu") {
+        const hit = spec.options.find((o) => String(o) === String(value));
+        if (hit !== undefined) kept[spec.name] = hit;
+        continue;
+      }
+      try {
+        kept[spec.name] = paramspec.coerce(spec, paramspec.valueAtoms(old, value));
+      } catch (e) {
+        // not a value of the new declaration: the default
       }
     }
     return kept;

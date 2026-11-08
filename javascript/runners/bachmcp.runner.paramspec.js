@@ -287,6 +287,11 @@ function valueAtoms(spec, value) {
   return Array.isArray(value) ? value.slice() : [value];
 }
 
+/** Whether two declarations of a parameter mean the same kind of value: name, type, kind and unit. */
+function sameMeaning(a, b) {
+  return a.name === b.name && a.type === b.type && (a.kind || "") === (b.kind || "") && (a.unit || "") === (b.unit || "");
+}
+
 /** One line per parameter: what the model and the Max console are told. */
 function describe(specs, values) {
   return specs.map((s) => {
@@ -308,5 +313,5 @@ function describe(specs, values) {
 
 module.exports = {
   TYPES, RESERVED, MIDI_RANGE,
-  normalizeParams, defaults, prepare, coerce, valueAtoms, describe,
+  normalizeParams, defaults, prepare, coerce, valueAtoms, describe, sameMeaning,
 };

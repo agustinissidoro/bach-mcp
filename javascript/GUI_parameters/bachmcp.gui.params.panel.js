@@ -2,7 +2,10 @@
 bachmcp.gui.params.panel.js
 ---------------------------
 The Panel: a title row (the algorithm, its kind, bypass and "set active": the
-instance Claude's tools work for, sent as "set_as_active_instance"), then two sections.
+instance Claude's tools work for, sent as "set_as_active_instance"), under it the
+algorithm's one-line description when its file has one (the spec's description:
+the // comment that opens the file), then two sections.
+Left of the kind, one animated icon follows the instance's prompt (setPrompt).
 Drags land on each slider's grid; alt lets one through. "Options": reset
 all; then bypass ("bypass 0|1"), repeat ("repeat"); pitch cards toggle ½ | ¼ | free ("snap 0|1|3"), time cards 100ms | 10ms | free; a transformer adds its source card: how many notes, write
 (write_to_playground), capture (capture_source) and the source mode as two
@@ -11,6 +14,14 @@ it) or destructive (every score at the runner's inlet becomes the source), sent
 as "source_mode 1|0". A selector has the same card, and under the mode
 two more segments, whole score | selection only (sent as "dump_selection_only 0|1"). "Parameters": one card each, its name and value above its
 control. A status line closes the panel.
+
+Size: a bigger panel draws its parameters bigger (layout: the scale grows with
+the width past M.baseWidth, up to M.maxScale, as long as the height still holds
+it), and height left over goes to lists and curves (up to M.tallGrow times taller).
+The rest (title row, buttons, section headers, status line) grows only
+M.chromeGrow as much: the parameters are what a bigger panel is for.
+Bigger controls are more precise: the elements mark finer steps and show free
+values to the pixel (see bachmcp.gui.params.elements.js).
 
 The Panel turns mouse gestures into "param <name> <value...>" messages for a runner
 (runners/) and gives its state to be saved with the patch and to pattr
@@ -34,6 +45,8 @@ var base = need("bachmcp.gui.params.base.js");
 var elements = need("bachmcp.gui.params.elements.js");
 var THEME = base.THEME,
   M = base.M,
+  scaled = base.scaled,
+  scaleFor = base.scaleFor,
   clamp = base.clamp,
   snap = base.snap,
   copy = base.copy,
@@ -43,11 +56,13 @@ var THEME = base.THEME,
   rounded = base.rounded,
   label = base.label,
   outline = base.outline,
-  dot = base.dot;
+  dot = base.dot,
+  color = base.color;
 var makeElement = elements.makeElement;
 
 function Panel() {
   this.name = "";  // set_name: shown while no algorithm is loaded; kept by clear
+  this.prompt = { stage: "", detail: "", at: 0 };  // the prompt's progress (setPrompt); kept by clear
   this.clear();
 }
 
@@ -61,6 +76,7 @@ Panel.prototype.setName = function (name) {
 
 Panel.prototype.clear = function () {
   this.title = "";
+  this.description = "";  // one line on what the algorithm does: the comment that opens its file
   this.path = "";
   this.kind = "producer";
   this.source = null;  // transformers: {notes, from}
@@ -92,14 +108,18 @@ Panel.prototype.modes = function () {
 };
 
 /**
- * Show a new set of parameters. A parameter that keeps its name and type keeps the
- * value it has here, so reloading code (or reopening the patch) does not lose the
- * user's settings. Returns the messages to send for the values kept that way.
+ * Show a new set of parameters (a file loaded, saved while watched, or the patch
+ * reopened). A value the user set here (it differs from the old default) is kept
+ * when the parameter still means the same: same name, type, kind and unit;
+ * clamped to the new range, a menu's only if its option is still there (by name,
+ * never by position). Everything else shows the spec's value, so a default edited
+ * in the file shows at once. Returns the messages to send for the values kept.
  */
 Panel.prototype.setSpec = function (spec) {
   var old = {}, i;
   for (i = 0; i < this.items.length; i++) old[this.items[i].name] = this.items[i];
   this.title = spec.title || "";
+  this.setDescription(spec.description);
   this.path = spec.path || "";
   this.kind = spec.kind || "producer";
   this.source = spec.source || null;
@@ -109,10 +129,12 @@ Panel.prototype.setSpec = function (spec) {
   for (i = 0; i < params.length; i++) {
     var item = makeElement(params[i]);
     var was = old[item.name];
-    if (was && was.type === item.type) {
-      if (was.kind === item.kind && params[i].display === undefined) item.display = was.display;
-      var before = item.atoms();
-      if (item.accept(was.atoms()) && !same(before, item.atoms())) messages.push(this.message(item));
+    if (was && was.type === item.type && was.kind === item.kind && was.unit === item.unit) {
+      if (params[i].display === undefined) item.display = was.display;
+      if (keeps(was, item)) {
+        var before = item.atoms();
+        if (item.accept(was.atoms()) && !same(before, item.atoms())) messages.push(this.message(item));
+      }
     }
     this.items.push(item);
   }
@@ -128,6 +150,14 @@ Panel.prototype.setSpec = function (spec) {
   if (this.pitchSnap !== 3) messages.push(["snap", this.pitchSnap]);
   return messages;
 };
+
+/** Whether a value set by the user carries over to the new declaration (see setSpec). */
+function keeps(was, item) {
+  if (same(was.value, was.def)) return false;
+  if (item.type !== "menu") return true;
+  for (var i = 0; i < item.options.length; i++) if (String(item.options[i]) === String(was.value)) return true;
+  return false;
+}
 
 /** The source mode set from outside (the runner's echo): shown, not sent back. */
 Panel.prototype.setSourceMode = function (flag) {
@@ -175,7 +205,8 @@ Panel.prototype.setPitchSnap = function (n) {
  * interval) card's toggle is the runner's snap: ½ (semitones), ¼ (quarter
  * tones), free; it sets where those sliders drag to and is sent as "snap
  * 0|1|3". A time card's toggle only sets where time sliders drag to: 100 ms,
- * 10 ms, free (the slider's own grid).
+ * 10 ms, free. Free is free: no grid at all, every pixel a value (alt then
+ * snaps to the card's own grid).
  */
 var PITCH_SNAPS = [[0, "\u00bd", 100], [1, "\u00bc", 50], [3, "free", 0]];
 var TIME_SNAPS = [[1, "100ms", 100], [2, "10ms", 10], [0, "free", 0]];
@@ -219,14 +250,14 @@ Panel.prototype.applyGrids = function () {
     var it = this.items[i];
     if (it.baseGrid === undefined) it.baseGrid = it.grid;
     var st = this.snapState(it);
-    if (st) it.grid = st[2] || it.baseGrid;
+    if (st) it.grid = st[2];
   }
 };
 
-/** Whether a drag of this item snaps (before alt): always, on its toggle's step or its own grid. */
+/** Whether a drag of this item snaps (before alt): on its toggle's step, never when free; else the panel's snap. */
 Panel.prototype.snapping = function (item) {
   var st = this.snapState(item);
-  return st && st[2] ? true : this.snap;
+  return st ? st[2] > 0 : this.snap;
 };
 
 Panel.prototype.find = function (name) {
@@ -239,6 +270,117 @@ Panel.prototype.setValue = function (name, atoms) {
   var item = this.find(name);
   return item ? item.accept(atoms) : false;
 };
+
+/** The algorithm's one-line description; "" removes it. True when it changes. */
+Panel.prototype.setDescription = function (text) {
+  var next = text === undefined || text === null ? "" : String(text).replace(/\s+/g, " ").trim();
+  if (next === this.description) return false;
+  this.description = next;
+  this.places = null;
+  return true;
+};
+
+/** The height of the description line under the title row (0 without one). */
+Panel.prototype.descriptionHeight = function () {
+  var k = this.k || M;
+  return this.description ? k.row + 2 * (this.chrome || 1) : 0;
+};
+
+// ── The prompt's progress ───────────────────────────────────────────────── //
+// The server's "prompt <instance> <stage> [detail]" (bachmcp.server's prompt info) as one
+// animated icon in the title row: received, queued <ahead>, starting, sent, thinking,
+// writing, calling <tool>, running <tool>, then done <tokens> <ms>, stopped or error <text>.
+// done and stopped fade out; error stays until the next prompt.
+
+var PROMPT_FADE = 4000;  // ms that done and stopped stay
+
+/** A stage of the prompt ("" or "idle": no icon). True when the drawing changes. */
+Panel.prototype.setPrompt = function (stage, detail) {
+  var next = stage === undefined || stage === null ? "" : String(stage);
+  if (next === "idle") next = "";
+  var text = detail === undefined || detail === null ? "" : String(detail);
+  if (next === this.prompt.stage && text === this.prompt.detail) return false;
+  this.prompt = { stage: next, detail: text, at: this.clock() };
+  return true;
+};
+
+Panel.prototype.clock = function () {
+  return new Date().getTime();
+};
+
+/** Whether the icon is shown at all. */
+Panel.prototype.promptShown = function () {
+  var s = this.prompt.stage;
+  if (!s) return false;
+  if (s === "done" || s === "stopped") return this.clock() - this.prompt.at < PROMPT_FADE;
+  return true;
+};
+
+/** Whether the icon still moves (the drawing needs redraws): everything but error and no icon. */
+Panel.prototype.promptMoving = function () {
+  return this.promptShown() && this.prompt.stage !== "error";
+};
+
+function strokeArc(g, x, y, r, a0, a1, c, width) {
+  color(g, c);
+  g.set_line_width(width);
+  g.arc(x, y, r, a0, a1);
+  g.stroke();
+}
+
+function fade(c, alpha) {
+  return [c[0], c[1], c[2], c[3] * alpha];
+}
+
+// The icon centred on (x, y), radius r, t ms after the stage began.
+function promptIcon(g, stage, x, y, r, t) {
+  var s = t / 1000, TAU = 2 * Math.PI;
+  var pulse = 0.5 + 0.5 * Math.sin(s * TAU / 1.2);
+  var spin = function (turnsPerSecond, c, length) {
+    var a = s * turnsPerSecond * TAU;
+    strokeArc(g, x, y, r, 0, TAU, fade(c, 0.18), 1.5);
+    strokeArc(g, x, y, r, a, a + length, c, 1.5);
+  };
+  if (stage === "received" || stage === "queued") {
+    // waiting its turn: a ring that breathes (slower while queued)
+    var slow = stage === "queued" ? 0.5 + 0.5 * Math.sin(s * TAU / 2.4) : pulse;
+    strokeArc(g, x, y, r, 0, TAU, fade(THEME.dim, 0.35 + 0.65 * slow), 1.5);
+  } else if (stage === "starting" || stage === "sent") {
+    spin(0.8, THEME.dim, 1.6);
+  } else if (stage === "thinking") {
+    // a dot that swells inside a faint ring
+    strokeArc(g, x, y, r, 0, TAU, fade(THEME.fill, 0.25), 1.5);
+    dot(g, x, y, r * (0.3 + 0.4 * pulse), fade(THEME.fill, 0.55 + 0.45 * pulse));
+  } else if (stage === "writing") {
+    spin(1.6, THEME.fill, 2.2);
+  } else if (stage === "calling" || stage === "running") {
+    spin(1.1, THEME.ok, 1.8);
+    dot(g, x, y, 1.6, THEME.ok);
+  } else if (stage === "done" || stage === "stopped") {
+    var left = 1 - Math.min(1, Math.max(0, (t - PROMPT_FADE / 2) / (PROMPT_FADE / 2)));
+    if (stage === "done") {
+      color(g, fade(THEME.ok, left));
+      g.set_line_width(1.8);
+      g.move_to(x - r * 0.6, y + r * 0.05);
+      g.line_to(x - r * 0.15, y + r * 0.5);
+      g.line_to(x + r * 0.7, y - r * 0.5);
+      g.stroke();
+    } else {
+      box(g, x - r * 0.55, y - r * 0.55, r * 1.1, r * 1.1, fade(THEME.dim, left));
+    }
+  } else if (stage === "error") {
+    color(g, THEME.error);
+    g.set_line_width(1.8);
+    g.move_to(x - r * 0.55, y - r * 0.55);
+    g.line_to(x + r * 0.55, y + r * 0.55);
+    g.move_to(x + r * 0.55, y - r * 0.55);
+    g.line_to(x - r * 0.55, y + r * 0.55);
+    g.stroke();
+  } else {
+    spin(0.8, THEME.dim, 1.6);  // a stage this panel does not know: busy all the same
+  }
+  g.set_line_width(1);
+}
 
 Panel.prototype.setStatus = function (kind, text) {
   this.state = { kind: String(kind || ""), text: String(text || "") };
@@ -283,7 +425,8 @@ Panel.prototype.hasGrid = function () {
 Panel.prototype.valueWidth = function () {
   var longest = 0;
   for (var i = 0; i < this.items.length; i++) longest = Math.max(longest, this.items[i].widest().length);
-  return clamp(Math.ceil(longest * M.charWidth) + 12, M.valueMin, M.valueMax);
+  var m = this.m || M;
+  return clamp(Math.ceil(longest * m.charWidth) + 12 * (this.scale || 1), m.valueMin, m.valueMax);
 };
 
 /**
@@ -301,83 +444,116 @@ Panel.prototype.valueWidth = function () {
  */
 Panel.prototype.layout = function (width, height) {
   this.height = height || 0;
-  var full = this.place(width, false);
-  if (height > 0 && full > height + 0.5) {
+  var s = scaleFor(width);
+  if (!(height > 0)) {
+    this.compact = false;
+    return this.place(width, false, s, 0);
+  }
+  // the height holds the panel at scale 1: grow as far as the width allows and the height holds
+  var natural = this.place(width, false, 1, 0);
+  if (natural > height + 0.5) {
     this.compact = true;
-    return this.place(width, true);
+    return this.place(width, true, 1, 0);
   }
   this.compact = false;
-  return full;
+  // the largest scale the width allows that the height still holds, in steps of 0.05
+  var used = this.place(width, false, s, 0);
+  while (used > height + 0.5 && s > 1) used = this.place(width, false, s = Math.max(1, Math.round((s - 0.05) * 20) / 20), 0);
+  // what is left: to the lists and curves
+  return height - used > 1 && this.hasTall() ? this.place(width, false, s, height - used) : used;
 };
 
-Panel.prototype.place = function (width, compact) {
+Panel.prototype.hasTall = function () {
+  for (var i = 0; i < this.items.length; i++) if (this.items[i].tall) return true;
+  return false;
+};
+
+/** Place everything at scale s; extra: height to share among the lists and curves. */
+Panel.prototype.place = function (width, compact, s, extra) {
+  s = s || 1;
+  var c = 1 + (s - 1) * M.chromeGrow;  // the title row, buttons, headers, status: they grow less
+  var m = scaled(s), u = function (n) { return n * s; };
+  var k = scaled(c), v = function (n) { return n * c; };
+  this.scale = s;
+  this.chrome = c;
+  this.m = m;
+  this.k = k;
   this.width = width;
   this.rows = [];
   var p = { setActive: null, within: null, bypass: null, repeat: null, write: null, capture: null, mode: null, only: null,
     snap: null, reset: null, sections: [] };
   this.places = p;
-  var inner = width - 2 * M.pad;
-  var section = compact ? 14 : M.section;
-  var y = M.title + M.gap;
-  p.setActive = { x: width - M.pad - 62, y: (M.title - M.button) / 2, w: 62, h: M.button };
-  if (!this.items.length && !this.title) return y + M.row + M.status;
-  p.bypass = { x: p.setActive.x - 4 - 56, y: (M.title - M.button) / 2, w: 56, h: M.button };
+  var inner = width - 2 * m.pad;
+  var section = compact ? v(14) : k.section;
+  var y = k.title + this.descriptionHeight() + k.gap;
+  p.setActive = { x: width - k.pad - v(62), y: (k.title - k.button) / 2, w: v(62), h: k.button };
+  if (!this.items.length && !this.title) return y + k.row + k.status;
+  p.bypass = { x: p.setActive.x - v(4) - v(56), y: (k.title - k.button) / 2, w: v(56), h: k.button };
   // output
   p.sections.push({ text: "output", y: y, h: section });
   y += section;
-  p.repeat = { x: M.pad, y: y, w: 50, h: M.button };
-  p.write = { x: M.pad + 54, y: y, w: 44, h: M.button };
-  y += M.button + M.gap;
+  p.repeat = { x: k.pad, y: y, w: v(50), h: k.button };
+  p.write = { x: k.pad + v(54), y: y, w: v(44), h: k.button };
+  y += k.button + k.gap;
   // source
   if (this.hasSource()) {
     p.sections.push({ text: "source", y: y, h: section, source: true });
     y += section;
-    var n = this.kind === "selector" ? 4 : 3, w = (inner - (n - 1) * 4) / n;
-    p.capture = { x: M.pad, y: y, w: w, h: M.button };
-    p.mode = { x: M.pad + w + 4, y: y, w: w, h: M.button };
-    p.within = { x: M.pad + 2 * (w + 4), y: y, w: w, h: M.button };
-    if (n === 4) p.only = { x: M.pad + 3 * (w + 4), y: y, w: w, h: M.button };
-    y += M.button + M.gap;
+    var n = this.kind === "selector" ? 4 : 3, gap = v(4), w = (inner - (n - 1) * gap) / n;
+    p.capture = { x: m.pad, y: y, w: w, h: k.button };
+    p.mode = { x: m.pad + w + gap, y: y, w: w, h: k.button };
+    p.within = { x: m.pad + 2 * (w + gap), y: y, w: w, h: k.button };
+    if (n === 4) p.only = { x: m.pad + 3 * (w + gap), y: y, w: w, h: k.button };
+    y += k.button + k.gap;
   }
   // parameters, reset in the header
-  var head = { text: "parameters" + (this.items.length ? " \u00b7 " + this.items.length : ""), y: y, h: section };
+  var head = { text: "parameters" + (this.items.length ? " · " + this.items.length : ""), y: y, h: section };
   p.sections.push(head);
-  var by = y + (section - 16) / 2 - 1;
-  p.reset = { x: width - M.pad - 44, y: by, w: 44, h: 16 };
-  y += section + 2;
+  var by = y + (section - v(16)) / 2 - v(1);
+  p.reset = { x: width - m.pad - v(44), y: by, w: v(44), h: v(16) };
+  y += section + v(2);
+  // each element at this scale, and the value one pixel of its control moves (free values)
+  var tall = 0, i, item;
+  for (i = 0; i < this.items.length; i++) {
+    item = this.items[i];
+    item.scale = s;
+    item.resolution = item.range && !(item.step > 0) ? (item.range[1] - item.range[0]) / Math.max(1, inner - u(16)) : 0;
+    if (item.tall) tall++;
+  }
+  var share = tall && extra > 0 ? extra / tall : 0;
   var vw = this.valueWidth();
-  var lw = clamp(Math.round(inner * 0.28), M.labelMin, M.labelMax);
-  for (var i = 0; i < this.items.length; i++) {
-    var item = this.items[i];
+  var lw = clamp(Math.round(inner * 0.28), m.labelMin, m.labelMax);
+  for (i = 0; i < this.items.length; i++) {
+    item = this.items[i];
     var row = { item: item, y: y };
-    var ch = item.tall || M.row;
+    var ch = item.tall ? u(item.tall) + Math.min(share, u(item.tall) * (M.tallGrow - 1)) : m.row;
     if (compact && !item.tall) {
-      row.label = { x: M.pad + 8, y: y + 3, w: lw, h: M.row };
-      row.value = { x: width - M.pad - 6 - vw, y: y + 3, w: vw, h: M.row };
-      row.control = { x: row.label.x + lw + 4, y: y + 3, w: row.value.x - row.label.x - lw - 10, h: M.row };
-      row.h = M.row + 6;
+      row.label = { x: m.pad + u(8), y: y + u(3), w: lw, h: m.row };
+      row.value = { x: width - m.pad - u(6) - vw, y: y + u(3), w: vw, h: m.row };
+      row.control = { x: row.label.x + lw + u(4), y: y + u(3), w: row.value.x - row.label.x - lw - u(10), h: m.row };
+      row.h = m.row + u(6);
     } else {
-      row.label = { x: M.pad + 8, y: y + 4, w: inner - vw - 20, h: M.head };
-      row.value = { x: width - M.pad - 8 - vw, y: y + 4, w: vw, h: M.head };
-      row.control = { x: M.pad + 8, y: y + 4 + M.head + 2, w: inner - 16, h: ch };
-      row.h = 4 + M.head + 2 + ch + 6;
+      row.label = { x: m.pad + u(8), y: y + u(4), w: inner - vw - u(20), h: m.head };
+      row.value = { x: width - m.pad - u(8) - vw, y: y + u(4), w: vw, h: m.head };
+      row.control = { x: m.pad + u(8), y: y + u(4) + m.head + u(2), w: inner - u(16), h: ch };
+      row.h = u(4) + m.head + u(2) + ch + u(6);
     }
     if (snapStates(item)) {
       // the snap toggle, left of the value
-      row.snapToggle = { x: row.value.x - 42, y: row.value.y + (row.value.h - 16) / 2, w: 38, h: 16 };
-      if (compact) row.control.w -= 42;
-      else row.label.w -= 42;
+      row.snapToggle = { x: row.value.x - u(42), y: row.value.y + (row.value.h - u(16)) / 2, w: u(38), h: u(16) };
+      if (compact) row.control.w -= u(42);
+      else row.label.w -= u(42);
     }
     this.rows.push(row);
-    y += row.h + (compact ? 2 : M.gap);
+    y += row.h + (compact ? u(2) : m.gap);
   }
-  return y + M.status;
+  return y + k.status;
 };
 
-
-function button(g, r, text, on, hot) {
-  rounded(g, r.x, r.y, r.w, r.h, 4, on ? THEME.fill : (hot ? THEME.buttonHover : THEME.button));
-  label(g, text, r, "center", on ? THEME.bg : THEME.text, 10);
+function button(g, r, text, on, hot, s) {
+  s = s || 1;
+  rounded(g, r.x, r.y, r.w, r.h, 4 * s, on ? THEME.fill : (hot ? THEME.buttonHover : THEME.button));
+  label(g, text, r, "center", on ? THEME.bg : THEME.text, 10 * s);
 }
 
 Panel.prototype.hot = function (r) {
@@ -386,78 +562,88 @@ Panel.prototype.hot = function (r) {
 
 Panel.prototype.paint = function (g, width, height) {
   if (width !== this.width || height !== this.height || !this.places) this.layout(width, height);
-  var p = this.places;
+  var p = this.places, m = this.m, k = this.k, S = this.scale, C = this.chrome;
+  var u = function (n) { return n * S; }, v = function (n) { return n * C; };
   box(g, 0, 0, width, height, THEME.bg);
   // title row
-  box(g, 0, 0, width, M.title, THEME.header);
-  box(g, 0, M.title - 1, width, 1, THEME.line);
+  box(g, 0, 0, width, k.title, THEME.header);
+  box(g, 0, k.title - 1, width, 1, THEME.line);
   var kindText = this.title ? ({ transformer: "transformer", selector: "selector" }[this.kind] || "generator") : "";
-  var titleRight = p.bypass ? p.bypass.x - 6 : p.setActive ? p.setActive.x - 6 : width - M.pad;
+  var titleRight = p.bypass ? p.bypass.x - v(6) : p.setActive ? p.setActive.x - v(6) : width - k.pad;
   if (kindText) {
-    var kw = kindText.length * 6 + 14;
-    var kr = { x: titleRight - kw, y: (M.title - 16) / 2, w: kw, h: 16 };
-    rounded(g, kr.x, kr.y, kr.w, kr.h, 8, THEME.button);
-    label(g, kindText, kr, "center", THEME.dim, THEME.smallSize);
-    titleRight = kr.x - 6;
+    var kw = v(kindText.length * 6 + 14);
+    var kr = { x: titleRight - kw, y: (k.title - v(16)) / 2, w: kw, h: v(16) };
+    rounded(g, kr.x, kr.y, kr.w, kr.h, v(8), THEME.button);
+    label(g, kindText, kr, "center", THEME.dim, v(THEME.smallSize));
+    titleRight = kr.x - v(6);
+  }
+  // the prompt's progress: one icon left of the kind
+  if (this.promptShown()) {
+    promptIcon(g, this.prompt.stage, titleRight - v(7), k.title / 2, v(6), this.clock() - this.prompt.at);
+    titleRight -= v(20);
   }
   // no algorithm: the instance's name (set_name), if any, over "No algorithm loaded."
   if (this.title || this.name) {
-    label(g, this.title || this.name, { x: M.pad + 2, y: 0, w: titleRight - M.pad - 2, h: M.title },
-      "left", THEME.text, THEME.titleSize, THEME.bold);
+    label(g, this.title || this.name, { x: k.pad + v(2), y: 0, w: titleRight - k.pad - v(2), h: k.title },
+      "left", THEME.text, v(THEME.titleSize), THEME.bold);
+  }
+  if (this.description) {
+    label(g, this.description, { x: k.pad + v(2), y: k.title + v(1), w: width - 2 * k.pad - v(4), h: k.row }, "left", THEME.dim, v(11));
   }
   if (!this.items.length && !this.title) {
-    label(g, "No algorithm loaded.", { x: M.pad + 2, y: M.title + M.gap, w: width - 2 * M.pad, h: M.row }, "left", THEME.dim);
+    label(g, "No algorithm loaded.", { x: k.pad + v(2), y: k.title + this.descriptionHeight() + k.gap, w: width - 2 * k.pad, h: k.row },
+      "left", THEME.dim, v(THEME.fontSize));
   }
-  if (p.bypass) button(g, p.bypass, this.bypass ? "bypassed" : "bypass", this.bypass, this.hot(p.bypass));
-  if (p.setActive) button(g, p.setActive, "set active", false, this.hot(p.setActive));
-  for (var k = 0; k < p.sections.length; k++) {
-    var sec = p.sections[k];
+  if (p.bypass) button(g, p.bypass, this.bypass ? "bypassed" : "bypass", this.bypass, this.hot(p.bypass), C);
+  if (p.setActive) button(g, p.setActive, "set active", false, this.hot(p.setActive), C);
+  for (var q = 0; q < p.sections.length; q++) {
+    var sec = p.sections[q];
     var text = sec.text.toUpperCase(), tc = THEME.faint;
     if (sec.source) {
       var has = this.source && this.source.notes;
-      text += has ? " \u00b7 " + this.source.notes + " notes" + (this.source.from ? " \u00b7 " + this.source.from : "") : " \u00b7 none";
+      text += has ? " · " + this.source.notes + " notes" + (this.source.from ? " · " + this.source.from : "") : " · none";
       if (!has) tc = THEME.error;
     }
-    label(g, text.toUpperCase(), { x: M.pad + 2, y: sec.y, w: width - 2 * M.pad, h: sec.h - 4 }, "left", tc, THEME.smallSize, THEME.bold);
+    label(g, text.toUpperCase(), { x: k.pad + v(2), y: sec.y, w: width - 2 * k.pad, h: sec.h - v(4) }, "left", tc, v(THEME.smallSize), THEME.bold);
   }
-  if (p.repeat) button(g, p.repeat, "repeat", false, this.hot(p.repeat));
-  if (p.write) button(g, p.write, "write", false, this.hot(p.write));
-  if (p.capture) button(g, p.capture, "capture", false, this.hot(p.capture));
-  if (p.mode) button(g, p.mode, "destructive", this.sourceMode === "destructive", this.hot(p.mode));
-  if (p.within) button(g, p.within, "process sel.", this.withinSelection, this.hot(p.within));
-  if (p.only) button(g, p.only, "dump sel.", this.selectionOnly, this.hot(p.only));
-  if (p.reset) button(g, p.reset, "reset", false, this.hot(p.reset));
+  if (p.repeat) button(g, p.repeat, "repeat", false, this.hot(p.repeat), C);
+  if (p.write) button(g, p.write, "write", false, this.hot(p.write), C);
+  if (p.capture) button(g, p.capture, "capture", false, this.hot(p.capture), C);
+  if (p.mode) button(g, p.mode, "destructive", this.sourceMode === "destructive", this.hot(p.mode), C);
+  if (p.within) button(g, p.within, "process sel.", this.withinSelection, this.hot(p.within), C);
+  if (p.only) button(g, p.only, "dump sel.", this.selectionOnly, this.hot(p.only), C);
+  if (p.reset) button(g, p.reset, "reset", false, this.hot(p.reset), C);
   if (this.title && !this.items.length) {
-    label(g, "no parameters", { x: M.pad + 2, y: (p.sections.length ? p.sections[p.sections.length - 1].y : M.title) + M.section,
-      w: width - 2 * M.pad, h: M.row }, "left", THEME.dim);
+    label(g, "no parameters", { x: k.pad + v(2), y: (p.sections.length ? p.sections[p.sections.length - 1].y : k.title) + k.section,
+      w: width - 2 * k.pad, h: k.row }, "left", THEME.dim, v(THEME.fontSize));
   }
   for (var i = 0; i < this.rows.length; i++) {
     var row = this.rows[i];
     if (row.y > height) break;
     var active = this.active === row;
     var hovered = this.hover && this.hover[1] >= row.y && this.hover[1] <= row.y + row.h;
-    rounded(g, M.pad, row.y, width - 2 * M.pad, row.h, M.radius, active || hovered ? THEME.cardHover : THEME.card);
-    if (active) outline(g, M.pad, row.y, width - 2 * M.pad, row.h, M.radius, THEME.fillDim);
-    label(g, row.item.name, row.label, "left", THEME.text, THEME.fontSize, THEME.bold);
+    rounded(g, m.pad, row.y, width - 2 * m.pad, row.h, m.radius, active || hovered ? THEME.cardHover : THEME.card);
+    if (active) outline(g, m.pad, row.y, width - 2 * m.pad, row.h, m.radius, THEME.fillDim);
+    label(g, row.item.name, row.label, "left", THEME.text, u(THEME.fontSize), THEME.bold);
     row.item.paint(g, row.control);
     var st = this.snapState(row.item);
-    if (st && row.snapToggle) button(g, row.snapToggle, st[1], st[2] > 0, this.hot(row.snapToggle));
+    if (st && row.snapToggle) button(g, row.snapToggle, st[1], st[2] > 0, this.hot(row.snapToggle), S);
     var t = row.item.text();
     if (t) {
       var switchable = row.item.displays().length > 1;
-      if (switchable && this.hot(row.value)) rounded(g, row.value.x - 2, row.value.y, row.value.w + 4, row.value.h, 3, THEME.button);
-      label(g, t, row.value, "right", switchable ? THEME.knob : THEME.dim);
+      if (switchable && this.hot(row.value)) rounded(g, row.value.x - u(2), row.value.y, row.value.w + u(4), row.value.h, u(3), THEME.button);
+      label(g, t, row.value, "right", switchable ? THEME.knob : THEME.dim, u(THEME.fontSize));
     }
   }
   var s = this.state;
-  var sy = height - M.status;
-  box(g, 0, sy, width, M.status, THEME.header);
+  var sy = height - k.status;
+  box(g, 0, sy, width, k.status, THEME.header);
   box(g, 0, sy, width, 1, THEME.line);
   if (s.kind) {
     var sc = s.kind === "error" ? THEME.error : THEME.ok;
-    dot(g, M.pad + 4, sy + M.status / 2, 3, sc);
-    label(g, (s.kind === "ok" ? "" : s.kind + ": ") + s.text, { x: M.pad + 12, y: sy, w: width - 2 * M.pad - 12, h: M.status },
-      "left", s.kind === "error" ? THEME.error : THEME.dim, 10);
+    dot(g, k.pad + v(4), sy + k.status / 2, v(3), sc);
+    label(g, (s.kind === "ok" ? "" : s.kind + ": ") + s.text, { x: k.pad + v(12), y: sy, w: width - 2 * k.pad - v(12), h: k.status },
+      "left", s.kind === "error" ? THEME.error : THEME.dim, v(10));
   }
 };
 
@@ -511,7 +697,7 @@ Panel.prototype.mouseDown = function (x, y, mods) {
   for (var i = 0; i < this.rows.length; i++) {
     if (inside(this.rows[i].value, x, y) && this.rows[i].item.nextDisplay()) {
       this.active = null;
-      if (this.width) this.layout(this.width);  // the value column may need another width
+      if (this.width) this.layout(this.width, this.height);  // the value column may need another width
       return [];
     }
   }
@@ -571,7 +757,7 @@ Panel.prototype.snapshot = function () {
       options: it.options, value: copy(it.value), "default": copy(it.def),
       kind: it.kind, grid: it.baseGrid !== undefined ? it.baseGrid : it.grid, display: it.display });
   }
-  return { title: this.title, path: this.path, kind: this.kind, source: this.source, params: params, snap: this.snap,
+  return { title: this.title, description: this.description, path: this.path, kind: this.kind, source: this.source, params: params, snap: this.snap,
     sourceMode: this.sourceMode, involutive: this.involutive, selectionOnly: this.selectionOnly,
     bypass: this.bypass, withinSelection: this.withinSelection, pitchSnap: this.pitchSnap, timeSnap: this.timeSnap };
 };

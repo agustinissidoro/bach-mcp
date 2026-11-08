@@ -4,6 +4,7 @@ Run: python -m unittest discover -s py/tests"""
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -19,6 +20,7 @@ from bach_mcp.bridge.protocol import line, words  # noqa: E402
 from bach_mcp.chat.engine import Conversation  # noqa: E402
 from bach_mcp.chat.hub import Hub  # noqa: E402
 from bach_mcp.config import Config  # noqa: E402
+from bach_mcp.prompt.docs import DocLibrary  # noqa: E402
 from bach_mcp.prompt.skill import load_skill  # noqa: E402
 from bach_mcp.tools.instance_tools import register_instance_tools  # noqa: E402
 from bach_mcp.tools.session import NoTarget, target  # noqa: E402
@@ -100,7 +102,8 @@ class HubTest(unittest.TestCase):
 
     def make(self, kind):
         self.client = HeldClient(self.go, *self.replies)
-        return Conversation(self.client, self.tools, RAW, None, 8, kind)
+        docs = DocLibrary() if getattr(self, "with_docs", False) else None
+        return Conversation(self.client, self.tools, RAW, docs, 8, kind)
 
     def heard(self, web_only=None):
         """What the pages heard, without the stage reports (stages() has them)."""
@@ -379,6 +382,26 @@ class PromptTests(HubTest):
         sent = [m["content"] for m in self.client.requests[0]["messages"][1:]]
         self.assertEqual(sent, ["first", "One.", "second"])
 
+    def test_docs_already_sent_are_not_sent_again_after_a_restart(self):
+        self.with_docs = True
+        self.setup_patch()
+        self.replies = [text_reply("One.")]
+        self.hub.handle('notes1 prompt "a line for cello"', "web")
+        self.answered("notes1")
+        first = self.client.requests[0]["messages"][-1]["content"]
+        self.assertIn("Reference for this request", first)
+
+        self.hub.close()  # Bach starts again
+        self.clients.clear()
+        hub = self.start()
+        self.replies = [text_reply("Two.")]
+        self.bridge.from_max(f"set_playground {line(self.playground)}")
+        self.bridge.from_max("add_instance_names_map notes1 writer")
+        hub.handle('notes1 prompt "now the cello higher"', "web")
+        self.answered("notes1")
+        self.assertEqual(self.client.requests[0]["messages"][-1]["content"], "now the cello higher",
+                         "the cello's doc is already in the conversation")
+
     def histories(self):
         """The conversations the pages were sent: {name: [prompts]}, the last one for each."""
         out = {}
@@ -501,6 +524,42 @@ class WebTests(HubTest):
                 headers={"Accept": "application/json, text/event-stream"})
             self.assertEqual(mcp.status_code, 200)
             self.assertIn('"serverInfo"', mcp.text)
+
+    def test_claude_code_started_by_bach_gets_its_mode_and_no_instructions(self):
+        """/mcp carries the skill as instructions and every tool; /mcp/headless/<mode>, for the
+        claude -p Bach starts, no instructions and only that mode's tools, as the local model has them."""
+        import asyncio
+        from starlette.testclient import TestClient
+        from bach_mcp import claude
+        from bach_mcp.bridge.max import OfflineBridge
+        from bach_mcp.chat.web import create_app
+        from bach_mcp.config import Config
+        from bach_mcp.prompt.modes import MODE_TOOLS
+        config = Config()
+        headless = claude.headless_apps(config, OfflineBridge())
+        app = create_app(self.hub, self.status, claude.mcp_app(config, OfflineBridge()), headless)
+        hello = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}}}
+        accept = {"Accept": "application/json, text/event-stream"}
+
+        def tools(path, session):
+            listed = client.post(path, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+                                 headers={**accept, "mcp-session-id": session})
+            return sorted(set(re.findall(r'"name":"(\w+)"', listed.text)) & set(MODE_TOOLS["score"] + MODE_TOOLS["algo"]
+                                                                            + ("get_instances", "set_active_instance")))
+
+        with TestClient(app, base_url="http://127.0.0.1:8090") as client:
+            full = client.post("/mcp", json=hello, headers=accept)
+            self.assertEqual(full.status_code, 200)
+            self.assertIn('"instructions"', full.text)
+            self.assertEqual(len(tools("/mcp", full.headers["mcp-session-id"])), 15)
+            for mode in ("score", "algo"):
+                path = f"/mcp/headless/{mode}"
+                self.assertEqual(config.headless_mcp_url(mode), "http://127.0.0.1:8090" + path)
+                bare = client.post(path, json=hello, headers=accept)
+                self.assertEqual(bare.status_code, 200)
+                self.assertNotIn('"instructions"', bare.text)
+                self.assertEqual(tools(path, bare.headers["mcp-session-id"]), sorted(MODE_TOOLS[mode]), mode)
 
     def test_an_event_holds_a_line_with_newlines(self):
         from bach_mcp.chat.web import event

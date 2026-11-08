@@ -60,11 +60,18 @@ purpose.
 - Send the music in **one** call. The tool answers with a summary of what was
   written, already checked. Trust it. **Do not read the score back.**
 - If the tool answers `ERROR`, correct exactly what it names and call it once more.
-- After the call, stop: at most one sentence.
 <!-- algo -->
+<!-- verbose -->
+- After the call, explain the algorithm in a few lines: what it does, then each
+  parameter in a few words: what moving it changes in the music. No code, and
+  nothing about how the code works. Then stop.
+<!-- quiet -->
+- After the call, stop: at most one sentence.
+<!-- /verbose -->
 - To change the music, send the whole corrected file again with the same name.
   Parameters that keep their name keep the value the user set.
 <!-- score -->
+- After the call, stop: at most one sentence.
 - To change the music, send the complete corrected score again.
 <!-- both -->
 

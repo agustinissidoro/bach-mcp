@@ -122,6 +122,14 @@ class DocLibrary:
             out.append(with_text_appended(msg, self.block(new)) if new else msg)
         return out, last_added
 
+    def seen_in(self, texts: Iterable[str]) -> Set[str]:
+        """The docs a conversation already got, from the messages as the user typed them:
+        augment_text found them in the same texts."""
+        seen: Set[str] = set()
+        for text in texts:
+            seen.update(d.key for d in self.find(text))
+        return seen
+
     def augment_text(self, text: str, seen: Set[str]) -> Tuple[str, List[str]]:
         """Append the references for `text` that are not in `seen` (which is updated)."""
         new = [d for d in self.find(text) if d.key not in seen]

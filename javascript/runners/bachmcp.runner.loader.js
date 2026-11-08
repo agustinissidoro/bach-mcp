@@ -29,7 +29,12 @@ and declares its parameters first (bachmcp.runner.paramspec.js):
 from it, never from the transformer's own output. A producer and a transformer return a JSON score.
 (An older file with `function generate(p, input)` is a producer.)
 
-    compile(code)                  the file -> {specs, kind, fn, state}; throws AlgoError
+It says what it does in the comment that opens it (its first // lines, before
+any code), shown on its panel as one line:
+
+    // A canon whose voices drift apart in tempo.
+
+    compile(code)                  the file -> {specs, kind, fn, description, state}; throws AlgoError
     run(compiled, values, source)  one run -> {score, notes, ms}
 
 Scores are bachjson-complete, as every object passes them: the loader does not
@@ -81,7 +86,26 @@ function lineOf(error) {
   return m && LINE_OFFSET !== null ? Number(m[1]) - LINE_OFFSET : null;
 }
 
-/** Algorithm source text -> {specs, kind, fn, state}. Throws AlgoError. */
+const DESCRIPTION_MAX = 200;  // characters: one line on a panel
+
+/** The // lines that open a file, before any code, joined ("" without them). */
+function openingComment(code) {
+  const lines = [];
+  for (const line of String(code).split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t && !lines.length) continue;
+    if (!t.startsWith("//")) break;
+    lines.push(t.replace(/^\/\/+\s?/, ""));
+  }
+  return lines.join(" ");
+}
+
+/** The file's description: the // lines that open it, as one line, whitespace folded ("" without them). */
+function describeFile(code) {
+  return openingComment(code).split(/\s+/).join(" ").trim().slice(0, DESCRIPTION_MAX);
+}
+
+/** Algorithm source text -> {specs, kind, fn, description, state}. Throws AlgoError. */
 function compile(code) {
   const state = { seed: 0, streams: new Map() };
   const lib = makeLibrary(state);
@@ -109,7 +133,9 @@ function compile(code) {
   }
   const specs = normalizeParams(parts.params);
   const kind = transform ? "transformer" : (select ? "selector" : "producer");
-  return { specs, kind, fn: transform || select || produce || generate, legacy: !produce && !transform && !select, state };
+  const description = describeFile(code);
+  return { specs, kind, fn: transform || select || produce || generate, description,
+    legacy: !produce && !transform && !select, state };
 }
 
 /**

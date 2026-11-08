@@ -9,8 +9,20 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
+        "rect": [ 34.0, 92.0, 1852.0, 954.0 ],
         "boxes": [
+            {
+                "box": {
+                    "bgcolor": [ 1.0, 0.0, 0.0, 1.0 ],
+                    "id": "obj-77",
+                    "linecount": 4,
+                    "maxclass": "comment",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 1834.0, 169.0, 150.0, 60.0 ],
+                    "text": "MISSING TO WIRE:\n\nVERBOSE MODEL\nSYSTEM PROMPT"
+                }
+            },
             {
                 "box": {
                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
@@ -51,8 +63,86 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 59.0, 111.0, 1000.0, 780.0 ],
+                        "rect": [ 484.0, 118.0, 1000.0, 780.0 ],
                         "boxes": [
+                            {
+                                "box": {
+                                    "id": "obj-16",
+                                    "maxclass": "newobj",
+                                    "numinlets": 2,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 261.25, 557.0, 150.0, 22.0 ],
+                                    "text": "join 2"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "id": "obj-15",
+                                    "linecount": 4,
+                                    "maxclass": "comment",
+                                    "numinlets": 1,
+                                    "numoutlets": 0,
+                                    "patching_rect": [ 418.0, 459.0, 150.0, 60.0 ],
+                                    "presentation_linecount": 4,
+                                    "text": "format to send to instances:\n\n[name] prompt [status]"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "id": "obj-14",
+                                    "maxclass": "newobj",
+                                    "numinlets": 1,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 261.25, 513.0, 89.0, 22.0 ],
+                                    "text": "append prompt"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "id": "obj-13",
+                                    "maxclass": "newobj",
+                                    "numinlets": 2,
+                                    "numoutlets": 2,
+                                    "outlettype": [ "", "" ],
+                                    "patching_rect": [ 261.25, 463.0, 150.0, 22.0 ],
+                                    "text": "zl.slice 1"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "id": "obj-11",
+                                    "maxclass": "newobj",
+                                    "numinlets": 1,
+                                    "numoutlets": 3,
+                                    "outlettype": [ "", "", "" ],
+                                    "patching_rect": [ 159.75, 128.0, 222.0, 22.0 ],
+                                    "text": "t l l l"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "id": "obj-10",
+                                    "linecount": 2,
+                                    "maxclass": "comment",
+                                    "numinlets": 1,
+                                    "numoutlets": 0,
+                                    "patching_rect": [ 385.25, 629.0, 150.0, 33.0 ],
+                                    "text": "send prompt info to all instances"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
+                                    "id": "obj-4",
+                                    "maxclass": "newobj",
+                                    "numinlets": 1,
+                                    "numoutlets": 0,
+                                    "patching_rect": [ 261.25, 634.0, 110.0, 22.0 ],
+                                    "text": "s bachmcp.server.r"
+                                }
+                            },
                             {
                                 "box": {
                                     "id": "obj-9",
@@ -82,7 +172,7 @@
                                     "numinlets": 0,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 556.0, 355.0, 85.0, 22.0 ],
+                                    "patching_rect": [ 477.0, 312.0, 85.0, 22.0 ],
                                     "text": "r #0verbose"
                                 }
                             },
@@ -95,17 +185,6 @@
                                     "outlettype": [ "", "" ],
                                     "patching_rect": [ 159.75, 223.0, 82.5, 22.0 ],
                                     "text": "zl.slice 1"
-                                }
-                            },
-                            {
-                                "box": {
-                                    "id": "obj-5",
-                                    "maxclass": "newobj",
-                                    "numinlets": 2,
-                                    "numoutlets": 2,
-                                    "outlettype": [ "", "" ],
-                                    "patching_rect": [ 387.0, 223.0, 159.0, 22.0 ],
-                                    "text": "zl.slice 1 @zlmaxsize 32000"
                                 }
                             },
                             {
@@ -139,37 +218,64 @@
                                     "numinlets": 0,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 159.75, 131.0, 30.0, 30.0 ]
+                                    "patching_rect": [ 159.75, 72.0, 30.0, 30.0 ]
                                 }
                             }
                         ],
                         "lines": [
                             {
                                 "patchline": {
-                                    "destination": [ "obj-7", 0 ],
-                                    "order": 1,
+                                    "destination": [ "obj-11", 0 ],
                                     "source": [ "obj-1", 0 ]
                                 }
                             },
                             {
                                 "patchline": {
+                                    "destination": [ "obj-13", 0 ],
+                                    "source": [ "obj-11", 1 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-7", 0 ],
+                                    "source": [ "obj-11", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
                                     "destination": [ "obj-9", 1 ],
-                                    "midpoints": [ 169.25, 210.0, 372.0, 210.0, 372.0, 342.0, 499.5, 342.0 ],
-                                    "order": 0,
-                                    "source": [ "obj-1", 0 ]
+                                    "midpoints": [ 372.25, 210.0, 372.0, 210.0, 372.0, 342.0, 499.5, 342.0 ],
+                                    "source": [ "obj-11", 2 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-14", 0 ],
+                                    "source": [ "obj-13", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-16", 1 ],
+                                    "source": [ "obj-13", 1 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-16", 0 ],
+                                    "source": [ "obj-14", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-4", 0 ],
+                                    "source": [ "obj-16", 0 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-2", 0 ],
                                     "source": [ "obj-3", 0 ]
-                                }
-                            },
-                            {
-                                "patchline": {
-                                    "destination": [ "obj-3", 0 ],
-                                    "midpoints": [ 396.5, 323.56640625, 169.25, 323.56640625 ],
-                                    "source": [ "obj-5", 0 ]
                                 }
                             },
                             {
@@ -1572,7 +1678,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 185.0, 414.0, 165.0, 22.0 ],
+                    "patching_rect": [ 183.66666666666669, 423.0, 165.0, 22.0 ],
                     "text": "p write_buffer_convert_report"
                 }
             },
@@ -1584,7 +1690,7 @@
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 185.0, 498.0, 30.0, 30.0 ]
+                    "patching_rect": [ 183.66666666666669, 498.0, 30.0, 30.0 ]
                 }
             },
             {
@@ -2056,7 +2162,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 76.0, 594.0, 115.0, 22.0 ],
+                    "patching_rect": [ 76.0, 579.0, 115.0, 22.0 ],
                     "text": "p on_server_started"
                 }
             },
@@ -4340,8 +4446,8 @@
                                                     "numinlets": 2,
                                                     "numoutlets": 2,
                                                     "outlettype": [ "", "" ],
-                                                    "patching_rect": [ 270.5, 413.0, 219.0, 22.0 ],
-                                                    "text": "zl.compare bach-mcp/extras/bach-mcp/"
+                                                    "patching_rect": [ 270.5, 413.0, 162.0, 22.0 ],
+                                                    "text": "zl.compare /extras/bachmcp/"
                                                 }
                                             },
                                             {
@@ -4355,7 +4461,7 @@
                                                     "saved_object_attributes": {
                                                         "legacyoutputorder": 0
                                                     },
-                                                    "text": "regexp @re bach-mcp/extras/bach-mcp/ @substitute si"
+                                                    "text": "regexp @re /extras/bachmcp/ @substitute si"
                                                 }
                                             },
                                             {
@@ -5846,7 +5952,7 @@
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 840.0, 431.0, 212.0, 51.0 ],
+                    "patching_rect": [ 815.5, 384.5, 212.0, 51.0 ],
                     "text": "INCLUDE SHELL IN EXTERNALS TO SHIP, runs main.py with the .venv of the package"
                 }
             },
@@ -5857,7 +5963,7 @@
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 199.0, 593.0, 150.0, 74.0 ],
+                    "patching_rect": [ 199.0, 578.0, 150.0, 74.0 ],
                     "text": "SENDS TO ALL BACHMCP.WRITE\nBACHMCP.SELECT\nBACHMCP.GENERATE\nBACHMCP.TRANSFORM"
                 }
             },
@@ -6424,7 +6530,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 399.0, 414.0, 84.0, 22.0 ],
+                    "patching_rect": [ 399.0, 423.0, 84.0, 22.0 ],
                     "text": "print bachmcp"
                 }
             },
@@ -6546,7 +6652,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 76.0, 547.0, 75.0, 22.0 ],
+                    "patching_rect": [ 76.0, 532.0, 75.0, 22.0 ],
                     "text": "p state_print"
                 }
             },
@@ -6581,17 +6687,6 @@
                     "outlettype": [ "" ],
                     "patching_rect": [ 657.0, 121.0, 32.0, 22.0 ],
                     "text": "start"
-                }
-            },
-            {
-                "box": {
-                    "id": "obj-7",
-                    "maxclass": "message",
-                    "numinlets": 2,
-                    "numoutlets": 1,
-                    "outlettype": [ "" ],
-                    "patching_rect": [ 682.0, 445.0, 29.5, 22.0 ],
-                    "text": "pkill"
                 }
             },
             {
@@ -6657,7 +6752,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 504.0, 220.0, 110.0, 22.0 ],
+                    "patching_rect": [ 504.0, 231.0, 110.0, 22.0 ],
                     "text": "s bachmcp.server.r"
                 }
             },
@@ -6694,7 +6789,7 @@
                     "maxclass": "inlet",
                     "numinlets": 0,
                     "numoutlets": 1,
-                    "outlettype": [ "int" ],
+                    "outlettype": [ "" ],
                     "patching_rect": [ 740.0, 48.0, 30.0, 30.0 ]
                 }
             }
@@ -6995,7 +7090,9 @@
             },
             {
                 "patchline": {
+                    "color": [ 1.0, 0.1491314173, 0.0, 1.0 ],
                     "destination": [ "obj-2", 0 ],
+                    "midpoints": [ 582.5, 432.0, 749.5, 432.0 ],
                     "source": [ "obj-56", 0 ]
                 }
             },
@@ -7045,12 +7142,6 @@
                 "patchline": {
                     "destination": [ "obj-75", 0 ],
                     "source": [ "obj-68", 0 ]
-                }
-            },
-            {
-                "patchline": {
-                    "destination": [ "obj-2", 0 ],
-                    "source": [ "obj-7", 0 ]
                 }
             },
             {

@@ -9,7 +9,9 @@ message from the user it:
        conversation is with an instance, whose type fixes the mode
     2. appends the instrument docs the message names (prompt/docs.py)
     3. sends the conversation to the model, with the mode's part of the skill as
-       system prompt and the mode's tools (model/client.py)
+       system prompt and the mode's tools (model/client.py). Algorithm files that a
+       later send_algorithm replaced are sent as a short placeholder (without_old_code);
+       the history itself, and the saved conversation, keep them whole
     4. runs the tools the model calls, here in this process (tools/inprocess.py),
        and sends their answers back, until the model answers without a tool
        call or max_tool_rounds is reached
@@ -45,8 +47,7 @@ from mcp.server.fastmcp import FastMCP
 from ..config import Config
 from ..model.client import ModelClient, Reply, ToolCall
 from ..prompt.docs import DocLibrary
-from ..prompt.modes import DEFAULT_MODE, KIND_MODE, KIND_NOTE, split_prefix, tools_for
-from ..prompt.skill import skill_for
+from ..prompt.modes import DEFAULT_MODE, KIND_MODE, instance_skill, split_prefix, tools_for
 from ..tools.inprocess import LocalTools
 from ..tools.session import new_conversation, use_conversation
 
@@ -86,8 +87,7 @@ class Conversation:
         self.client.cancel()
 
     def system_prompt(self) -> str:
-        skill = skill_for(self.skill, self.mode)
-        return f"{skill}\n{KIND_NOTE[self.kind]}\n" if self.kind else skill
+        return instance_skill(self.skill, self.mode, self.kind)
 
     def mode_tools(self) -> List[Dict[str, Any]]:
         return tools_for(self._specs, self.mode)
@@ -127,7 +127,7 @@ class Conversation:
 
     def _ask(self, max_tokens: Optional[int]) -> Iterator[Event]:
         """One request to the model, streamed as events; returns its Reply (None after an error)."""
-        messages = [{"role": "system", "content": self.system_prompt()}] + self.history
+        messages = [{"role": "system", "content": self.system_prompt()}] + without_old_code(self.history)
         tools = self.mode_tools()
         for attempt in range(1 + LOOP_RETRIES):
             started = time.time()
@@ -163,6 +163,44 @@ class Conversation:
             return "You already made this exact call in this turn and have its result. Do not repeat it: answer now."
         seen.add(signature)
         return self.tools.call(call.name, call.arguments)
+
+
+OLD_CODE = "(an earlier version of the file: a later send_algorithm replaced it)"
+
+
+def without_old_code(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The history as the model reads it: the code of every send_algorithm call but the last
+    one, and the last one that loaded (its answer starts with OK), becomes OLD_CODE. A
+    conversation is one instance and so one file: an older version is never needed again.
+    It depends only on the history, so a request changes the prefix the model server has
+    cached only from the version just replaced on."""
+    calls = [(i, k, call) for i, m in enumerate(history) if m.get("role") == "assistant"
+             for k, call in enumerate(m.get("tool_calls") or []) if call["function"]["name"] == "send_algorithm"]
+    if len(calls) < 2:
+        return history
+    loaded = {m.get("tool_call_id") for m in history
+              if m.get("role") == "tool" and str(m.get("content", "")).startswith("OK")}
+    keep = {calls[-1][2]["id"]}
+    last_loaded = [c["id"] for _, _, c in calls if c["id"] in loaded]
+    if last_loaded:
+        keep.add(last_loaded[-1])
+    out = list(history)
+    for i, k, call in calls:
+        if call["id"] in keep:
+            continue
+        try:
+            arguments = json.loads(call["function"]["arguments"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(arguments, dict) or arguments.get("code") in (None, OLD_CODE):
+            continue
+        arguments["code"] = OLD_CODE
+        message = dict(out[i])
+        message["tool_calls"] = [dict(c) for c in message["tool_calls"]]
+        message["tool_calls"][k] = {**call, "function": {**call["function"],
+                                                         "arguments": json.dumps(arguments, ensure_ascii=False)}}
+        out[i] = message
+    return out
 
 
 def _assistant_message(reply: Reply) -> Dict[str, Any]:

@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from bach_mcp.prompt.modes import MODE_TOOLS, split_prefix, tools_for  # noqa: E402
-from bach_mcp.prompt.skill import load_skill, skill_for  # noqa: E402
+from bach_mcp.prompt.skill import load_skill, skill_for, with_verbosity  # noqa: E402
 
 RAW = load_skill(raw=True)
 FULL = load_skill()
@@ -29,6 +29,18 @@ class PrefixTests(unittest.TestCase):
 
 
 class SkillTests(unittest.TestCase):
+    def test_verbose_chooses_what_follows_an_algorithm(self):
+        verbose, quiet = skill_for(RAW, "algo", verbose=True), skill_for(RAW, "algo", verbose=False)
+        self.assertIn("After the call, explain the algorithm", verbose)
+        self.assertNotIn("After the call, stop", verbose)
+        self.assertIn("After the call, stop: at most one sentence", quiet)
+        self.assertNotIn("explain the algorithm", quiet)
+        for text in (verbose, quiet, skill_for(RAW, "score", verbose=True)):
+            self.assertNotIn("<!--", text)
+        self.assertIn("After the call, stop: at most one sentence", skill_for(RAW, "score", verbose=True),
+                      "a score is never explained")
+        self.assertEqual(skill_for(with_verbosity(RAW, False), "algo"), quiet, "resolved once, it stays")
+
     def test_each_mode_gets_its_part(self):
         algo, score = skill_for(RAW, "algo"), skill_for(RAW, "score")
         self.assertIn("## Algorithms", algo)

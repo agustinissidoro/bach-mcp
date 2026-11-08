@@ -20,6 +20,9 @@ without waiting for an answer:
 
     <name> load_algo <name>.js                       to Max
 
+The comment that opens the file (one line on what it does) is its description: the
+runner sends it to the panel on load. The tool asks for it and refuses a file without it.
+
 A transformer or a selector is checked on the music it will work on: the score now in the
 roll, read like read_score (server write_buffer -> buffer.json, see buffer.py),
 else, when the roll is empty or Max does not answer, a small built-in score.
@@ -106,6 +109,22 @@ def _kind_error(t: Target, code: str) -> Optional[str]:
     return None
 
 
+_DOC = """Write the music as an algorithm: a JavaScript file that generates the score
+        (the file and the library in scope are described in the skill). It is checked,
+        saved and sent to Max, where its parameters become a panel the user plays
+        with; every change runs it again. Sending it again replaces it.
+
+        code: the whole file: const params = {...}; then function produce(p) {...} (a generator),
+          function transform(source, p) {...} (a transformer of the score in its roll)
+          or function select(source, p) {...} returning the notes it picks (a selector).
+          Open the file with a // comment: what the algorithm does, in one line of plain
+          words (at most about 12), shown above its panel.
+          E.g. // A canon whose voices drift apart in tempo.
+        The result lists the parameters and the score at the declared values; the file
+        has also been run at every slider's minimum and maximum. Do not call it again to check.
+        """
+
+
 def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> None:
     """Register send_algorithm on `mcp`. node: the Node.js that checks the files ([algo] node)."""
 
@@ -117,19 +136,12 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
             return None, "a built-in test score: the roll is empty or Max did not hand it over"
         return buffer.path, "the score in the roll"
 
-    @mcp.tool()
     def send_algorithm(code: str) -> str:
-        """Write the music as an algorithm: a JavaScript file that generates the score
-        (the file and the library in scope are described in the skill). It is checked,
-        saved and sent to Max, where its parameters become a panel the user plays
-        with; every change runs it again. Sending it again replaces it.
+        return _send(code)
+    send_algorithm.__doc__ = _DOC
+    mcp.tool()(send_algorithm)
 
-        code: the whole file: const params = {...}; then function produce(p) {...} (a generator),
-          function transform(source, p) {...} (a transformer of the score in its roll)
-          or function select(source, p) {...} returning the notes it picks (a selector).
-        The result lists the parameters and the score at the declared values; the file
-        has also been run at every slider's minimum and maximum. Do not call it again to check.
-        """
+    def _send(code: str) -> str:
         try:
             t = target()
         except NoTarget as exc:
@@ -152,6 +164,10 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
         if not result.get("ok"):
             os.remove(draft)
             return _error_text(name, result)
+        if not result.get("description"):
+            os.remove(draft)
+            return ("ERROR: the file must open with a // comment: what the algorithm does, in one line "
+                    "(shown above its panel). Nothing was loaded.")
         if os.path.exists(final):
             with open(final, encoding="utf-8") as f:
                 unchanged = f.read() == code.rstrip() + "\n"
@@ -168,12 +184,13 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
             status = f"and sent to Max ({name})"
 
         params = "\n".join(f"  {p}" for p in result["describe"]) or "  (none)"
+        shown = f'Shown above its panel: "{result["description"]}"\n' if result.get("description") else ""
         kind = ""
         if result.get("kind") == "selector":
             picked = ", ".join(f"[{v} {c} {n}]" for v, c, n in (result.get("selection") or [])[:24])
             more = " ..." if len(result.get("selection") or []) > 24 else ""
             return (
-                f"OK. Algorithm saved as algorithms/{file} {status}.\n"
+                f"OK. Algorithm saved as algorithms/{file} {status}.\n{shown}"
                 f"Selector, checked on {origin} ({result['source']['notes']} notes). In Max every change "
                 f"asks the roll for its score and selects in it.\n"
                 f"Parameters (now a panel in Max):\n{params}\n"
@@ -184,7 +201,7 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
             kind = (f"Transformer, checked on {origin} ({result['source']['notes']} notes). In Max its source "
                     f"lives in memory (non-destructive: every run starts again from it).\n")
         return (
-            f"OK. Algorithm saved as algorithms/{file} {status}.\n{kind}"
+            f"OK. Algorithm saved as algorithms/{file} {status}.\n{shown}{kind}"
             f"Parameters (now a panel in Max):\n{params}\n"
             f"Checked in {result['runs']} runs (every slider at its minimum and maximum, every option).\n"
             f"Score at the declared values ({result['notes']} notes, {result['ms']} ms):\n{describe(result['score'])}"

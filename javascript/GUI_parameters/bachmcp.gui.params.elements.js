@@ -10,6 +10,12 @@ The runner also says what a number is (`kind`: pitch, interval, time or plain)
 and where a drag snaps to (`grid`): a pitch shows as a name, midicents or MIDI,
 an interval as cents or semitones (click the value text to switch).
 
+The panel sets each element's `scale` (its size: bigger panels draw bigger) and
+`resolution` (the value one pixel of its control moves). The bigger the control,
+the more precise it gets: finer marks under sliders and in lists and curves, one
+more decimal for a free value once a pixel is worth it, each bar's value written
+in a list once the bars are wide enough.
+
 Written in ECMAScript 5, because jsui runs Max's legacy JavaScript engine (it
 also runs unchanged in v8ui and in Node, where the tests draw it on a mock).
 jsui's require gives a module only `exports`, so every name leaves through it.
@@ -42,7 +48,8 @@ var THEME = base.THEME,
   rounded = base.rounded,
   dot = base.dot,
   fit = base.fit,
-  label = base.label;
+  label = base.label,
+  tickStep = base.tickStep;
 
 function Element(spec) {
   this.name = spec.name;
@@ -60,7 +67,37 @@ function Element(spec) {
   this.snapping = false;  // set by the panel for each gesture
   this.tall = false;
   this.grab = null;
+  this.scale = 1;       // set by the panel: how big to draw
+  this.resolution = 0;  // set by the panel: the value one pixel moves (free values only)
 }
+
+/** A size at this element's scale. */
+Element.prototype.u = function (n) {
+  return n * this.scale;
+};
+
+/** Whether marks go by octaves (pitches and intervals). */
+Element.prototype.octaves = function () {
+  return this.kind === "pitch" || this.kind === "interval";
+};
+
+/** The step between marks along `pixels` of this element's range (0: none fit). */
+Element.prototype.ticks = function (pixels, minPx) {
+  if (!this.range) return 0;
+  // marks on the card's own grid, whatever its snap toggle says (free has none)
+  return tickStep(this.range[1] - this.range[0], pixels, this.baseGrid || this.grid || this.step, minPx, this.octaves());
+};
+
+/** Lines across a well at every `step` of the range, bottom to top (lists, curves). */
+Element.prototype.paintGuides = function (g, r, step) {
+  if (!(step > 0)) return;
+  var lo = this.range[0], hi = this.range[1];
+  for (var v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+    var y = r.y + r.h - this.fraction(v) * r.h;
+    if (y <= r.y + 0.5 || y >= r.y + r.h - 0.5) continue;
+    box(g, r.x + 1, Math.round(y), r.w - 2, 1, THEME.guide);
+  }
+};
 
 /** The ways this value can be shown (empty: only one). */
 Element.prototype.displays = function () {
@@ -79,11 +116,11 @@ Element.prototype.nextDisplay = function () {
 Element.prototype.fmt = function (x) {
   if (this.display === "name") return centsToName(x);
   if (this.display === "midi" || this.display === "semitones") {
-    var t = formatNumber(x / 100, this.step / 100);
+    var t = formatNumber(x / 100, (this.step || this.resolution) / 100);
     return this.display === "semitones" && x > 0 ? "+" + t : t;
   }
-  if (this.kind === "interval" && x > 0) return "+" + formatNumber(x, this.step);
-  return formatNumber(x, this.step);
+  if (this.kind === "interval" && x > 0) return "+" + formatNumber(x, this.step || this.resolution);
+  return formatNumber(x, this.step || this.resolution);
 };
 
 /** What follows the numbers: the unit, or what the display is. */
@@ -97,8 +134,9 @@ Element.prototype.suffix = function () {
 /** A value from a gesture: on the grid while snapping (the ends of the range stay reachable). */
 Element.prototype.gesture = function (x) {
   var lo = this.range[0], hi = this.range[1];
-  if (!this.snapping || !(this.grid > 0) || x <= lo || x >= hi) return snap(this, x);
-  return snap(this, Math.round(x / this.grid) * this.grid);
+  var grid = this.grid > 0 ? this.grid : this.baseGrid;  // free: alt snaps to the card's own grid
+  if (!this.snapping || !(grid > 0) || x <= lo || x >= hi) return snap(this, x);
+  return snap(this, Math.round(x / grid) * grid);
 };
 
 Element.prototype.atoms = function () {
@@ -151,9 +189,17 @@ Element.prototype.reset = function () {
 };
 
 Element.prototype.paintTrack = function (g, r, from, to) {
-  var y = r.y + r.h / 2 - 3;
-  rounded(g, r.x, y, r.w, 6, 3, THEME.track);
-  rounded(g, r.x + from * r.w, y, (to - from) * r.w, 6, 3, THEME.fill);
+  var th = this.u(6), y = r.y + r.h / 2 - th / 2;
+  // marks under the track, finer as it grows (at least 6 px apart)
+  var step = this.ticks(r.w, 6);
+  if (step > 0) {
+    var lo = this.range[0], hi = this.range[1], ty = y + th + this.u(2), tl = this.u(3);
+    for (var v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+      box(g, Math.round(r.x + this.fraction(v) * r.w), ty, 1, tl, THEME.line);
+    }
+  }
+  rounded(g, r.x, y, r.w, th, th / 2, THEME.track);
+  rounded(g, r.x + from * r.w, y, (to - from) * r.w, th, th / 2, THEME.fill);
 };
 
 // slider: one number in a range
@@ -179,7 +225,7 @@ Slider.prototype.drag = function (r, x, y, mods) {
 Slider.prototype.paint = function (g, r) {
   var f = clamp(this.fraction(this.value), 0, 1);
   this.paintTrack(g, r, 0, f);
-  dot(g, r.x + f * r.w, r.y + r.h / 2, 5, THEME.knob);
+  dot(g, r.x + f * r.w, r.y + r.h / 2, this.u(5), THEME.knob);
 };
 
 // range: two numbers, low and high
@@ -202,7 +248,7 @@ Range.prototype.text = function () {
 Range.prototype.down = function (r, x) {
   var x0 = r.x + this.fraction(this.value[0]) * r.w;
   var x1 = r.x + this.fraction(this.value[1]) * r.w;
-  if (x > x0 + M.grab && x < x1 - M.grab) this.grab = { which: "both", x: x, value: this.value.slice() };
+  if (x > x0 + this.u(M.grab) && x < x1 - this.u(M.grab)) this.grab = { which: "both", x: x, value: this.value.slice() };
   else this.grab = { which: Math.abs(x - x0) <= Math.abs(x - x1) ? 0 : 1 };
   if (this.grab.which === 0 && x0 === x1 && x > x1) this.grab.which = 1;
   return this.drag(r, x);
@@ -214,7 +260,8 @@ Range.prototype.drag = function (r, x) {
   if (this.grab.which === "both") {
     var span = this.range[1] - this.range[0];
     var d = ((x - this.grab.x) / r.w) * span;
-    if (this.snapping && this.grid > 0) d = Math.round(d / this.grid) * this.grid;
+    var grid = this.grid > 0 ? this.grid : this.baseGrid;
+    if (this.snapping && grid > 0) d = Math.round(d / grid) * grid;
     d = clamp(d, this.range[0] - this.grab.value[0], this.range[1] - this.grab.value[1]);
     this.value = [snap(this, this.grab.value[0] + d), snap(this, this.grab.value[1] + d)];
   } else {
@@ -229,8 +276,8 @@ Range.prototype.paint = function (g, r) {
   var a = clamp(this.fraction(this.value[0]), 0, 1);
   var b = clamp(this.fraction(this.value[1]), 0, 1);
   this.paintTrack(g, r, a, b);
-  dot(g, r.x + a * r.w, r.y + r.h / 2, 5, THEME.knob);
-  dot(g, r.x + b * r.w, r.y + r.h / 2, 5, THEME.knob);
+  dot(g, r.x + a * r.w, r.y + r.h / 2, this.u(5), THEME.knob);
+  dot(g, r.x + b * r.w, r.y + r.h / 2, this.u(5), THEME.knob);
 };
 
 // toggle: on or off
@@ -261,10 +308,10 @@ Toggle.prototype.down = function () {
 };
 
 Toggle.prototype.paint = function (g, r) {
-  var s = Math.min(14, r.h - 4);
+  var s = Math.min(this.u(14), r.h - this.u(4)), k = this.u(4);
   var y = r.y + (r.h - s) / 2;
-  rounded(g, r.x, y, s, s, 3, this.value ? THEME.fill : THEME.track);
-  if (this.value) rounded(g, r.x + 4, y + 4, s - 8, s - 8, 2, THEME.bg);
+  rounded(g, r.x, y, s, s, this.u(3), this.value ? THEME.fill : THEME.track);
+  if (this.value) rounded(g, r.x + k, y + k, s - 2 * k, s - 2 * k, this.u(2), THEME.bg);
 };
 
 // menu: one of a list of options (segments, or a stepper when they do not fit)
@@ -298,7 +345,7 @@ Menu.prototype.text = function () {
 };
 
 Menu.prototype.segmented = function (r) {
-  return r.w / this.options.length >= 34;
+  return r.w / this.options.length >= this.u(34);
 };
 
 Menu.prototype.down = function (r, x) {
@@ -311,18 +358,18 @@ Menu.prototype.down = function (r, x) {
 };
 
 Menu.prototype.paint = function (g, r) {
-  var i = this.index();
-  rounded(g, r.x, r.y + 2, r.w, r.h - 4, 3, THEME.track);
+  var i = this.index(), u = this.u.bind(this), fs = u(THEME.fontSize);
+  rounded(g, r.x, r.y + u(2), r.w, r.h - u(4), u(3), THEME.track);
   if (this.segmented(r)) {
     var w = r.w / this.options.length;
-    rounded(g, r.x + i * w, r.y + 2, w, r.h - 4, 3, THEME.fill);
+    rounded(g, r.x + i * w, r.y + u(2), w, r.h - u(4), u(3), THEME.fill);
     for (var k = 0; k < this.options.length; k++) {
-      label(g, this.options[k], { x: r.x + k * w + 3, y: r.y, w: w - 6, h: r.h }, "center", k === i ? THEME.bg : THEME.text);
+      label(g, this.options[k], { x: r.x + k * w + u(3), y: r.y, w: w - u(6), h: r.h }, "center", k === i ? THEME.bg : THEME.text, fs);
     }
   } else {
-    label(g, "‹", { x: r.x + 4, y: r.y, w: 10, h: r.h }, "left", THEME.dim);
-    label(g, "›", { x: r.x + r.w - 14, y: r.y, w: 10, h: r.h }, "right", THEME.dim);
-    label(g, this.value, { x: r.x + 16, y: r.y, w: r.w - 32, h: r.h }, "center", THEME.text);
+    label(g, "‹", { x: r.x + u(4), y: r.y, w: u(10), h: r.h }, "left", THEME.dim, fs);
+    label(g, "›", { x: r.x + r.w - u(14), y: r.y, w: u(10), h: r.h }, "right", THEME.dim, fs);
+    label(g, this.value, { x: r.x + u(16), y: r.y, w: r.w - u(32), h: r.h }, "center", THEME.text, fs);
   }
 };
 
@@ -359,12 +406,12 @@ Seed.prototype.drag = function (r, x, y) {
 };
 
 Seed.prototype.paint = function (g, r) {
-  var d = this.dice(r);
-  rounded(g, r.x, r.y + 2, r.w - d.w - 4, r.h - 4, 3, THEME.track);
-  label(g, "drag", { x: r.x + 6, y: r.y, w: r.w - d.w - 16, h: r.h }, "left", THEME.dim);
-  rounded(g, d.x + 2, d.y + 2, d.w - 4, d.h - 4, 3, THEME.fill);
-  dot(g, d.x + d.w / 2 - 3, d.y + d.h / 2 - 3, 1.6, THEME.bg);
-  dot(g, d.x + d.w / 2 + 3, d.y + d.h / 2 + 3, 1.6, THEME.bg);
+  var d = this.dice(r), u = this.u.bind(this);
+  rounded(g, r.x, r.y + u(2), r.w - d.w - u(4), r.h - u(4), u(3), THEME.track);
+  label(g, "drag", { x: r.x + u(6), y: r.y, w: r.w - d.w - u(16), h: r.h }, "left", THEME.dim, u(THEME.fontSize));
+  rounded(g, d.x + u(2), d.y + u(2), d.w - u(4), d.h - u(4), u(3), THEME.fill);
+  dot(g, d.x + d.w / 2 - u(3), d.y + d.h / 2 - u(3), u(1.6), THEME.bg);
+  dot(g, d.x + d.w / 2 + u(3), d.y + d.h / 2 + u(3), u(1.6), THEME.bg);
 };
 
 // curve: breakpoints [[x, y], ...], x from 0 to 1; click adds a point, shift-click removes one
@@ -409,7 +456,7 @@ Curve.prototype.fromPixel = function (r, x, y) {
 };
 
 Curve.prototype.down = function (r, x, y, mods) {
-  var best = -1, bestD = M.grab;
+  var best = -1, bestD = this.u(M.grab);
   for (var i = 0; i < this.value.length; i++) {
     var p = this.toPixel(r, this.value[i]);
     var d = Math.sqrt((p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y));
@@ -453,8 +500,13 @@ Curve.prototype.drag = function (r, x, y) {
 };
 
 Curve.prototype.paint = function (g, r) {
-  rounded(g, r.x, r.y, r.w, r.h, 4, THEME.well);
+  var u = this.u.bind(this), small = u(THEME.smallSize);
+  rounded(g, r.x, r.y, r.w, r.h, u(4), THEME.well);
   var i, p;
+  // guides: values across (at least 8 px apart), time along (tenths once they are 20 px apart, else quarters)
+  this.paintGuides(g, r, this.ticks(r.h, 8));
+  var tx = r.w / 10 >= 20 ? 0.1 : 0.25;
+  for (var t = tx; t < 1 - 1e-9; t += tx) box(g, Math.round(r.x + t * r.w), r.y + 1, 1, r.h - 2, THEME.guide);
   color(g, THEME.fillDim);
   g.move_to(r.x, r.y + r.h);
   for (i = 0; i < this.value.length; i++) {
@@ -465,7 +517,7 @@ Curve.prototype.paint = function (g, r) {
   g.close_path();
   g.fill();
   color(g, THEME.fill);
-  g.set_line_width(1.5);
+  g.set_line_width(u(1.5));
   for (i = 0; i < this.value.length; i++) {
     p = this.toPixel(r, this.value[i]);
     if (i === 0) g.move_to(p[0], p[1]);
@@ -474,10 +526,20 @@ Curve.prototype.paint = function (g, r) {
   g.stroke();
   for (i = 0; i < this.value.length; i++) {
     p = this.toPixel(r, this.value[i]);
-    dot(g, p[0], p[1], 3.5, THEME.knob);
+    dot(g, p[0], p[1], u(3.5), THEME.knob);
   }
-  label(g, this.fmt(this.range[1]), { x: r.x + 3, y: r.y, w: 60, h: 12 }, "left", THEME.dim, 9);
-  label(g, this.fmt(this.range[0]), { x: r.x + 3, y: r.y + r.h - 12, w: 60, h: 12 }, "left", THEME.dim, 9);
+  g.set_line_width(1);
+  label(g, this.fmt(this.range[1]), { x: r.x + u(3), y: r.y, w: u(60), h: u(12) }, "left", THEME.dim, small);
+  label(g, this.fmt(this.range[0]), { x: r.x + u(3), y: r.y + r.h - u(12), w: u(60), h: u(12) }, "left", THEME.dim, small);
+  // the point being dragged: its time and value beside it
+  if (this.grab && this.value[this.grab.index]) {
+    var q = this.value[this.grab.index];
+    p = this.toPixel(r, q);
+    var lw = u(84), right = p[0] + u(8) + lw <= r.x + r.w;
+    label(g, formatNumber(q[0], 0.01) + " \u00b7 " + this.fmt(q[1]),
+      { x: right ? p[0] + u(8) : p[0] - u(8) - lw, y: clamp(p[1] - u(14), r.y, r.y + r.h - u(12)), w: lw, h: u(12) },
+      right ? "left" : "right", THEME.knob, small);
+  }
 };
 
 // list: several numbers, drawn as bars; drag across them to draw
@@ -535,13 +597,29 @@ List.prototype.drag = function (r, x, y) {
 };
 
 List.prototype.paint = function (g, r) {
-  rounded(g, r.x, r.y, r.w, r.h, 4, THEME.well);
+  var u = this.u.bind(this), small = u(THEME.smallSize);
+  rounded(g, r.x, r.y, r.w, r.h, u(4), THEME.well);
+  // guides across, finer as the list grows taller (at least 8 px apart)
+  this.paintGuides(g, r, this.ticks(r.h, 8));
   var n = this.value.length, w = r.w / n;
   var base = clamp(this.fraction(0), 0, 1);
   var y0 = r.y + r.h - base * r.h;
+  var gap = Math.min(u(1), w / 4);
+  // each bar's value once the bars are wide enough to hold it, and the list tall enough
+  var written = r.h >= u(70) && w >= u(26);
   for (var i = 0; i < n; i++) {
     var y = r.y + r.h - clamp(this.fraction(this.value[i]), 0, 1) * r.h;
-    box(g, r.x + i * w + 1, Math.min(y, y0), Math.max(1, w - 2), Math.max(1.5, Math.abs(y0 - y)), THEME.fill);
+    box(g, r.x + i * w + gap, Math.min(y, y0), Math.max(1, w - 2 * gap), Math.max(1.5, Math.abs(y0 - y)), THEME.fill);
+    if (written) {
+      var above = y - u(13) >= r.y;
+      label(g, this.fmt(this.value[i]), { x: r.x + i * w, y: above ? y - u(13) : y + u(1), w: w, h: u(12) },
+        "center", above ? THEME.dim : THEME.bg, small);
+    }
+  }
+  // the range, left, once there is room for it
+  if (!written && r.h >= u(50)) {
+    label(g, this.fmt(this.range[1]), { x: r.x + u(3), y: r.y, w: u(60), h: u(12) }, "left", THEME.dim, small);
+    label(g, this.fmt(this.range[0]), { x: r.x + u(3), y: r.y + r.h - u(12), w: u(60), h: u(12) }, "left", THEME.dim, small);
   }
 };
 

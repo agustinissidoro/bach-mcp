@@ -97,8 +97,18 @@ class HeadlessTests(unittest.TestCase):
         self.assertEqual(args[args.index("--allowedTools") + 1], "mcp__bach__send_algorithm")
         self.assertIn("You are writing for a generator", args[args.index("--append-system-prompt") + 1])
         self.assertEqual(json.loads(args[args.index("--mcp-config") + 1]),
-                         {"mcpServers": {"bach": {"type": "http", "url": Config().mcp_url}}})
+                         {"mcpServers": {"bach": {"type": "http", "url": Config().headless_mcp_url("algo")}}})
         self.assertNotIn("--resume", args)
+
+    def test_system_prompt_false_replaces_claude_codes_own(self):
+        args = self.chat.command_line()
+        self.assertIn("--append-system-prompt", args, "by default Claude Code keeps its own prompt")
+        self.assertNotIn("--system-prompt", args)
+        config = Config()
+        config.chat.system_prompt = False
+        args = ClaudeConversation(self.command, config, "writer").command_line()
+        self.assertNotIn("--append-system-prompt", args)
+        self.assertIn("You are writing for a writer", args[args.index("--system-prompt") + 1])
 
     def test_the_next_message_resumes_the_session(self):
         list(self.chat.send("one"))

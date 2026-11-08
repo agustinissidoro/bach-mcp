@@ -9,7 +9,7 @@ no other module reads bachmcp.toml or the environment for its settings.
     [chat]        the skill, tool rounds per answer, instrument docs, the browser
     [server]      Bach's own address: the chat page and /mcp; tool logging
     [max]         the UDP ports of the patch
-    [algo]        the Node.js that checks algorithms
+    [algo]        the Node.js that checks algorithms; the explanation after one
 
 Where files go is not set here: the patch sends the playground (set_playground).
 
@@ -64,6 +64,8 @@ class ChatConfig:
     max_tool_rounds: int = 8
     docs: bool = True
     open_browser: bool = True
+    system_prompt: bool = True  # claude -p keeps Claude Code's own system prompt (the skill is added to it);
+                                # false: the skill replaces it
 
 
 @dataclass
@@ -82,6 +84,7 @@ class MaxConfig:
 @dataclass
 class AlgoConfig:
     node: str = "node"
+    verbose: bool = True               # after send_algorithm the model explains the algorithm and its parameters
 
 
 # Keys that are gone, and what took their place.
@@ -89,6 +92,7 @@ _REMOVED = {
     ("model", "backend"): "Bach reads it from the model",
     ("max", "buffer"): "each instance has its own file in the playground (set_playground from the patch)",
     ("algo", "dir"): "algorithms go to the playground (set_playground from the patch)",
+    ("algo", "one_line_description"): "send_algorithm always asks for the // comment that opens the file",
 }
 
 
@@ -112,6 +116,12 @@ class Config:
     @property
     def mcp_url(self) -> str:
         return f"{self.url}/mcp"
+
+    def headless_mcp_url(self, mode: str) -> str:
+        """The tools of one mode ("score" or "algo") without the skill as instructions, for the
+        `claude -p` Bach starts itself: it gets its instance's part of the skill as its system
+        prompt instead, as the local model does."""
+        return f"{self.url}/mcp/headless/{mode}"
 
     @property
     def model_path(self) -> str:
@@ -148,13 +158,14 @@ class Config:
         return bool(self.model_path) and os.path.exists(self.model_path)
 
     def skill_source(self) -> str:
-        """The skill file as it is, with its mode markers: [chat] skill_file, else the built-in one."""
-        from .prompt.skill import read_skill
+        """The skill file with its mode markers: [chat] skill_file, else the built-in one,
+        with the wording [algo] verbose chooses (see prompt/skill.py)."""
+        from .prompt.skill import read_skill, with_verbosity
         if not self.chat.skill_file:
-            return read_skill()
+            return with_verbosity(read_skill(), self.algo.verbose)
         path = _from_repo(self.chat.skill_file)
         try:
-            return read_skill(path)
+            return with_verbosity(read_skill(path), self.algo.verbose)
         except OSError as exc:
             raise ConfigError(f"[chat] skill_file: cannot read {path} ({exc.strerror})") from None
 

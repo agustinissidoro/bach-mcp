@@ -7,6 +7,10 @@ Claude brings its own model; Bach gives it the tools, what to read, and Max.
     mcp_app(config, bridge)   the 15 tools (tools/registry.py) plus what Claude reads:
                               the skill as the server's instructions, /score and /algo
                               as two prompts, the instrument docs as resources
+    headless_apps(config, bridge)  one per mode at /mcp/headless/<mode>: only that mode's tools
+                              and no instructions, for the `claude -p` Bach starts
+                              (chat/headless.py). It gets its instance's part of the skill as
+                              its system prompt: the same skill and tools the local model gets
     serve(config, stdio)      serves that app: over HTTP at [server] (bachmcp.server claude),
                               with the chat page beside it (chat/web.py), where prompts from
                               Max and the page are answered by Claude Code (chat/headless.py),
@@ -41,7 +45,7 @@ from mcp.server.fastmcp import FastMCP
 from .bridge.max import OfflineBridge
 from .config import REPO_ROOT, Config
 from .prompt.docs import DocLibrary
-from .prompt.modes import MODE_TOOLS
+from .prompt.modes import MODE_TOOLS, MODES
 from .utilities.status import quit_on_signals, start_bridge, watch_input
 from .tools.registry import create_tools
 
@@ -80,6 +84,15 @@ def mcp_app(config: Config, bridge: Any) -> FastMCP:
     return mcp
 
 
+def headless_apps(config: Config, bridge: Any) -> List[FastMCP]:
+    """For the Claude Code Bach starts itself, one app per mode: that mode's tools alone, as the
+    local model has them (prompt/modes.py tools_for), and no instructions: its skill is the
+    instance's part, given as its system prompt (chat/headless.py). The docs reach it inside the
+    messages, as they reach the local model, so there are no resources either."""
+    return [create_tools(bridge, config.algo.node, log_calls=config.server.tool_log,
+                         path=f"/mcp/headless/{mode}", only=MODE_TOOLS[mode]) for mode in MODES]
+
+
 def _mode_prompt(instruction: str):
     def prompt(request: str = "") -> str:
         return f"{instruction}\n\n{request}".strip()
@@ -102,6 +115,7 @@ def serve(config: Config, stdio: bool = False) -> None:
     quit_on_signals(status)
     try:
         mcp = mcp_app(config, bridge)
+        headless = [] if stdio else headless_apps(config, bridge)
         command = None if stdio else find_claude_code()
         make = None if stdio else lambda kind: ClaudeConversation(command, config, kind)
         hub = Hub(bridge, status, make)
@@ -110,13 +124,13 @@ def serve(config: Config, stdio: bool = False) -> None:
             status.started()
             mcp.run(transport="stdio")
             return
-        _serve_http(config, hub, status, mcp)
+        _serve_http(config, hub, status, mcp, headless)
     finally:
         status.off()
         bridge.stop()
 
 
-def _serve_http(config: Config, hub: Any, status: Any, mcp: FastMCP) -> None:
+def _serve_http(config: Config, hub: Any, status: Any, mcp: FastMCP, headless: List[FastMCP]) -> None:
     """The tools at /mcp and the chat page at / on one port: the page shows every instance's
     conversation with Claude Code, and prompts written there are answered like Max's."""
     import threading
@@ -126,7 +140,7 @@ def _serve_http(config: Config, hub: Any, status: Any, mcp: FastMCP) -> None:
     import uvicorn
 
     from .chat.web import close_page_tabs, create_app
-    http = uvicorn.Server(uvicorn.Config(create_app(hub, status, mcp), host=config.server.host,
+    http = uvicorn.Server(uvicorn.Config(create_app(hub, status, mcp, headless), host=config.server.host,
                                          port=config.server.port, log_level="warning",
                                          timeout_graceful_shutdown=1))  # the pages' streams never end
 

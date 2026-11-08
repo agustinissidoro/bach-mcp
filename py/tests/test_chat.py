@@ -170,3 +170,36 @@ class KindTests(EngineTest):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OldCodeTests(unittest.TestCase):
+    """Algorithm files a later send_algorithm replaced reach the model as a placeholder."""
+
+    @staticmethod
+    def call(n, code):
+        return {"role": "assistant", "content": "", "tool_calls": [{"id": f"c{n}", "type": "function", "function": {
+            "name": "send_algorithm", "arguments": json.dumps({"code": code, "one_line_description": f"v{n}"})}}]}
+
+    @staticmethod
+    def result(n, ok):
+        return {"role": "tool", "tool_call_id": f"c{n}", "content": "OK. Algorithm saved" if ok else "ERROR in x.js"}
+
+    @staticmethod
+    def codes(history):
+        return [json.loads(c["function"]["arguments"])["code"] for m in history for c in m.get("tool_calls") or []]
+
+    def test_only_the_last_and_the_last_loaded_stay(self):
+        from bach_mcp.chat.engine import OLD_CODE, without_old_code
+        history = [{"role": "user", "content": "a canon"}, self.call(1, "one"), self.result(1, True),
+                   {"role": "user", "content": "slower"}, self.call(2, "two"), self.result(2, True),
+                   {"role": "user", "content": "denser"}, self.call(3, "three"), self.result(3, False)]
+        sent = without_old_code(history)
+        self.assertEqual(self.codes(sent), [OLD_CODE, "two", "three"], "two is what Max has loaded")
+        self.assertEqual(self.codes(history), ["one", "two", "three"], "the history itself keeps every file")
+        self.assertEqual(json.loads(sent[1]["tool_calls"][0]["function"]["arguments"])["one_line_description"], "v1")
+        history += [self.call(4, "four"), self.result(4, True)]
+        self.assertEqual(self.codes(without_old_code(history)), [OLD_CODE, OLD_CODE, OLD_CODE, "four"])
+        self.assertEqual(without_old_code(history)[:4], without_old_code(history[:4] + history[4:])[:4],
+                         "a pure function of the history")
+        one = history[:3]
+        self.assertIs(without_old_code(one), one, "a single version is left alone")

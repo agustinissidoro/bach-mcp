@@ -530,3 +530,12 @@ test("process_only_selection: a selector picks only among the flagged notes, add
   assert.deepEqual(m.out.filter((o) => o[0] === 1).slice(-1)[0].slice(1).join(" "), "sel note [ 1 2 1 ]",
     "6400 is above 6000 but not flagged: only 7200");
 });
+
+test("the comment that opens the file reaches the panel in the spec", () => {
+  const m = load("bachmcp.runner.generator.js");
+  m.send("load", tempFile("// Notes that climb\n" + ALGO.replace(/^\/\/.*\n/, "")));
+  assert.equal(JSON.parse(last(m.out, 1, "spec")[2]).description, "Notes that climb");
+  const plain = load("bachmcp.runner.generator.js");
+  plain.send("load", tempFile(ALGO.replace(/^\/\/.*\n/, "")));
+  assert.equal(JSON.parse(last(plain.out, 1, "spec")[2]).description, "");
+});

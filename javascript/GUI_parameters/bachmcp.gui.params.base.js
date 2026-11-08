@@ -19,6 +19,7 @@ var THEME = {
   well: [0.12, 0.125, 0.135, 1],
   line: [0.26, 0.265, 0.29, 1],
   track: [0.27, 0.275, 0.3, 1],
+  guide: [1, 1, 1, 0.06],  // the lines across lists and curves
   button: [0.23, 0.235, 0.26, 1],
   buttonHover: [0.3, 0.305, 0.34, 1],
   fill: [0.96, 0.63, 0.24, 1],
@@ -53,8 +54,44 @@ var M = {
   labelMax: 132,
   curve: 76,
   list: 58,
-  grab: 7
+  grab: 7,
+  baseWidth: 300,  // the width drawn at scale 1; a wider panel draws everything bigger
+  maxScale: 2,     // up to this many times
+  tallGrow: 4,     // spare height can make a list or a curve up to this many times taller
+  chromeGrow: 0.33 // the title row, buttons, headers and status grow this much of what the parameters grow
 };
+
+/** Every size of M times s (the panel's scale). */
+function scaled(s) {
+  var out = {};
+  for (var k in M) out[k] = k === "baseWidth" || k === "maxScale" || k === "tallGrow" || k === "chromeGrow" ? M[k] : M[k] * s;
+  return out;
+}
+
+/**
+ * The scale for a width: 1 up to M.baseWidth, then growing with it, at most
+ * M.maxScale; in steps of 0.05 so a resize does not redraw everything for a pixel.
+ */
+function scaleFor(width) {
+  return clamp(Math.floor((width / M.baseWidth) * 20) / 20, 1, M.maxScale);
+}
+
+/**
+ * The finest step between marks on an axis that keeps them minPx apart:
+ * span is the values the axis covers, pixels its length, unit the finest step
+ * worth marking (a grid, a step); octave: pitches and intervals (multiples of 12
+ * semitones once a semitone is too fine). 0 when not even a coarse step fits.
+ */
+function tickStep(span, pixels, unit, minPx, octave) {
+  if (!(span > 0) || !(pixels > 0)) return 0;
+  if (!(unit > 0)) unit = Math.pow(10, Math.floor(Math.log(span) / Math.LN10) - 2);
+  var mults = octave ? [1, 2, 12, 24, 48, 96] : [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+  for (var i = 0; i < mults.length; i++) {
+    var step = unit * mults[i];
+    if ((step / span) * pixels >= minPx) return span / step <= 400 ? step : 0;
+  }
+  return 0;
+}
 
 // ── Numbers ─────────────────────────────────────────────────────────────── //
 
@@ -155,6 +192,9 @@ function label(g, text, r, align, c, size, font) {
 
 exports.THEME = THEME;
 exports.M = M;
+exports.scaled = scaled;
+exports.scaleFor = scaleFor;
+exports.tickStep = tickStep;
 exports.clamp = clamp;
 exports.tidy = tidy;
 exports.snap = snap;
