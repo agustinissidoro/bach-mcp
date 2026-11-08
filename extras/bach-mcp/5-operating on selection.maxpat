@@ -3,13 +3,13 @@
         "fileversion": 1,
         "appversion": {
             "major": 9,
-            "minor": 2,
-            "revision": 0,
+            "minor": 1,
+            "revision": 1,
             "architecture": "x64",
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 95.0, 1005.0, 853.0 ],
+        "rect": [ 260.0, 102.0, 1005.0, 853.0 ],
         "boxes": [
             {
                 "box": {
@@ -134,11 +134,12 @@
             {
                 "box": {
                     "id": "obj-3",
+                    "linecount": 4,
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 19.0, 58.0, 540.0, 20.0 ],
-                    "text": "For this to work you need the latest version of bach.roll, which uses the flag 16 bit to mark selection."
+                    "patching_rect": [ 19.0, 18.0, 689.0, 60.0 ],
+                    "text": "For this to work you need at least bach 0.9 (or one of its release candidates), using the flag 16 bit to mark selection.\n\nDepending on when you read these lines, this new version may be already publicly available on Max's Package Manager, or perhaps only as a dev-release on Patreon, or maybe just as a private release for the Ircam MusicaExMachina test group."
                 }
             },
             {
