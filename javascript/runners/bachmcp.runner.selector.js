@@ -27,17 +27,17 @@ processing 0. The source modes are the transformer's:
 cumulative: each run replaces the previous one (involutive is ignored for now).
 A run sends:
 
-  outlet 0   the score, its slot `selection_slot` (default 11) declared in the
-             slotinfo as "selected" (an int, 0..1), every note flagged in it, so
-             that a runner with process_only_selection 1 works on it:
-               dump_selection_only 1  (default) only the selected notes, each flagged 1
-               dump_selection_only 0  the whole source, flagged 1 or 0
-             selection_slot 0: no score.
+  outlet 0   the score, the selection written in bach's flags: bit 16 set on
+             the `flag` of every selected note, cleared on the other notes and
+             on every chord (other bits kept), so that a runner with
+             process_only_selection 1 works on it:
+               dump_selection_only 1  (default) only the selected notes
+               dump_selection_only 0  the whole source
   outlet 1   then, to bach: clearselection, sel note [v c n] ...
              ("sel note", singular: bach's "sel notes" selects every note, whatever follows)
 
 dump_selection outputs only the tracked notes of the source, as a score (each
-flagged 1 in the slot), out of outlet 0.
+flagged 16), out of outlet 0.
 
 Messages:
   set_name <name> [file]  the instance's name (and a file to load)
@@ -53,10 +53,10 @@ Messages:
   source_mode 0/1         0 destructive, 1 non-destructive (see above)
   involutive 0/1          kept for later; ignored for now (every run is clearselection, sel)
   dump_selection_only 0/1 the score out of outlet 0: the selected notes only (1, default) or the whole source
-  selection_slot <n>      the slot marking the selection, read and written (default 11; 0: none)
-  process_only_selection 0/1  1: select only among the notes flagged in that slot (default 0)
+  selection_slot <n>      ignored (the selection is the flags now; kept for old patches)
+  process_only_selection 0/1  1: select only among the selected notes, flag 16 on the note or its chord (default 0)
   dump_selection          the selected notes as a score, out of outlet 0
-  clear_selection         nothing selected any more: the score (empty, or the source all 0), then clearselection
+  clear_selection         nothing selected any more: the score (empty, or the source, no flag 16), then clearselection
   snap 0/1/3              the output score's pitches: 0 semitones, 1 quarter tones, 3 free (default)
   bypass 0/1              1: runs do nothing; a score at the inlet goes straight out of outlet 0
   repeat                  the last output again: the score out of outlet 0, then the commands out of outlet 1
@@ -98,7 +98,6 @@ const PROCESSING_TIMEOUT_MS = 3000;
 const source = { score: null, from: "", processing: false, destructive: false, open: false };
 const selection = {
   involutive: false,
-  slot: 11,
   only: true,  // dump_selection_only
   within: false,  // process_only_selection
   map: null,      // process_only_selection: address in what the algorithm got -> in the source
@@ -112,8 +111,8 @@ const engine = createEngine(
   {
     source: () => {
       selection.map = null;
-      if (!selection.within || !source.score || !selection.slot) return source.score;
-      const parts = sel.split(source.score, selection.slot);
+      if (!selection.within || !source.score) return source.score;
+      const parts = sel.split(source.score);
       selection.map = parts.map;
       return parts.picked;
     },
@@ -134,7 +133,7 @@ const engine = createEngine(
 
 try {
   setinletassist(0, "load_algo <path>, run, [param] <param> <value>, input dictionary <name>, dump_selection");
-  setoutletassist(0, "dictionary <name>: the source with the selection slot (a run), the selected notes (dump_selection)");
+  setoutletassist(0, "dictionary <name>: the source with the selection flags (a run), the selected notes (dump_selection)");
   setoutletassist(1, "to bach: sel / select notes ..., clearselection, dump");
   setoutletassist(2, "to the parameter panel (bachmcp.gui.params.v8ui.js)");
   setoutletassist(3, "<name> algo_loaded / algo_done / algo_error");
@@ -188,7 +187,7 @@ function dump_selection_only(flag) {
   outlet(PANEL, "dump_selection_only", m);
 }
 
-/** 1: select only among the notes already flagged in selection_slot. */
+/** 1: select only among the notes already selected (flag 16 on the note or its chord). */
 function process_only_selection(flag) {
   const m = Number(flag);
   if (m !== 0 && m !== 1) return engine.fail(`process_only_selection is 0 or 1, got ${flag}`);
@@ -197,11 +196,8 @@ function process_only_selection(flag) {
   if (engine.state.autorun && engine.state.compiled) engine.schedule();
 }
 
-function selection_slot(n) {
-  const slot = Number(n);
-  if (!Number.isInteger(slot) || slot < 0 || slot > 30) return engine.fail(`selection_slot is a slot number 1..30, or 0 for none, got ${n}`);
-  selection.slot = slot;
-}
+/** Ignored: the selection is bach's flag 16 now. Kept so that old patches (@selection_slot 11) do not fail. */
+function selection_slot() {}
 
 /** 0 destructive (every run asks for the roll's score), 1 non-destructive (the source is held). */
 function source_mode(flag) {
@@ -274,7 +270,7 @@ function input(what, name) {
 
 function dump_selection() {
   if (!source.score) return engine.fail("dump_selection: there is no source yet");
-  engine.sendScore(sel.only(source.score, trackedAddresses(), selection.slot));
+  engine.sendScore(sel.only(source.score, trackedAddresses()));
 }
 
 function clear_selection() {
@@ -301,11 +297,11 @@ function trackedAddresses() {
   return [...selection.tracked].map((k) => k.split(" ").map(Number));
 }
 
-/** The score with the slot declared and every note flagged, out of outlet 0 (see dump_selection_only). */
+/** The score with every note flagged, out of outlet 0 (see dump_selection_only). */
 function sendMarked() {
-  if (!selection.slot || !source.score) return;
+  if (!source.score) return;
   const make = selection.only ? sel.only : sel.mark;
-  engine.sendScore(make(source.score, trackedAddresses(), selection.slot));
+  engine.sendScore(make(source.score, trackedAddresses()));
 }
 
 function sourceInfo() {

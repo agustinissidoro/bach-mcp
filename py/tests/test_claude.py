@@ -14,6 +14,7 @@ from bach_mcp import claude  # noqa: E402
 from bach_mcp.bridge.max import OfflineBridge  # noqa: E402
 from bach_mcp.config import Config  # noqa: E402
 from bach_mcp.prompt.modes import MODE_TOOLS  # noqa: E402
+from bach_mcp.tools.instance_tools import INSTANCE_TOOLS  # noqa: E402
 
 
 class AppTests(unittest.TestCase):
@@ -23,8 +24,8 @@ class AppTests(unittest.TestCase):
 
     def test_the_tools_and_the_skill(self):
         names = [t.name for t in asyncio.run(self.app.list_tools())]
-        self.assertEqual(len(names), 13)
-        self.assertEqual(set(names), set(MODE_TOOLS["score"]) | set(MODE_TOOLS["algo"]))
+        self.assertEqual(len(names), 15)
+        self.assertEqual(set(names), set(MODE_TOOLS["score"]) | set(MODE_TOOLS["algo"]) | set(INSTANCE_TOOLS))
         self.assertTrue(self.app.instructions.startswith("# Bach"))
 
     def test_the_modes_are_prompts(self):

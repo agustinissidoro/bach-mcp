@@ -12,7 +12,10 @@ says which instance the tools serve while it answers (tools/session.py). The
 next message resumes the same Claude session: its id is kept with the assistant's
 messages in prompts/<name>.jsonl.
 
-Claude Code's lines (--output-format stream-json) become engine.py's events.
+Claude Code's lines (--output-format stream-json) become engine.py's events. With
+--include-partial-messages it also says when it sends a request (system status
+requesting) and when each block starts, before the block is whole: those become
+stage events, so Max hears "sent", "thinking", "writing", "calling <tool>" as they happen.
 """
 
 from __future__ import annotations
@@ -63,7 +66,7 @@ class ClaudeConversation:
 
     def command_line(self) -> List[str]:
         config = {"mcpServers": {SERVER: {"type": "http", "url": self.url}}}
-        line = [self.command or "claude", "-p", "--output-format", "stream-json", "--verbose",
+        line = [self.command or "claude", "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                 "--mcp-config", json.dumps(config), "--strict-mcp-config", "--setting-sources", "",
                 "--tools", "", "--allowedTools", *[PREFIX + tool for tool in MODE_TOOLS[self.mode]],
                 "--append-system-prompt", self.system_prompt(),
@@ -132,7 +135,18 @@ def _events(said: Dict[str, Any], names: Dict[str, str], answer: List[str], chat
     kind = said.get("type")
     if said.get("session_id"):
         chat.session = said["session_id"]
-    if kind == "assistant":
+    if kind == "system" and said.get("subtype") == "status" and said.get("status") == "requesting":
+        yield {"type": "stage", "stage": "sent"}
+    elif kind == "stream_event":
+        block = (said.get("event") or {}).get("content_block") or {}
+        if said["event"].get("type") == "content_block_start":
+            if block.get("type") == "thinking":
+                yield {"type": "stage", "stage": "thinking"}
+            elif block.get("type") == "text":
+                yield {"type": "stage", "stage": "writing"}
+            elif block.get("type") == "tool_use":
+                yield {"type": "stage", "stage": "calling", "detail": [block.get("name", "").removeprefix(PREFIX)]}
+    elif kind == "assistant":
         if said.get("error"):  # Claude Code's own message (not logged in ...): the result line reports it
             return
         for block in said["message"].get("content") or []:

@@ -328,7 +328,7 @@ const THREE = { voices: [{ chords: [
   { onset: 500, notes: [{ pitch: 7200, dur: 500, vel: 90 }] },
 ] }] };
 
-test("a selector outputs the selected notes flagged in the slot, then clearselection and sel note", () => {
+test("a selector outputs the selected notes flagged 16, then clearselection and sel note", () => {
   const m = load("bachmcp.runner.selector.js");
   m.send("set_name", "s1");
   m.send("load", tempFile(SELECTOR));
@@ -339,18 +339,23 @@ test("a selector outputs the selected notes flagged in the slot, then clearselec
   const bach = m.out.filter((o) => o[0] === 1).map((o) => o.slice(1).join(" "));
   assert.deepEqual(bach, ["dump", "clearselection", "sel note [ 1 1 2 ] [ 1 2 1 ]"], "dump asks for the score, then selects in it");
   const only = scoreOut(m);
-  assert.deepEqual(only.header.slotinfo["11"], { name: ["selected"], type: ["int"], range: [0, 1], default: [0] });
-  assert.deepEqual(only.voices[0].chords.map((c) => c.notes.map((n) => [n.pitch, n.slots["11"][0]])), [[[6400, 1]], [[7200, 1]]]);
+  assert.equal(only.header, undefined, "no slot declared");
+  assert.deepEqual(only.voices[0].chords.map((c) => [c.flag, c.notes.map((n) => [n.pitch, n.flag])]), [[0, [[6400, 16]]], [0, [[7200, 16]]]]);
   assert.ok(m.out.findIndex((o) => o[0] === 0) < m.out.findIndex((o) => o[0] === 1 && o[1] === "clearselection"), "the score before the commands");
   assert.match(last(m.out, 2, "status")[3], /2 notes selected/);
   assert.deepEqual(last(m.out, 3).slice(0, 4), [3, "s1", "algo_done", 2]);
   m.send("dump_selection_only", 0);
   assert.deepEqual(last(m.out, 2, "dump_selection_only"), [2, "dump_selection_only", 0]);
-  m.send("dump");
-  inputScore(m, THREE);
-  assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => c.notes.map((n) => n.slots["11"][0])), [[0, 1], [1]], "the whole source, flagged");
+  m.send("capture_source");
+  const marked = JSON.parse(JSON.stringify(THREE));
+  marked.voices[0].chords[0].flag = 16;            // a chord selected in the roll: cleared, written on notes
+  marked.voices[0].chords[0].notes[1].flag = 2;    // muted: kept
+  inputScore(m, marked);
+  m.flush();
+  assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => [c.flag, c.notes.map((n) => n.flag)]), [[0, [0, 18]], [0, [16]]],
+    "the whole source, flagged on notes only, other bits kept");
   m.send("clear_selection");
-  assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => c.notes.map((n) => n.slots["11"][0])), [[0, 0], [0]]);
+  assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => [c.flag, c.notes.map((n) => n.flag)]), [[0, [0, 2]], [0, [0]]]);
   assert.deepEqual(last(m.out, 1), [1, "clearselection"]);
 });
 
@@ -399,25 +404,25 @@ test("a destructive selector: an unasked input becomes the source but is not sel
   assert.deepEqual(m.out.slice(-2), [[3, "s1", "timeout", 1], [3, "s1", "processing", 0]]);
 });
 
-test("input_mode 1: a transformer changes only the notes flagged in the slot named selected", () => {
+test("input_mode 1: a transformer changes only the selected notes; a note inherits its chord's flag 16", () => {
   const m = load("bachmcp.runner.transformer.js");
   m.send("load", tempFile(TRANSFORMER));
   m.send("input_mode", 1);
+  m.send("selection_slot", 11);  // ignored, old patches send it
   const flagged = JSON.parse(JSON.stringify(THREE));
-  flagged.header = { slotinfo: { "7": { name: ["selected"], type: ["int"] } } };
-  flagged.voices[0].chords[0].notes[1].slots = { "7": [1] };
+  flagged.voices[0].chords[1].flag = 16;
+  flagged.voices[0].chords[1].notes[0].flag = 0;
   inputScore(m, flagged);
   m.flush();
-  const out = scoreOut(m);
-  assert.deepEqual(out.voices[0].chords.map((c) => [c.onset, c.notes.map((n) => n.pitch)]),
-    [[0, [5500]], [0, [6500]], [500, [7200]]]);
-  assert.deepEqual(out.header, flagged.header);
+  assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => [c.onset, c.notes.map((n) => n.pitch)]),
+    [[0, [5500, 6400]], [500, [7300]]]);
   const bare = load("bachmcp.runner.transformer.js");
   bare.send("load", tempFile(TRANSFORMER));
   bare.send("input_mode", 1);
   inputScore(bare, THREE);
   bare.flush();
-  assert.match(last(bare.out, 2)[3], /no slot named "selected"/);
+  assert.deepEqual(scoreOut(bare).voices[0].chords.map((c) => c.notes.map((n) => n.pitch)), [[5500, 6400], [7200]],
+    "nothing selected: nothing changes");
 });
 
 // ── snap, bypass, repeat ────────────────────────────────────────────────── //
@@ -500,12 +505,12 @@ test("a non-destructive selector (default) asks once, then selects again in the 
   assert.deepEqual(last(m.out, 2, "source_mode"), [2, "source_mode", 0]);
 });
 
-test("process_only_selection: a transformer changes only the notes flagged in selection_slot (default 11)", () => {
+test("process_only_selection: a transformer changes only the notes flagged 16", () => {
   const m = load("bachmcp.runner.transformer.js");
   m.send("load", tempFile(TRANSFORMER));
   m.send("process_only_selection", 1);
   const flagged = JSON.parse(JSON.stringify(THREE));
-  flagged.voices[0].chords[0].notes[1].slots = { "11": [1] };
+  flagged.voices[0].chords[0].notes[1].flag = 18;  // muted and selected
   inputScore(m, flagged);
   m.flush();
   assert.deepEqual(scoreOut(m).voices[0].chords.map((c) => [c.onset, c.notes.map((n) => n.pitch)]),
@@ -519,7 +524,7 @@ test("process_only_selection: a selector picks only among the flagged notes, add
   m.send("process_only_selection", 1);
   m.send("dump");
   const flagged = JSON.parse(JSON.stringify(THREE));
-  flagged.voices[0].chords[1].notes[0].slots = { "11": [1] };
+  flagged.voices[0].chords[1].notes[0].flag = 16;
   inputScore(m, flagged);
   m.flush();
   assert.deepEqual(m.out.filter((o) => o[0] === 1).slice(-1)[0].slice(1).join(" "), "sel note [ 1 2 1 ]",

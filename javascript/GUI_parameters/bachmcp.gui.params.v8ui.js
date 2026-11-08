@@ -9,6 +9,7 @@ name (as set_name), e.g. [bachmcp.gui.params t1]. Then:
 
 The panel builds itself from the spec the runner sends when it loads a file
 (bachmcp.gui.params.panel.js, with the elements of bachmcp.gui.params.elements.js):
+  title       set active ("set_as_active_instance": the instance Claude's tools work for), bypass;
   options     drags land on round values (alt lets one through);
               reset all; a source's process sel. ("process_only_selection 0|1"); bypass ("bypass 0|1"), repeat; a pitch card's snap toggle ½ | ¼ | free ("snap 0|1|3"),
               a time card's 100ms | 10ms | free;
@@ -54,7 +55,7 @@ if (!panel) post("bachmcp.gui.params: cannot load bachmcp.gui.params.panel.js; t
 let autosizing = true;
 
 setinletassist(0, "from a runner's middle outlet: spec, set, status, source, source_mode");
-setoutletassist(0, "to the runner: param <name> <value...>; capture_source, write_to_playground, source_mode");
+setoutletassist(0, "to the runner: param <name> <value...>; capture_source, write_to_playground, source_mode, set_as_active_instance");
 
 function emit(messages) {
   for (const m of messages) outlet(0, m);

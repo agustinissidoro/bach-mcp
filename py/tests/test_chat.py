@@ -105,7 +105,7 @@ class ToolLoopTests(EngineTest):
         conversation = self.chat(tool_reply("p2mc", {"pitches": ["C4", "E4"]}, text="The pitches first."),
                                  text_reply("Written."))
         events = list(conversation.send("a major third"))
-        self.assertEqual([k for k in self.kinds(events) if k not in ("text", "calling")],
+        self.assertEqual([k for k in self.kinds(events) if k not in ("text", "calling", "stage")],
                          ["round", "tool_call", "tool_result", "round", "done"])
         result = next(e for e in events if e["type"] == "tool_result")
         self.assertEqual(json.loads(result["result"]), [6000, 6400])

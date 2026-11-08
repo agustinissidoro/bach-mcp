@@ -11,7 +11,7 @@ never from above; music/ is the base anyone may use.
         model/         runs the local model (mlx or gguf) and talks to it
         prompt/        what any model reads: the skill, the modes, the instrument docs
 
-    ③  tools/         the 13 tools, defined once, used by both doors
+    ③  tools/         the 15 tools, defined once, used by both doors
 
     ④  bridge/        the link to Max: UDP messages, scores through the buffer file
 

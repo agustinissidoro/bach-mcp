@@ -10,14 +10,16 @@ The hub holds the playground (tools/playground.py), the map of the instances
 in the patch (name -> type), the active instance and one conversation per
 instance. An instance's type fixes how the model works for it (chat/engine.py),
 and the tools serve the instance whose prompt is being answered, else the
-active one (tools/session.py).
+active one (tools/session.py). A Claude written to directly lists the instances
+and chooses the active one with two tools (tools/instance_tools.py).
 
 Into the hub:
 
     set_playground <path>                     the folder for everything the model makes
     clear_instance_names_map                  empty the map
     add_instance_names_map <name> <type>      generator | transformer | selector | writer
-    set_active_instance <name>
+    set_active_instance <name> [<type>]       with the type, the instance joins the map if new
+    instances <name> <type> ...               Max's answer to `server get_instances`: the whole map
     <name> prompt <text>                      to that instance's conversation
     <name> stop                               stop its answer (or its turn in the queue)
     <name> new                                a new conversation (the old one stays in prompts/)
@@ -27,7 +29,6 @@ Out of the hub, to Max and to the page:
     set_playground <path>  clear_instance_names_map  add_instance_names_map <name> <type>
     set_active_instance <name>  <name> prompt <text>  <name> new     echoed
     <name> queued                             waits for another instance's answer
-    <name> thinking                           the model started
     <name> tool <tool> <first line of what the tool answered>
     <name> answer <text>                      the whole answer, once
     <name> done <tokens> <ms>
@@ -35,9 +36,24 @@ Out of the hub, to Max and to the page:
     <name> error <message>
     server warning <text>                   something to fix (a bad path, an unknown type)
 
-Only to Max, when it sends a prompt:
+Only to Max, when a tool asks (get_instances, set_active_instance):
 
-    server prompt received
+    server get_instances                    Max answers `instances <name> <type> ...`
+
+To Max (and the pages), what happens to a prompt, whoever sent it; a stage is said
+once, when it changes:
+
+    server prompt <name> received             Bach has it
+    server prompt <name> queued <n>           <n> prompts are answered before it
+    server prompt <name> starting             its turn: the model is being set up (Claude Code starts)
+    server prompt <name> sent                 the model has the prompt (and, later, each tool's answer)
+    server prompt <name> thinking             it reasons
+    server prompt <name> writing              it writes the answer
+    server prompt <name> calling <tool>       it writes a tool call
+    server prompt <name> running <tool>       the tool runs, here in Bach
+    server prompt <name> done <tokens> <ms>
+    server prompt <name> stopped
+    server prompt <name> error <message>
 
 Only to Max, after each answer:
 
@@ -48,6 +64,7 @@ Only to Max, after each answer:
 Only to the page (Max does not need them):
 
     state <state> <model> <message>           the model: starting, loading, ready, no_model ...
+    <name> thinking                           its turn started (Max gets server prompt <name> ... instead)
     <name> delta <text>                       a piece of the answer
     <name> reasoning <text>                   a piece of the reasoning
     <name> note <text>                        docs added, a reply asked again
@@ -76,13 +93,15 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 from ..bridge.protocol import Word, line, words
 from ..tools.playground import prepare
-from ..tools.session import KINDS, NoTarget, Target, serve_targets
+from ..tools.session import KINDS, NoTarget, Target, serve_instances, serve_targets
 from .engine import Conversation
 
-SERVER_COMMANDS = ("set_playground", "clear_instance_names_map", "add_instance_names_map", "set_active_instance")
+SERVER_COMMANDS = ("set_playground", "clear_instance_names_map", "add_instance_names_map", "set_active_instance",
+                   "instances")
 INSTANCE_COMMANDS = ("prompt", "stop", "new")
-WEB_ONLY = ("state", "delta", "reasoning", "note", "tool_call", "tool_result", "history")
+WEB_ONLY = ("state", "thinking", "delta", "reasoning", "note", "tool_call", "tool_result", "history")
 HISTORY_SHOWN = 400  # messages of a saved conversation sent to a page that connects
+INSTANCES_WAIT = 1.5  # seconds a tool waits for Max to answer server get_instances
 
 
 @dataclass
@@ -119,13 +138,16 @@ class Hub:
         self._queue: Deque[Tuple[str, str]] = deque()
         self._wake = threading.Condition(self._lock)
         self._answering = ""                 # the instance whose prompt is being answered
+        self._said: List[Word] = []          # the stage of its answer last said to Max
         self._turn: Optional[Target] = None  # its target, while the tools work for it
         self._stopping = threading.Event()
+        self._map_answered = threading.Event()  # Max answered `server get_instances`
         self._running = True
         self._worker = threading.Thread(target=self._work, name="bach-hub", daemon=True)
         self._worker.start()
         bridge.on_line(lambda text: self.handle(text, "max"))
         serve_targets(self.target)
+        serve_instances(self)
         status.on_change(lambda: self._send(*self._state(), web_only=True))
 
     # ── Clients ────────────────────────────────────────────────────────── #
@@ -199,7 +221,9 @@ class Hub:
         elif head == "add_instance_names_map":
             self._add_instance(said[1:], echo)
         elif head == "set_active_instance":
-            self._set_active(said[1] if len(said) > 1 else "", echo)
+            self._set_active(said[1] if len(said) > 1 else "", said[2] if len(said) > 2 else "", echo)
+        elif head == "instances":
+            self._replace_map(said[1:])
         elif len(said) >= 2 and said[1] in INSTANCE_COMMANDS:
             name, command = said[0], said[1]
             if command == "prompt":
@@ -236,14 +260,27 @@ class Hub:
             if self.instances.get(name) not in (None, kind):
                 self._conversations.pop(name, None)  # another type: another way of working
             self.instances[name] = kind
-            first = self.active not in self.instances  # so that Claude's tools always have an instance
+            first = not self.active  # so that Claude's tools always have an instance
             if first:
                 self.active = name
         self._send("add_instance_names_map", name, kind, to_max=echo)
         if first:
             self._send("set_active_instance", name, to_max=echo)
 
-    def _set_active(self, name: str, echo: bool) -> None:
+    def _set_active(self, name: str, kind: str, echo: bool) -> None:
+        """The active instance. With its type (Max sends it), a name not yet in the map joins
+        it: Max may say so before it sends the map again."""
+        if kind:
+            if kind not in KINDS:
+                self._warn(f"{name}: unknown type {kind} (one of {', '.join(KINDS)})")
+                return
+            with self._lock:
+                joins = self.instances.get(name) != kind
+                if joins:
+                    self._conversations.pop(name, None)  # another type: another way of working
+                    self.instances[name] = kind
+            if joins:
+                self._send("add_instance_names_map", name, kind, to_max=echo)
         with self._lock:
             known = name in self.instances
             if known:
@@ -252,6 +289,52 @@ class Hub:
             self._send("set_active_instance", name, to_max=echo)
         else:
             self._warn(f"set_active_instance: no instance {name or '(no name)'} in the map")
+
+    def _replace_map(self, args: List[str]) -> None:
+        """Max's whole map (`instances <name> <type> ...`): it replaces the hub's, and the pages
+        get it as usual. An active instance no longer there gives way to the first."""
+        pairs = [(args[i], args[i + 1]) for i in range(0, len(args) - 1, 2)]
+        bad = [f"{name} {kind}" for name, kind in pairs if kind not in KINDS]
+        if len(args) % 2 or bad:
+            self._warn(f"instances: expected <name> <type> pairs, got {' '.join(args)}")
+        with self._lock:
+            fresh = {name: kind for name, kind in pairs if kind in KINDS}
+            for name, kind in self.instances.items():
+                if fresh.get(name) != kind:
+                    self._conversations.pop(name, None)
+            self.instances = fresh
+            moved = self.active not in fresh
+            if moved:
+                self.active = next(iter(fresh), "")
+            active = self.active
+        self._send("clear_instance_names_map", to_max=False)
+        for name, kind in fresh.items():
+            self._send("add_instance_names_map", name, kind, to_max=False)
+        if moved and active:
+            self._send("set_active_instance", active, to_max=False)
+        self._map_answered.set()
+
+    # ── The instances, for Claude's tools (tools/instance_tools.py) ──────── #
+
+    def ask_instances(self, timeout: float = INSTANCES_WAIT) -> bool:
+        """Ask Max for its map (server get_instances); True if it answered in time."""
+        self._map_answered.clear()
+        if not self.bridge.send(line("server", "get_instances")):
+            return False
+        return self._map_answered.wait(timeout)
+
+    def instance_map(self) -> Tuple[Dict[str, str], str]:
+        with self._lock:
+            return dict(self.instances), self.active
+
+    def choose(self, name: str) -> str:
+        """Make name the active instance, telling Max and the pages; "" if done, else why not."""
+        with self._lock:
+            known = name in self.instances
+        if not known:
+            return f"no instance {name or '(no name)'} in the patch"
+        self._set_active(name, "", echo=True)
+        return ""
 
     def _refusal(self, name: str) -> str:
         """Why a prompt to this instance cannot be answered now, or ""."""
@@ -266,23 +349,35 @@ class Hub:
             return self.status.message or f"the model is not ready ({self.status.state})"
         return ""
 
+    def _report(self, name: str, *said: Word) -> None:
+        """server prompt <name> <stage> [detail]: what happens to the prompt, for Max."""
+        self._send("server", "prompt", name, *said)
+
+    def _stage(self, name: str, *said: Word) -> None:
+        """A stage of the answer, said only when it changes."""
+        if list(said) != self._said:
+            self._said = list(said)
+            self._report(name, *said)
+
     def _prompt(self, name: str, text: str, echo: bool) -> None:
-        if not echo:  # Max is told its prompt arrived
-            self.bridge.send(line("server", "prompt", "received"))
+        self._report(name, "received")
         if not text:
             self._send(name, "error", "the prompt is empty")
+            self._report(name, "error", "the prompt is empty")
             return
         with self._lock:
             refusal = self._refusal(name)
             if not refusal:
-                waits = bool(self._answering or self._queue)
+                ahead = len(self._queue) + (1 if self._answering else 0)
                 self._queue.append((name, text))
         if refusal:
             self._send(name, "error", refusal)
+            self._report(name, "error", refusal)
             return
         self._send(name, "prompt", text, to_max=echo)
-        if waits:
+        if ahead:
             self._send(name, "queued")
+            self._report(name, "queued", ahead)
         with self._wake:
             self._wake.notify()
 
@@ -299,6 +394,7 @@ class Hub:
                 conversation.cancel()
         elif waiting:
             self._send(name, "stopped")
+            self._report(name, "stopped")
 
     def _new(self, name: str, echo: bool) -> None:
         with self._lock:
@@ -326,7 +422,7 @@ class Hub:
                 raise NoTarget("no instance is active: select one (set_active_instance <name>)")
             kind = self.instances.get(self.active)
             if kind is None:
-                raise NoTarget(f"no instance {self.active} in the map")
+                raise NoTarget(f"the active instance {self.active} is not in the map: choose one (set_active_instance <name>)")
             return Target(self.active, kind, self.playground)
 
     # ── Answering ──────────────────────────────────────────────────────── #
@@ -339,6 +435,7 @@ class Hub:
         if conversation is not None:
             conversation.cancel()
         serve_targets(None)
+        serve_instances(None)
 
     def _work(self) -> None:
         while True:
@@ -355,6 +452,7 @@ class Hub:
             except Exception as exc:  # noqa: BLE001 — said, never lost; the next prompt goes on
                 self._send(name, "error", f"{type(exc).__name__}: {exc}")
                 self._send(name, "done", 0, 0)
+                self._report(name, "error", f"{type(exc).__name__}: {exc}")
             finally:
                 with self._lock:
                     self._answering = ""
@@ -369,22 +467,32 @@ class Hub:
                 self._turn = target
         if refusal:
             self._send(name, "error", refusal)
+            self._report(name, "error", refusal)
             return
         before = len(conversation.history)
         started, tokens, answer, finish = time.time(), 0, [], "stop"
-        self._send(name, "thinking")
+        self._said = []
+        self._send(name, "thinking", web_only=True)  # the page's busy sign; Max hears the stages
+        self._stage(name, "starting")
         events = conversation.send(text)
         try:
             for event in events:
                 if self._stopping.is_set():
                     break
                 kind = event["type"]
-                if kind == "text":
+                if kind == "stage":
+                    self._stage(name, event["stage"], *event.get("detail", []))
+                elif kind == "text":
                     answer.append(event["text"])
+                    self._stage(name, "writing")
                     self._send(name, "delta", event["text"], web_only=True)
                 elif kind == "thinking":
+                    self._stage(name, "thinking")
                     self._send(name, "reasoning", event["text"], web_only=True)
+                elif kind == "calling":
+                    self._stage(name, "calling", event["name"])
                 elif kind == "tool_call":
+                    self._stage(name, "running", event["name"])
                     self._send(name, "tool_call", event["name"],
                                json.dumps(event["arguments"], ensure_ascii=False), web_only=True)
                 elif kind == "tool_result":
@@ -398,6 +506,7 @@ class Hub:
                     self._send(name, "note", event["reason"], web_only=True)
                 elif kind == "error":
                     self._send(name, "error", event["message"])
+                    self._report(name, "error", event["message"])
                 elif kind == "done":
                     finish = event["finish"]
         finally:
@@ -405,15 +514,18 @@ class Hub:
             self._save(conversation, target, before, text)
         if self._stopping.is_set():
             self._send(name, "stopped")
+            self._report(name, "stopped")
             return
-        if finish == "length":
-            self._send(name, "error", "the answer reached the reply limit ([generation] max_tokens)")
-        elif finish == "rounds":
-            self._send(name, "error", "stopped after [chat] max_tool_rounds tool calls")
+        cut = {"length": "the answer reached the reply limit ([generation] max_tokens)",
+               "rounds": "stopped after [chat] max_tool_rounds tool calls"}.get(finish)
+        if cut:
+            self._send(name, "error", cut)
+            self._report(name, "error", cut)
         whole, ms = "".join(answer).strip(), int((time.time() - started) * 1000)
         if whole:
             self._send(name, "answer", whole)
         self._send(name, "done", tokens, ms)
+        self._report(name, "done", tokens, ms)
         self.bridge.send(line("server", "answer", name, whole))
         self.bridge.send(line("server", "answer", "tokens", tokens))
         self.bridge.send(line("server", "answer", "time", ms))

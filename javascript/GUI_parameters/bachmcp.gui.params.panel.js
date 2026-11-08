@@ -1,7 +1,8 @@
 /*
 bachmcp.gui.params.panel.js
 ---------------------------
-The Panel: a title row (the algorithm and its kind), then two sections.
+The Panel: a title row (the algorithm, its kind, bypass and "set active": the
+instance Claude's tools work for, sent as "set_as_active_instance"), then two sections.
 Drags land on each slider's grid; alt lets one through. "Options": reset
 all; then bypass ("bypass 0|1"), repeat ("repeat"); pitch cards toggle ½ | ¼ | free ("snap 0|1|3"), time cards 100ms | 10ms | free; a transformer adds its source card: how many notes, write
 (write_to_playground), capture (capture_source) and the source mode as two
@@ -287,7 +288,9 @@ Panel.prototype.valueWidth = function () {
 
 /**
  * Place everything for this width (and height, when known); returns the height
- * the panel needs. Title row: the algorithm, its kind and the bypass toggle.
+ * the panel needs. Title row: the algorithm, its kind, the bypass toggle and
+ * "set active" (always: to make this instance the one Claude works on again, or
+ * the one it starts on before it has an algorithm).
  * "output": repeat, write. Pitch and time cards carry their snap toggle
  * (see snapState). "source"
  * (transformers, selectors; its header says how many notes): capture and the
@@ -310,14 +313,15 @@ Panel.prototype.layout = function (width, height) {
 Panel.prototype.place = function (width, compact) {
   this.width = width;
   this.rows = [];
-  var p = { within: null, bypass: null, repeat: null, write: null, capture: null, mode: null, only: null,
+  var p = { setActive: null, within: null, bypass: null, repeat: null, write: null, capture: null, mode: null, only: null,
     snap: null, reset: null, sections: [] };
   this.places = p;
   var inner = width - 2 * M.pad;
   var section = compact ? 14 : M.section;
   var y = M.title + M.gap;
+  p.setActive = { x: width - M.pad - 62, y: (M.title - M.button) / 2, w: 62, h: M.button };
   if (!this.items.length && !this.title) return y + M.row + M.status;
-  p.bypass = { x: width - M.pad - 56, y: (M.title - M.button) / 2, w: 56, h: M.button };
+  p.bypass = { x: p.setActive.x - 4 - 56, y: (M.title - M.button) / 2, w: 56, h: M.button };
   // output
   p.sections.push({ text: "output", y: y, h: section });
   y += section;
@@ -388,7 +392,7 @@ Panel.prototype.paint = function (g, width, height) {
   box(g, 0, 0, width, M.title, THEME.header);
   box(g, 0, M.title - 1, width, 1, THEME.line);
   var kindText = this.title ? ({ transformer: "transformer", selector: "selector" }[this.kind] || "generator") : "";
-  var titleRight = p.bypass ? p.bypass.x - 6 : width - M.pad;
+  var titleRight = p.bypass ? p.bypass.x - 6 : p.setActive ? p.setActive.x - 6 : width - M.pad;
   if (kindText) {
     var kw = kindText.length * 6 + 14;
     var kr = { x: titleRight - kw, y: (M.title - 16) / 2, w: kw, h: 16 };
@@ -396,13 +400,16 @@ Panel.prototype.paint = function (g, width, height) {
     label(g, kindText, kr, "center", THEME.dim, THEME.smallSize);
     titleRight = kr.x - 6;
   }
-  // no algorithm: the instance's name (set_name) over "No algorithm loaded.", or that alone
-  label(g, this.title || this.name || "No algorithm loaded.", { x: M.pad + 2, y: 0, w: titleRight - M.pad - 2, h: M.title },
-    "left", this.title || this.name ? THEME.text : THEME.dim, THEME.titleSize, THEME.bold);
-  if (!this.items.length && !this.title && this.name) {
+  // no algorithm: the instance's name (set_name), if any, over "No algorithm loaded."
+  if (this.title || this.name) {
+    label(g, this.title || this.name, { x: M.pad + 2, y: 0, w: titleRight - M.pad - 2, h: M.title },
+      "left", THEME.text, THEME.titleSize, THEME.bold);
+  }
+  if (!this.items.length && !this.title) {
     label(g, "No algorithm loaded.", { x: M.pad + 2, y: M.title + M.gap, w: width - 2 * M.pad, h: M.row }, "left", THEME.dim);
   }
   if (p.bypass) button(g, p.bypass, this.bypass ? "bypassed" : "bypass", this.bypass, this.hot(p.bypass));
+  if (p.setActive) button(g, p.setActive, "set active", false, this.hot(p.setActive));
   for (var k = 0; k < p.sections.length; k++) {
     var sec = p.sections[k];
     var text = sec.text.toUpperCase(), tc = THEME.faint;
@@ -473,6 +480,7 @@ Panel.prototype.message = function (item) {
 Panel.prototype.mouseDown = function (x, y, mods) {
   var p = this.width ? this.ui(this.width) : {};
   this.active = null;
+  if (p.setActive && inside(p.setActive, x, y)) return [["set_as_active_instance"]];
   if (p.capture && inside(p.capture, x, y)) return [["capture_source"]];
   if (p.write && inside(p.write, x, y)) return [["write_to_playground"]];
   if (p.within && inside(p.within, x, y)) {

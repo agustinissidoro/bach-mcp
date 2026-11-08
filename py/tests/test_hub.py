@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
@@ -19,7 +20,9 @@ from bach_mcp.chat.engine import Conversation  # noqa: E402
 from bach_mcp.chat.hub import Hub  # noqa: E402
 from bach_mcp.config import Config  # noqa: E402
 from bach_mcp.prompt.skill import load_skill  # noqa: E402
+from bach_mcp.tools.instance_tools import register_instance_tools  # noqa: E402
 from bach_mcp.tools.session import NoTarget, target  # noqa: E402
+from mcp.server.fastmcp import FastMCP  # noqa: E402
 from bach_mcp.utilities.status import Status  # noqa: E402
 from fakemodel import FakeClient, text_reply, tool_reply  # noqa: E402
 
@@ -100,7 +103,18 @@ class HubTest(unittest.TestCase):
         return Conversation(self.client, self.tools, RAW, None, 8, kind)
 
     def heard(self, web_only=None):
-        return [m.text for m in self.clients if web_only is None or m.web_only == web_only]
+        """What the pages heard, without the stage reports (stages() has them)."""
+        return [m.text for m in self.clients if (web_only is None or m.web_only == web_only)
+                and not m.text.startswith("server prompt ")]
+
+    def stages(self, name):
+        """What Max was told about name's prompt: server prompt <name> <what...>, without the times."""
+        out = []
+        for text in self.bridge.sent:
+            said = words(text)
+            if said[:3] == ["server", "prompt", name]:
+                out.append(" ".join(said[3:5] if said[3] == "done" else said[3:]))
+        return out
 
     def answered(self, name, timeout=3.0):
         """Wait until the hub has said `<name> done`."""
@@ -192,6 +206,91 @@ class MapTests(HubTest):
                                                             os.path.join(self.playground, "algorithms", "scales1.js")))
 
 
+class ActiveInstanceTests(HubTest):
+    """Max says which instance is active, with its type; Claude asks for the map and chooses."""
+
+    def setUp(self):
+        super().setUp()
+        self.answer = None  # what Max answers to server get_instances
+        send = self.bridge.send
+
+        def send_and_answer(text):
+            send(text)
+            if text == "server get_instances" and self.answer is not None:
+                self.bridge.from_max(self.answer)
+            return True
+
+        self.bridge.send = send_and_answer
+        app = FastMCP("t")
+        register_instance_tools(app)
+        self.tools = {t.name: t for t in app._tool_manager.list_tools()}
+
+    def call(self, tool, **arguments):
+        return self.tools[tool].fn(**arguments)
+
+    def test_max_sends_the_name_and_the_type(self):
+        self.setup_patch()
+        self.bridge.from_max("set_active_instance chords1 selector")
+        self.assertEqual((self.hub.active, self.hub.instances["chords1"]), ("chords1", "selector"))
+        self.assertEqual(self.heard(), ["add_instance_names_map chords1 selector", "set_active_instance chords1"])
+        self.assertEqual(self.bridge.sent, [], "Max is not told what it said")
+        self.bridge.from_max("set_active_instance notes1 writer")
+        self.assertEqual(self.heard()[-1], "set_active_instance notes1", "known: only the active one changes")
+        self.bridge.from_max("set_active_instance x mixer")
+        self.assertIn("unknown type mixer", self.bridge.sent[-1])
+        self.assertEqual(self.hub.active, "notes1")
+
+    def test_a_map_sent_again_keeps_the_active_instance(self):
+        self.setup_patch()
+        self.bridge.from_max("set_active_instance notes1 writer")
+        self.bridge.from_max("clear_instance_names_map")
+        self.bridge.from_max("add_instance_names_map scales1 generator")
+        self.bridge.from_max("add_instance_names_map notes1 writer")
+        self.assertEqual(target().name, "notes1")
+
+    def test_the_answer_to_get_instances_replaces_the_map(self):
+        self.setup_patch()
+        self.bridge.from_max("set_active_instance notes1")
+        self.clients.clear()
+        self.assertTrue(self.bridge.from_max("instances scales1 generator chords1 selector"))
+        self.assertEqual(self.hub.instances, {"scales1": "generator", "chords1": "selector"})
+        self.assertEqual(self.hub.active, "scales1", "the active one went: the first takes its place")
+        self.assertEqual(self.heard(), ["clear_instance_names_map", "add_instance_names_map scales1 generator",
+                                        "add_instance_names_map chords1 selector", "set_active_instance scales1"])
+        self.bridge.from_max("instances")
+        self.assertEqual((self.hub.instances, self.hub.active), ({}, ""))
+
+    def test_get_instances_asks_max(self):
+        self.setup_patch()
+        self.answer = "instances scales1 generator notes1 writer chords1 selector"
+        self.assertEqual(self.call("get_instances"),
+                         "active: scales1 (generator)\nscales1 generator\nnotes1 writer\nchords1 selector")
+        self.assertEqual(self.bridge.sent, ["server get_instances"])
+
+    def test_get_instances_without_an_answer_gives_the_last_map(self):
+        self.setup_patch()
+        with unittest.mock.patch("bach_mcp.chat.hub.INSTANCES_WAIT", 0.05):
+            text = self.call("get_instances")
+        self.assertTrue(text.startswith("active: scales1 (generator)\nscales1 generator\nnotes1 writer"))
+        self.assertIn("Max did not answer", text)
+
+    def test_set_active_instance_tells_max_and_the_products_follow(self):
+        self.setup_patch()
+        self.assertEqual(self.call("set_active_instance", name="notes1"), "active: notes1 (writer)")
+        self.assertEqual(self.bridge.sent, ["set_active_instance notes1"])
+        self.assertEqual(target().name, "notes1")
+
+    def test_set_active_instance_asks_max_for_a_name_it_does_not_know(self):
+        self.setup_patch()
+        self.answer = "instances scales1 generator notes1 writer fresh1 transformer"
+        self.assertEqual(self.call("set_active_instance", name="fresh1"), "active: fresh1 (transformer)")
+        self.answer = "instances scales1 generator"
+        text = self.call("set_active_instance", name="nobody")
+        self.assertTrue(text.startswith("ERROR: no instance nobody in the patch"))
+        self.assertIn("scales1 generator", text)
+        self.assertEqual(target().name, "scales1")
+
+
 class PromptTests(HubTest):
     def test_a_prompt_from_max_is_answered_for_its_instance(self):
         self.setup_patch()
@@ -203,13 +302,15 @@ class PromptTests(HubTest):
         self.assertIn('notes1 delta "Three "', heard)
         self.assertIn('notes1 answer "Three notes for you."', heard)
         self.assertTrue(heard[-1].startswith("notes1 done 7 "))
-        self.assertEqual(self.bridge.sent.pop(0), "server prompt received")
-        self.assertEqual([t.split()[1] for t in self.bridge.sent[:3]], ["thinking", "answer", "done"],
-                         "Max gets no echo of its own prompt, and no pieces")
-        self.assertEqual(self.bridge.sent[3:5], ['server answer notes1 "Three notes for you."',
-                                                 "server answer tokens 7"])
-        self.assertTrue(self.bridge.sent[5].startswith("server answer time "))
-        self.assertEqual(len(self.bridge.sent), 6)
+        self.assertEqual(self.stages("notes1"), ["received", "starting", "sent", "writing", "done 7"],
+                         "each stage once, as it happens")
+        sent = [t for t in self.bridge.sent if not t.startswith("server prompt ")]
+        self.assertEqual([t.split()[1] for t in sent[:2]], ["answer", "done"],
+                         "Max gets no echo of its own prompt, no pieces, and no thinking: the stages say it")
+        self.assertEqual(sent[2:4], ['server answer notes1 "Three notes for you."', "server answer tokens 7"])
+        self.assertTrue(sent[4].startswith("server answer time "))
+        self.assertEqual(len(sent), 5)
+        self.assertIn("notes1 thinking", self.heard(web_only=True), "the page still gets it")
         self.assertIn("You are writing for a writer", self.client.requests[0]["messages"][0]["content"])
 
     def test_the_tools_work_for_the_prompted_instance_not_the_active_one(self):
@@ -219,6 +320,10 @@ class PromptTests(HubTest):
         self.hub.handle('scales1 prompt "a scale"', "web")
         self.answered("scales1")
         self.assertEqual(self.tools.calls, [("send_algorithm", "scales1")])
+        self.assertEqual(self.stages("scales1")[:-1], ["received", "starting", "sent", "calling send_algorithm",
+                                                       "running send_algorithm", "sent", "writing"],
+                         "the model reads the tool's answer: sent again")
+        self.assertTrue(self.stages("scales1")[-1].startswith("done "))
         self.assertIn('scales1 tool send_algorithm "called for scales1"', self.bridge.sent)
         self.assertEqual(target().name, "notes1", "after the turn, the active one again")
 
@@ -226,6 +331,7 @@ class PromptTests(HubTest):
         self.hub.handle("add_instance_names_map scales1 generator", "web")
         self.hub.handle("scales1 prompt hello", "web")
         self.hub.handle("ghost prompt hello", "web")
+        ghost = self.stages("ghost")
         before = self.heard()
         self.setup_patch()
         self.hub.handle("scales1 prompt", "web")
@@ -236,6 +342,7 @@ class PromptTests(HubTest):
                                   'ghost error "no instance ghost in the map"',
                                   'scales1 error "the prompt is empty"',
                                   'scales1 error "the model is not ready (loading)"'])
+        self.assertEqual(ghost, ["received", "error no instance ghost in the map"])
 
     def test_without_a_local_model_prompts_are_refused(self):
         self.hub.close()
@@ -290,6 +397,7 @@ class PromptTests(HubTest):
         self.assertEqual(self.heard()[-1], "notes1 queued")
         self.hub.handle("notes1 stop", "web")
         self.assertEqual(self.heard()[-1], "notes1 stopped")
+        self.assertEqual(self.stages("notes1"), ["received", "queued 1", "stopped"])
         self.go.set()
         self.answered("scales1")
         self.assertFalse(any(t.startswith("notes1 thinking") for t in self.heard()), "a stopped prompt is never answered")

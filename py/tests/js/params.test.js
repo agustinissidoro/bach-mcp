@@ -99,15 +99,15 @@ test("an empty panel: No algorithm loaded., under the set_name name if there is 
     m.ctx.paint();
     return m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
   };
-  assert.deepEqual(texts(), ["No algorithm loaded."]);
+  assert.deepEqual(texts(), ["No algorithm loaded.", "set active"]);
   m.send("set_name", "t1");
-  assert.deepEqual(texts(), ["t1", "No algorithm loaded."]);
+  assert.deepEqual(texts(), ["t1", "No algorithm loaded.", "set active"]);
   m.send("set_name");
-  assert.deepEqual(texts(), ["No algorithm loaded."]);
+  assert.deepEqual(texts(), ["No algorithm loaded.", "set active"], "set active is always there");
   const named = loadPanel({ width: 200, height: 60, args: ["t2"] });
   named.ctx.paint();
   assert.deepEqual(named.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]),
-                   ["t2", "No algorithm loaded."], "the box's first argument is the name");
+                   ["t2", "No algorithm loaded.", "set active"], "the box's first argument is the name");
 });
 
 test("slider: click jumps, drag follows, shift drag is fine, double-click resets", () => {
@@ -445,6 +445,22 @@ test("reset all in the options, and hovering a card redraws only when it changes
 });
 
 const M_TITLE = 30;
+
+test("set active sits in the title row, also with no algorithm, and sends set_as_active_instance", () => {
+  const m = panelWith(KINDS);
+  const panel = m.ctx.panel;
+  const p = panel.ui(panel.width);
+  assert.ok(p.setActive.y < M_TITLE && p.bypass.x + p.bypass.w <= p.setActive.x, "on top, right of bypass");
+  m.ctx.onclick(p.setActive.x + 2, p.setActive.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  assert.deepEqual(sent(m), [["set_as_active_instance"]]);
+  const empty = loadPanel({ width: 320, height: 100 });
+  const q = empty.ctx.panel.ui(320);
+  assert.ok(q.setActive && !q.bypass, "an instance with no algorithm can be made active");
+  empty.ctx.onclick(q.setActive.x + 2, q.setActive.y + 2, 1, 0, 0, 0, 0, 0);
+  release(empty);
+  assert.deepEqual(sent(empty), [["set_as_active_instance"]]);
+});
 
 test("bypass sits in the title row; a pitch card's toggle cycles ½ | ¼ | free, sets its grid and is sent as snap", () => {
   const m = panelWith(KINDS);

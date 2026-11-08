@@ -12,7 +12,8 @@ Instance. Every product carries the name of the instance it is for, and the
 instance's type decides what the tools accept (a writer writes notes, a
 generator or a transformer an algorithm). The tools never get a name from the
 model: they ask target(), which the hub (chat/hub.py) answers, with the
-instance of the prompt being answered, else the active one.
+instance of the prompt being answered, else the active one. A Claude written
+to directly chooses the active one itself (instances(): instance_tools.py).
 
     Target(name, kind, playground)
       .algorithms .scores .prompts           the playground's folders
@@ -24,7 +25,7 @@ from __future__ import annotations
 import os
 import threading
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional, Protocol, Tuple
 
 KINDS = ("generator", "transformer", "selector", "writer")
 
@@ -101,5 +102,30 @@ def target() -> Target:
     return _provider()
 
 
-__all__ = ["KINDS", "Target", "NoTarget", "serve_targets", "target",
-           "new_conversation", "use_conversation", "conversation"]
+# The instances themselves, for a Claude written to directly: it has no prompt line, so it
+# lists them and chooses the active one (instance_tools.py). The hub answers.
+
+class Instances(Protocol):
+    def ask_instances(self) -> bool: ...                      # asks Max; True if it answered
+    def instance_map(self) -> Tuple[Dict[str, str], str]: ...  # (name -> type, the active one)
+    def choose(self, name: str) -> str: ...                    # "" when done, else why not
+
+
+_instances: Optional[Instances] = None
+
+
+def serve_instances(manager: Optional[Instances]) -> None:
+    """Who lists the instances and sets the active one (None: nobody)."""
+    global _instances
+    _instances = manager
+
+
+def instances() -> Instances:
+    """The hub's instances. Raises NoTarget when there is no hub (nothing from the patch)."""
+    if _instances is None:
+        raise NoTarget("no instances: Bach has no hub here (the patch's bachmcp.server is not running)")
+    return _instances
+
+
+__all__ = ["KINDS", "Target", "NoTarget", "serve_targets", "target", "Instances", "serve_instances",
+           "instances", "new_conversation", "use_conversation", "conversation"]

@@ -34,8 +34,8 @@ timeout 1, then processing 0. What happens depends on the source mode:
                   kept as the source but never transformed by itself (no loop
                   through a roll).
 
-process_only_selection 1 transforms only the selected notes: those flagged 1
-in slot `selection_slot` (default 11; bachmcp.runner.selection.js, a selector
+process_only_selection 1 transforms only the selected notes: those with bit
+16 in their flag, or in their chord's (bachmcp.runner.selection.js; a selector
 writes it). The algorithm gets a score of those notes only; the others are put
 back unchanged around its result. process_only_selection 0 (default): the
 whole score.
@@ -55,9 +55,9 @@ Messages:
   input dictionary <n>    a source score; input clear forgets it
   capture_source          "dump" out of outlet 1; the next input becomes the source
   source_mode 0/1         0 destructive, 1 non-destructive (see above)
-  input_mode 0/1          0 the whole score (default), 1 only the notes flagged in the slot named "selected"
+  input_mode 0/1          the same as process_only_selection (kept for old patches)
   process_only_selection 0/1  0 the whole score (default), 1 only the selected notes (see above)
-  selection_slot <n>      the slot that flags the selected notes (default 11)
+  selection_slot <n>      ignored (the selection is the flags now; kept for old patches)
   snap 0/1/3              the output's pitches: 0 semitones, 1 quarter tones, 3 free (default)
   bypass 0/1              1: runs do nothing; a score at the inlet goes straight out of outlet 0
   repeat                  the last score sent, out of outlet 0 again
@@ -95,9 +95,7 @@ const source = {
   destructive: false,       // source_mode 0: see the top
   open: false,              // capture_source: the next input becomes the source
   processing: false,        // a dump went out, the score has not come in yet
-  selectedOnly: false,      // process_only_selection 1
-  byName: false,            // input_mode 1: the slot is the one named "selected"
-  slot: 11,                 // selection_slot
+  selectedOnly: false,      // process_only_selection 1: only the notes with flag 16 (on the note or its chord)
   rest: null,               // process_only_selection 1: the notes left out of the run, put back after it
 };
 
@@ -108,12 +106,7 @@ const engine = createEngine(
     source: () => {
       source.rest = null;
       if (!source.selectedOnly || !source.score) return source.score;
-      let slot = source.slot;
-      if (source.byName) {
-        slot = sel.selectionSlot(source.score);
-        if (slot === null) throw new Error(`input_mode 1: the source has no slot named "${sel.SLOT_NAME}" (a selector writes it)`);
-      }
-      const parts = sel.split(source.score, slot);
+      const parts = sel.split(source.score);
       source.rest = parts.rest;
       return parts.picked;
     },
@@ -170,13 +163,11 @@ function source_mode(flag) {
   outlet(1, "source_mode", m);
 }
 
-/** 0 the whole score, 1 only its selected notes. */
-/** As before: 1 transforms only the notes flagged in the slot named "selected". */
+/** 0 the whole score, 1 only its selected notes: as process_only_selection. */
 function input_mode(flag) {
   const m = Number(flag);
   if (m !== 0 && m !== 1) return engine.fail(`input_mode is 0 (the whole score) or 1 (only the selected notes), got ${flag}`);
   source.selectedOnly = m === 1;
-  source.byName = m === 1;
   outlet(1, "input_mode", m);
 }
 
@@ -184,16 +175,12 @@ function process_only_selection(flag) {
   const m = Number(flag);
   if (m !== 0 && m !== 1) return engine.fail(`process_only_selection is 0 (the whole score) or 1 (only the selected notes), got ${flag}`);
   source.selectedOnly = m === 1;
-  source.byName = false;
   outlet(1, "process_only_selection", m);
   if (engine.state.autorun && engine.state.compiled) engine.schedule();
 }
 
-function selection_slot(n) {
-  const slot = Number(n);
-  if (!Number.isInteger(slot) || slot < 1 || slot > 30) return engine.fail(`selection_slot is a slot number 1..30, got ${n}`);
-  source.slot = slot;
-}
+/** Ignored: the selection is bach's flag 16 now. Kept so that old patches do not fail. */
+function selection_slot() {}
 
 function setProcessing(on) {
   if (on) timeout.schedule(PROCESSING_TIMEOUT_MS);

@@ -17,6 +17,7 @@ message from the user it:
 and reports each step as an event, as it happens:
 
     {"type": "mode", "mode": "algo"}                      the mode is set by a prefix
+    {"type": "stage", "stage": "sent"}                    a request went to the model (each round)
     {"type": "docs", "added": ["strings/cello", ...]}     docs appended to the message
     {"type": "thinking", "text": ...}                     a piece of reasoning
     {"type": "text", "text": ...}                         a piece of the answer
@@ -131,6 +132,7 @@ class Conversation:
         for attempt in range(1 + LOOP_RETRIES):
             started = time.time()
             reply: Optional[Reply] = None
+            yield {"type": "stage", "stage": "sent"}  # the model now reads it: nothing comes until its first token
             try:
                 for kind, value in self.client.stream(messages, tools, max_tokens):
                     if kind == "reply":

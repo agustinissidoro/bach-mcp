@@ -38,6 +38,11 @@ if mode == "login":
     sys.exit(1)
 if mode == "slow":
     time.sleep(30)
+say(type="system", subtype="status", status="requesting", session_id="s1")
+say(type="stream_event", session_id="s1", event={{"type": "message_start"}})
+say(type="stream_event", session_id="s1", event={{"type": "content_block_start", "content_block": {{"type": "thinking"}}}})
+say(type="stream_event", session_id="s1", event={{"type": "content_block_start", "content_block": {{"type": "text", "text": ""}}}})
+say(type="stream_event", session_id="s1", event={{"type": "content_block_start", "content_block": {{"type": "tool_use", "name": "mcp__bach__send_algorithm"}}}})
 say(type="assistant", session_id="s1", message={{"content": [
     {{"type": "text", "text": "Writing it. "}},
     {{"type": "tool_use", "id": "t1", "name": "mcp__bach__send_algorithm", "input": {{"code": "x"}}}}]}})
@@ -70,13 +75,18 @@ class HeadlessTests(unittest.TestCase):
             return [json.loads(row) for row in f]
 
     def test_a_message_becomes_events(self):
-        events = list(self.chat.send("a canon"))
+        events = [e for e in self.chat.send("a canon") if e["type"] != "stage"]
         self.assertEqual([e["type"] for e in events], ["text", "tool_call", "tool_result", "text", "round", "done"])
         self.assertEqual(events[1]["name"], "send_algorithm")
         self.assertEqual(events[2], {"type": "tool_result", "id": "t1", "name": "send_algorithm", "result": "OK. loaded"})
         self.assertEqual(events[4]["usage"]["completion_tokens"], 42)
         self.assertEqual(self.chat.history[-1],
                          {"role": "assistant", "content": "Writing it. Done.", "session": "s1"})
+
+    def test_the_stages_come_from_the_partial_messages(self):
+        stages = [[e["stage"], *e.get("detail", [])] for e in self.chat.send("a canon") if e["type"] == "stage"]
+        self.assertEqual(stages, [["sent"], ["thinking"], ["writing"], ["calling", "send_algorithm"]])
+        self.assertIn("--include-partial-messages", self.runs()[0]["args"])
 
     def test_claude_gets_only_the_tools_and_the_skill_of_its_instance(self):
         list(self.chat.send("a canon"))

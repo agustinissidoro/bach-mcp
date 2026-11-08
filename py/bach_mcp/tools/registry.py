@@ -1,13 +1,14 @@
 """
 registry.py
 -----------
-Builds the one MCP app that holds the 13 tools. Both doors use it: the Claude
+Builds the one MCP app that holds the 15 tools. Both doors use it: the Claude
 door serves it over MCP, the local chat calls its tools in-process. A tool is
 defined once, here and in the modules it registers:
 
     pitch_tools.py  exact pitch arithmetic in midicents (p2mc, get_chord, ...)
     score_tools.py  write_score, read_score, clear_score: the JSON score
     algo_tools.py   send_algorithm: a JavaScript algorithm run in Max
+    instance_tools.py  get_instances, set_active_instance: which instance the others serve
 
 They speak bach's hierarchy and units as JSON, never llll. Which instance a
 call is for, and so where its files go, the tools ask session.py.
@@ -20,6 +21,7 @@ from typing import Any, Dict, Optional
 from mcp.server.fastmcp import FastMCP
 
 from .algo_tools import register_algo_tools
+from .instance_tools import register_instance_tools
 from .pitch_tools import register_pitch_tools
 from .score_tools import register_score_tools
 
@@ -87,4 +89,5 @@ def create_tools(bridge: Any, node: str = "node", log_calls: bool = True,
     register_pitch_tools(mcp)
     register_score_tools(mcp, bridge)
     register_algo_tools(mcp, bridge, node)
+    register_instance_tools(mcp)
     return mcp
