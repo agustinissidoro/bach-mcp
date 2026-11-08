@@ -1,6 +1,6 @@
 # bachjson-complete — declaration
 
-// this is a 1:1 translation of bach-lll syntax to json
+// this is a 1:1 translation of bach-llll syntax to json
 
 ```jsonc
 {
@@ -55,7 +55,7 @@
               },
               "articulations": [ string ],     // optional, e.g. "staccato"
               "name": [ string | integer | float ],  // optional
-              "flag": integer                  // 1 locked + 2 muted + 4 solo
+              "flag": integer                  // 1 locked + 2 muted + 4 solo + 16 selected
             }
           ],
           "name": [ string | integer | float ],  // optional
