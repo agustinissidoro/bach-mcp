@@ -107,8 +107,9 @@ function mark(score, addresses) {
   const keep = new Set(addresses.map((a) => a.join(" ")));
   const out = copy(score);
   (out.voices || []).forEach((v, vi) => ((v && v.chords) || []).forEach((c, ci) => {
+    if (!c) return;
     c.flag = (Number(c.flag) || 0) & ~SELECTED;
-    ((c && c.notes) || []).forEach((n, ni) => {
+    (c.notes || []).forEach((n, ni) => {
       const flag = (Number(n.flag) || 0) & ~SELECTED;
       n.flag = keep.has(`${vi + 1} ${ci + 1} ${ni + 1}`) ? flag | SELECTED : flag;
     });

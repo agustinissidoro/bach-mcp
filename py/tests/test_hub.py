@@ -2,6 +2,7 @@
 instances, the active instance and one conversation per instance; and the web app around it.
 Run: python -m unittest discover -s py/tests"""
 
+import asyncio
 import json
 import os
 import re
@@ -23,7 +24,9 @@ from bach_mcp.config import Config  # noqa: E402
 from bach_mcp.prompt.docs import DocLibrary  # noqa: E402
 from bach_mcp.prompt.skill import load_skill  # noqa: E402
 from bach_mcp.tools.instance_tools import register_instance_tools  # noqa: E402
-from bach_mcp.tools.session import NoTarget, target  # noqa: E402
+from bach_mcp.bridge.max import OfflineBridge  # noqa: E402
+from bach_mcp.tools.registry import create_tools, threaded  # noqa: E402
+from bach_mcp.tools.session import NoTarget, calling_directly, direct, target  # noqa: E402
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 from bach_mcp.utilities.status import Status  # noqa: E402
 from fakemodel import FakeClient, text_reply, tool_reply  # noqa: E402
@@ -177,6 +180,17 @@ class MapTests(HubTest):
             'server warning "set_active_instance: no instance nobody in the map"',
             'server warning "add_instance_names_map needs a name and a type"'])
         self.assertNotIn("odd", self.hub.instances)
+
+    def test_an_instance_cannot_be_named_like_a_command(self):
+        self.setup_patch()
+        self.bridge.from_max("add_instance_names_map server generator")
+        self.bridge.from_max("set_active_instance instances writer")
+        self.bridge.from_max("instances scales1 generator bach writer")
+        self.assertEqual([t for t in self.bridge.sent if "cannot be named" in t], [
+            'server warning "an instance cannot be named server: rename it"',
+            'server warning "an instance cannot be named instances: rename it"',
+            'server warning "an instance cannot be named bach: rename it"'])
+        self.assertEqual(self.hub.instances, {"scales1": "generator"})
 
     def test_the_playground_is_made_and_echoed(self):
         self.bridge.from_max(f"set_playground {line('Macintosh HD:' + self.playground)}")
@@ -332,6 +346,21 @@ class PromptTests(HubTest):
         self.assertTrue(self.stages("scales1")[-1].startswith("done "))
         self.assertIn('scales1 tool send_algorithm "called for scales1"', self.bridge.sent)
         self.assertEqual(target().name, "notes1", "after the turn, the active one again")
+
+    def test_a_claude_written_to_directly_keeps_the_active_instance_during_an_answer(self):
+        self.setup_patch()
+        self.hub.handle("set_active_instance notes1", "web")
+        self.go.clear()  # the model holds its answer: scales1's turn stays open
+        self.replies = [text_reply("Done.")]
+        self.hub.handle('scales1 prompt "a scale"', "web")
+        deadline = time.time() + 3
+        while "scales1 thinking" not in self.heard() and time.time() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(target().name, "scales1", "the Claude Code that answers the prompt: its instance")
+        with calling_directly():
+            self.assertEqual(target().name, "notes1", "Claude Desktop, meanwhile: the active one")
+        self.go.set()
+        self.answered("scales1")
 
     def test_refusals(self):
         self.hub.handle("add_instance_names_map scales1 generator", "web")
@@ -517,6 +546,46 @@ class PromptTests(HubTest):
         self.assertIn("scales1 stopped", self.heard())
         self.assertEqual(self.client.cancelled, 1)
         self.assertNotIn('scales1 answer "Never shown."', self.heard())
+
+
+class ToolThreadTests(unittest.TestCase):
+    """A tool may wait seconds for Max or Node: it must not hold the server's event loop."""
+
+    def call(self, app, is_direct=False):
+        import time as clock
+
+        def slow() -> str:
+            clock.sleep(0.3)
+            return f"{threading.current_thread() is threading.main_thread()} {direct()}"
+
+        app.add_tool(threaded(slow, direct=is_direct))
+
+        async def both():
+            ticks = 0
+
+            async def tick():
+                nonlocal ticks
+                while True:
+                    await asyncio.sleep(0.01)
+                    ticks += 1
+
+            ticking = asyncio.ensure_future(tick())
+            result = await app.call_tool("slow", {})
+            ticking.cancel()
+            return ticks, result
+
+        ticks, result = asyncio.run(both())
+        blocks = result[0] if isinstance(result, tuple) else result
+        return ticks, blocks[0].text
+
+    def test_the_loop_goes_on_while_a_tool_runs(self):
+        ticks, said = self.call(create_tools(OfflineBridge(), log_calls=False))
+        self.assertGreater(ticks, 10, "the page's stream and other sessions were served meanwhile")
+        self.assertEqual(said, "False False", "on a thread of its own; not a direct call")
+
+    def test_the_app_claude_reaches_marks_its_calls_as_direct(self):
+        self.assertEqual(self.call(create_tools(OfflineBridge(), log_calls=False, direct=True), True)[1], "False True")
+        self.assertFalse(direct(), "only while the tool runs")
 
 
 class WebTests(HubTest):

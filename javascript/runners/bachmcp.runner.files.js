@@ -2,8 +2,8 @@
 bachmcp.runner.files.js
 -----------------------
 Text files for the runners, through Max's File object (passed in, so that the
-same code runs on a stand-in in the tests): an algorithm file to read, a
-transformer's source score to read and write.
+same code runs on a stand-in in the tests): an algorithm file to read, a score
+to write to the playground.
 
     const files = makeFiles(File);
     files.read(path)            the text, or null if it cannot be read

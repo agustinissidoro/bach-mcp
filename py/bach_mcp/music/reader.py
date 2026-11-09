@@ -28,8 +28,7 @@ needs it.
 from __future__ import annotations
 
 import json
-from bisect import bisect_left
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .compress import compress, number
 

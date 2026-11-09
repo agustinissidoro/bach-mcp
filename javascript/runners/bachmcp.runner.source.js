@@ -107,8 +107,9 @@ function createSource(engine, options = {}) {
     bypassed(on) {
       if (on) setProcessing(false);
     },
-    deleted() {
-      timeout.cancel();
+    deleted(replaced) {
+      if (replaced) setProcessing(false);  // the type changed while it waited: processing 0, as it said 1
+      else timeout.cancel();               // the object goes: nothing more is said
     },
   };
 

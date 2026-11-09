@@ -1,4 +1,4 @@
-// bach.config.js: edit bachmcp.toml from Max, before Bach starts. For [node.script bach.config.js].
+// bachmcp.server.config.js: edit bachmcp.toml from Max, before Bach starts. For [node.script bachmcp.server.config.js].
 //
 //   script start <path>        start with the file already set (the arguments of "script start")
 //   config_file_path <path>    the bachmcp.toml to edit (Max path or plain path)

@@ -23,7 +23,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 DOCS_DIR = os.path.join(os.path.dirname(__file__), "docs")
-FAMILY_FILE = "_family.md"
 _HEADER = "Reference for this request (every pitch is sounding pitch, in midicents):"
 
 
@@ -33,10 +32,6 @@ class Doc:
     family: str        # "strings"
     aliases: Tuple[str, ...]
     text: str          # what the model sees: the body without front matter or the clefs line
-
-    @property
-    def is_family(self) -> bool:
-        return self.key.endswith("/_family")
 
 
 def _parse(path: str) -> Doc:

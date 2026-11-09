@@ -176,3 +176,32 @@ test("get_specs: a panel that was not listening at load gets the spec, with the 
   empty.send("get_specs");
   assert.deepEqual(empty.out, [[4, "algo", "specs", 0]], "nothing loaded: no spec, and it says so");
 });
+
+test("a type change: the cleared panel gets the runner's settings again", () => {
+  const w = wire("transformer");
+  w.runner.send("set_name", "a1");
+  w.runner.send("load", file(FILES.transformer));
+  for (const m of [["source_mode", 0], ["bypass", 1], ["process_only_selection", 1], ["snap", 1]]) w.runner.send(...m);
+  w.pump();
+  w.runner.send("type", "selector");  // the transformer's file is refused, its panel cleared
+  w.runner.send("load", file(FILES.selector));
+  w.pump();
+  const p = w.panel.ctx.panel;
+  assert.equal(p.sourceMode, "destructive", "source_mode 0 kept by the runner, shown by the panel");
+  assert.equal(p.bypass, true);
+  assert.equal(p.withinSelection, true);
+  assert.equal(p.pitchSnap, 1);
+});
+
+test("a type change while waiting for the roll's score closes processing", () => {
+  const w = wire("transformer");
+  w.runner.send("set_name", "a1");
+  w.runner.send("load", file(FILES.transformer));
+  w.runner.send("bang");  // asks the roll: processing 1
+  w.pump();
+  const said = () => w.runner.out.filter((o) => o[0] === 4 && o[2] === "processing").map((o) => o[3]);
+  assert.deepEqual(said(), [1]);
+  w.runner.send("type", "generator");
+  w.pump();
+  assert.deepEqual(said(), [1, 0], "processing 0, as it said 1");
+});

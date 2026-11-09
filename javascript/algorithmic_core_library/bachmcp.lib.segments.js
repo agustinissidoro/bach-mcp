@@ -48,7 +48,9 @@ function phrases(x, gap) {
  * longer than `gap` (default 1500 ms) across all voices.
  */
 function sections(x, gap = 1500) {
-  const markers = (x && Array.isArray(x.markers) ? x.markers : []).map((m) => m.onset).sort((a, b) => a - b);
+  // a score keeps its markers in its header (bachjson-complete, Score.marker); a plain list at the top is taken too
+  const inHeader = x && x.header && Array.isArray(x.header.markers) ? x.header.markers : [];
+  const markers = (x && Array.isArray(x.markers) ? x.markers : inHeader).map((m) => m.onset).sort((a, b) => a - b);
   if (!markers.length) return phrases(x, gap);
   const cuts = markers.filter((t) => t > 0);
   const out = cuts.concat([Infinity]).map(() => []);

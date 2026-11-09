@@ -11,7 +11,11 @@ in the patch (name -> type), the active instance and one conversation per
 instance. An instance's type fixes how the model works for it (chat/engine.py),
 and the tools serve the instance whose prompt is being answered, else the
 active one (tools/session.py). A Claude written to directly lists the instances
-and chooses the active one with two tools (tools/instance_tools.py).
+and chooses the active one with two tools (tools/instance_tools.py); its calls
+are always for the active one, also while another prompt is being answered.
+
+An instance cannot be named like a line's first word (RESERVED): its lines would
+be read as that command.
 
 Into the hub:
 
@@ -96,13 +100,14 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 from ..bridge.protocol import Word, line, words
 from ..tools.playground import prepare
-from ..tools.session import TYPES, NoTarget, Target, serve_instances, serve_targets
+from ..tools.session import TYPES, NoTarget, Target, direct, serve_instances, serve_targets
 from .engine import Conversation
 
-SERVER_COMMANDS = ("set_playground", "clear_instance_names_map", "add_instance_names_map", "set_active_instance",
-                   "instances")
 INSTANCE_COMMANDS = ("prompt", "stop", "new")
-WEB_ONLY = ("state", "thinking", "delta", "reasoning", "note", "tool_call", "tool_result", "history")
+# First words that are not an instance: the hub's own commands, Max's requests (bridge/max.py),
+# the lines for the server object and the page's state line.
+RESERVED = ("set_playground", "clear_instance_names_map", "add_instance_names_map", "set_active_instance",
+            "instances", "server", "bach", "state")
 HISTORY_SHOWN = 400  # messages of a saved conversation sent to a page that connects
 INSTANCES_WAIT = 1.5  # seconds a tool waits for Max to answer server get_instances
 
@@ -263,6 +268,9 @@ class Hub:
         if instance_type not in TYPES:
             self._warn(f"{name}: unknown type {instance_type} (one of {', '.join(TYPES)})")
             return
+        if name in RESERVED:
+            self._warn(f"an instance cannot be named {name}: rename it")
+            return
         with self._lock:
             if self.instances.get(name) not in (None, instance_type):
                 self._start_over(name)
@@ -281,6 +289,9 @@ class Hub:
         if instance_type:
             if instance_type not in TYPES:
                 self._warn(f"{name}: unknown type {instance_type} (one of {', '.join(TYPES)})")
+                return
+            if name in RESERVED:
+                self._warn(f"an instance cannot be named {name}: rename it")
                 return
             with self._lock:
                 joins = self.instances.get(name) != instance_type
@@ -307,6 +318,9 @@ class Hub:
         bad = [f"{name} {instance_type}" for name, instance_type in pairs if instance_type not in TYPES]
         if len(args) % 2 or bad:
             self._warn(f"instances: expected <name> <type> pairs, got {' '.join(args)}")
+        for name in [name for name, _ in pairs if name in RESERVED]:
+            self._warn(f"an instance cannot be named {name}: rename it")
+        pairs = [pair for pair in pairs if pair[0] not in RESERVED]
         with self._lock:
             fresh = {name: instance_type for name, instance_type in pairs if instance_type in TYPES}
             for name, instance_type in self.instances.items():
@@ -438,9 +452,11 @@ class Hub:
     # ── The tools' instance ────────────────────────────────────────────── #
 
     def target(self) -> Target:
-        """The instance the tools serve: the one being answered, else the active one."""
+        """The instance the tools serve: the one being answered, else the active one. A Claude
+        written to directly (session.direct) always gets the active one: the prompt being
+        answered is another conversation's."""
         with self._lock:
-            if self._turn is not None:
+            if self._turn is not None and not direct():
                 return self._turn
             if not self.playground:
                 raise NoTarget("no playground: the patch sends set_playground <folder>")
@@ -613,4 +629,4 @@ class Hub:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-__all__ = ["Hub", "Message", "SERVER_COMMANDS", "INSTANCE_COMMANDS", "WEB_ONLY"]
+__all__ = ["Hub", "Message", "INSTANCE_COMMANDS", "RESERVED"]

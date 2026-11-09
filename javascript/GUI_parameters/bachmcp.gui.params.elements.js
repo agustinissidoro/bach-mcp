@@ -47,7 +47,6 @@ var THEME = base.THEME,
   box = base.box,
   rounded = base.rounded,
   dot = base.dot,
-  fit = base.fit,
   label = base.label,
   tickStep = base.tickStep;
 

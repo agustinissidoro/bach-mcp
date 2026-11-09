@@ -1,5 +1,5 @@
 /*
-A small stand-in for Max's JavaScript environment, enough to run the bach.mcp
+A small stand-in for Max's JavaScript environment, enough to run the bachmcp
 scripts (v8 and jsui) in Node: outlets, post, Dict, Task, File, messagename,
 messnamed, mgraphics and box. Tasks run only when the test calls flush().
 */

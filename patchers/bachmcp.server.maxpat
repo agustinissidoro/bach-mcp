@@ -9,8 +9,18 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 92.0, 1852.0, 954.0 ],
+        "rect": [ 234.0, 92.0, 1453.0, 954.0 ],
         "boxes": [
+            {
+                "box": {
+                    "id": "obj-7",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 573.0, 552.0, 55.0, 22.0 ],
+                    "text": "print out!"
+                }
+            },
             {
                 "box": {
                     "bgcolor": [ 1.0, 0.0, 0.0, 1.0 ],
@@ -2368,12 +2378,23 @@
                         "boxes": [
                             {
                                 "box": {
+                                    "id": "obj-3",
+                                    "maxclass": "newobj",
+                                    "numinlets": 2,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 313.0, 501.0, 71.0, 22.0 ],
+                                    "text": "join"
+                                }
+                            },
+                            {
+                                "box": {
                                     "id": "obj-1",
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 313.0, 405.0, 71.0, 22.0 ],
+                                    "patching_rect": [ 313.0, 398.0, 71.0, 22.0 ],
                                     "text": "fromsymbol"
                                 }
                             },
@@ -2385,7 +2406,7 @@
                                     "numinlets": 0,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 313.0, 251.0, 102.0, 22.0 ],
+                                    "patching_rect": [ 313.0, 230.0, 102.0, 22.0 ],
                                     "text": "r #0playground"
                                 }
                             },
@@ -2395,8 +2416,8 @@
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 579.0, 507.0, 134.0, 22.0 ],
-                                    "text": "print bachmcp @level 2"
+                                    "patching_rect": [ 579.0, 507.0, 171.0, 22.0 ],
+                                    "text": "print bachmcp.server @level 2"
                                 }
                             },
                             {
@@ -2416,8 +2437,8 @@
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 313.0, 507.0, 84.0, 22.0 ],
-                                    "text": "print bachmcp"
+                                    "patching_rect": [ 313.0, 555.0, 121.0, 22.0 ],
+                                    "text": "print bachmcp.server"
                                 }
                             },
                             {
@@ -2438,12 +2459,10 @@
                                     "numinlets": 1,
                                     "numoutlets": 2,
                                     "outlettype": [ "", "" ],
-                                    "patching_rect": [ 313.0, 372.0, 230.0, 22.0 ],
+                                    "patching_rect": [ 313.0, 363.0, 230.0, 22.0 ],
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.playground.js",
@@ -2490,7 +2509,7 @@
                             },
                             {
                                 "patchline": {
-                                    "destination": [ "obj-15", 0 ],
+                                    "destination": [ "obj-3", 0 ],
                                     "source": [ "obj-2", 0 ]
                                 }
                             },
@@ -2503,7 +2522,22 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-14", 0 ],
+                                    "order": 1,
                                     "source": [ "obj-22", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-3", 1 ],
+                                    "midpoints": [ 322.5, 273.2265625, 374.5, 273.2265625 ],
+                                    "order": 0,
+                                    "source": [ "obj-22", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-15", 0 ],
+                                    "source": [ "obj-3", 0 ]
                                 }
                             },
                             {
@@ -3061,8 +3095,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.download.js",
@@ -3331,8 +3363,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.modelcheck.js",
@@ -4600,7 +4630,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 588.0, 853.0, 150.0, 20.0 ]
+                                    "patching_rect": [ 633.0, 851.0, 150.0, 20.0 ]
                                 }
                             },
                             {
@@ -5279,7 +5309,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 442.66666666666674, 651.0, 77.0, 22.0 ],
+                                    "patching_rect": [ 442.66666666666674, 637.0, 77.0, 22.0 ],
                                     "text": "absolutepath"
                                 }
                             },
@@ -5962,7 +5992,6 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-4", 0 ],
-                                    "disabled": 1,
                                     "source": [ "obj-7", 0 ]
                                 }
                             },
@@ -6198,8 +6227,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.config.js",
@@ -7159,7 +7186,7 @@
                     "maxclass": "inlet",
                     "numinlets": 0,
                     "numoutlets": 1,
-                    "outlettype": [ "int" ],
+                    "outlettype": [ "" ],
                     "patching_rect": [ 740.0, 48.0, 30.0, 30.0 ]
                 }
             }
@@ -7231,6 +7258,14 @@
             {
                 "patchline": {
                     "destination": [ "obj-56", 0 ],
+                    "order": 1,
+                    "source": [ "obj-17", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-7", 0 ],
+                    "order": 0,
                     "source": [ "obj-17", 0 ]
                 }
             },

@@ -4,7 +4,7 @@ claude.py
 The door for Claude (Claude Desktop, Claude Code) and any other MCP host.
 Claude brings its own model; Bach gives it the tools, what to read, and Max.
 
-    mcp_app(config, bridge)   the 15 tools (tools/registry.py) plus what Claude reads:
+    mcp_app(config, bridge)   the 15 tools (tools/registry.py), for the active instance, plus what Claude reads:
                               the skill as the server's instructions, /score and /algo
                               as two prompts, the instrument docs as resources ([chat] docs)
     headless_apps(config, bridge)  one per mode at /mcp/headless/<mode>: only that mode's tools
@@ -16,7 +16,8 @@ Claude brings its own model; Bach gives it the tools, what to read, and Max.
                               Max and the page are answered by Claude Code (chat/headless.py),
                               or over stdio for a host that starts Bach itself
     connect(config)           Claude Desktop's side: it can only launch a command, so this
-                              answers it and passes the tool calls to the Bach Max started.
+                              answers it and passes the tool calls to the Bach Max started,
+                              over one MCP session kept open (Upstream).
                               It holds no port, so opening Claude blocks nothing in Max
     register_desktop()        adds Bach to Claude Desktop's configuration
     register_code(config)     adds Bach to Claude Code: with its command, or in its file
@@ -35,11 +36,12 @@ import shutil
 import stat
 import subprocess
 import sys
-from typing import Any, Dict, List, Optional
+import asyncio
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import httpx
 from mcp import ClientSession, types
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.server.fastmcp import FastMCP
 
 from .bridge.max import OfflineBridge
@@ -64,10 +66,11 @@ _MODE_PROMPTS = {
 }
 
 
-def mcp_app(config: Config, bridge: Any) -> FastMCP:
-    """The tools, with the skill, the mode prompts and the instrument docs for Claude."""
+def mcp_app(config: Config, bridge: Any, app: Type[FastMCP] = FastMCP) -> FastMCP:
+    """The tools, with the skill, the mode prompts and the instrument docs for Claude.
+    app: the FastMCP class to build (connect's hands the calls on)."""
     mcp = create_tools(bridge, config.algo.node, log_calls=config.server.tool_log,
-                       instructions=config.system_prompt())
+                       instructions=config.system_prompt(), direct=True, app=app)
 
     @mcp.resource("bach://skill", name="skill", description="How to compose with Bach's tools.",
                   mime_type="text/markdown")
@@ -106,8 +109,8 @@ def _reader(text: str):
 def serve(config: Config, stdio: bool = False) -> None:
     """Serve the tools for an MCP host until it stops (stdio) or Ctrl-C (HTTP). Max can ask
     `bach status` meanwhile (status.py): it answers "claude". The hub takes the patch's
-    playground and instances, so the tools work for the instance being answered, else the
-    active one. Over HTTP it answers prompts with Claude Code; over stdio the host is the
+    playground and instances, so a Claude written to directly works for the active instance,
+    and the Claude Code that answers a prompt for that prompt's instance. Over HTTP it answers prompts with Claude Code; over stdio the host is the
     one Claude is talking to, so it answers none."""
     from .chat.headless import ClaudeConversation, settings_line
     from .chat.hub import Hub
@@ -166,23 +169,76 @@ def _serve_http(config: Config, hub: Any, status: Any, mcp: FastMCP, headless: L
         close_page_tabs(config.url)
 
 
-def connect(config: Config) -> None:
-    """Claude Desktop's Bach: what Claude reads is answered here, the same with Max on or off,
-    and each tool call goes to the Bach that bachmcp.server claude started."""
-    mcp = mcp_app(config, OfflineBridge())
+class Upstream:
+    """One MCP session with the Bach that Max started, kept open between tool calls. A task of
+    its own holds it (a session must be closed by the task that opened it) and takes the calls
+    one by one; when the session breaks, the task ends and the next call opens a new one."""
 
-    @mcp._mcp_server.call_tool(validate_input=False)
-    async def call_tool(name: str, arguments: Dict[str, Any]) -> types.CallToolResult:
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self._calls: Optional["asyncio.Queue[Tuple[str, Dict[str, Any], asyncio.Future]]"] = None
+        self._task: Optional["asyncio.Task[None]"] = None
+
+    async def call(self, name: str, arguments: Dict[str, Any]) -> types.CallToolResult:
+        """The tool's result from that Bach. Raises if it cannot be reached."""
+        if self._task is None or self._task.done():
+            self._calls = asyncio.Queue()
+            self._task = asyncio.create_task(self._hold(self._calls))
+        answer: asyncio.Future = asyncio.get_running_loop().create_future()
+        await self._calls.put((name, arguments, answer))
+        await asyncio.wait({answer, self._task}, return_when=asyncio.FIRST_COMPLETED)
+        if not answer.done():  # the session ended before it took this call
+            raise ConnectionError(f"no Bach at {self.url}")
+        return answer.result()
+
+    async def _hold(self, calls: "asyncio.Queue[Tuple[str, Dict[str, Any], asyncio.Future]]") -> None:
         try:
-            async with streamablehttp_client(config.mcp_url) as (read, write, _):
+            async with streamable_http_client(self.url) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
-                    return await session.call_tool(name, arguments)
+                    while True:
+                        name, arguments, answer = await calls.get()
+                        try:
+                            answer.set_result(await session.call_tool(name, arguments))
+                        except Exception as exc:  # noqa: BLE001 — the session is no use any more
+                            answer.set_exception(exc)
+                            return
         except Exception:  # noqa: BLE001 — the transport ends in an exception group, whatever the cause
+            pass
+        finally:
+            while not calls.empty():  # calls it never took: their callers hear it
+                waiting = calls.get_nowait()[2]
+                if not waiting.done():
+                    waiting.set_exception(ConnectionError(f"no Bach at {self.url}"))
+
+    async def close(self) -> None:
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+            await asyncio.gather(self._task, return_exceptions=True)
+
+
+def connect_app(config: Config) -> FastMCP:
+    """Claude Desktop's Bach: what Claude reads is answered here, the same with Max on or off,
+    and each tool call goes to the Bach that bachmcp.server claude started, over one session
+    kept open (a call that finds it closed, Bach restarted say, opens a new one and asks again)."""
+    upstream = Upstream(config.mcp_url)
+
+    class Connected(FastMCP):
+        async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:  # FastMCP serves tools/call with this
+            for _ in range(2):
+                try:
+                    return await upstream.call(name, arguments)
+                except Exception:  # noqa: BLE001
+                    continue
             return types.CallToolResult(isError=True,
                                         content=[types.TextContent(type="text", text=_why_unreachable(config))])
 
-    mcp.run(transport="stdio")
+    return mcp_app(config, OfflineBridge(), app=Connected)
+
+
+def connect(config: Config) -> None:
+    """What Claude Desktop launches (connect_app), over stdio."""
+    connect_app(config).run(transport="stdio")
 
 
 def _why_unreachable(config: Config) -> str:
@@ -286,6 +342,6 @@ def register_code(config: Config, command: Optional[str] = None, path: str = CLA
         return SERVER_NAME in json.load(f).get("mcpServers", {})
 
 
-__all__ = ["mcp_app", "serve", "connect", "register_desktop", "register_code", "find_claude_code",
+__all__ = ["mcp_app", "serve", "connect", "connect_app", "Upstream", "register_desktop", "register_code", "find_claude_code",
            "login_command", "logged_in",
            "claude_code_commands", "desktop_entry", "SERVER_NAME"]

@@ -11,8 +11,8 @@ files are read and written by bachmcp.runner.files.js.
     const engine = createEngine(max)
     engine.setType(type)
 
-max: what the runner's [v8] has and a module does not (outlet, post, messnamed,
-Dict, Task, File), passed in by the runner.
+max: what the runner's [v8] has and a module does not (outlet, post, Dict, Task,
+File), passed in by the runner.
 
 type: what the runner is now:
     name        "generator" | "transformer" | "selector"   shown in the Max console and in errors
@@ -29,12 +29,12 @@ type: what the runner is now:
     repeated()          after the last score is sent again: what else the type sends (a selector's commands)
     bypassed(on)        bypass changed
     setting(name)       a setting of the types with a source changed (source_mode ...)
-    deleted()           the type is replaced, or the object deleted: stop what it started
+    deleted(replaced)   the type is replaced (true), or the object deleted: stop what it started
 
 The outlets, the same for every type:
     0  SCORE    dictionary <name>                           only scores (bachjson-complete)
     1  BACH     dump, clearselection, sel note [v c n] ...  to bach.roll
-    2  PANEL    spec, set, status, source, the settings,    to bachmcp.gui.params
+    2  PANEL    spec, set, status, type, the settings,      to bachmcp.gui.params
                 clear (the type changed with a file loaded)
     3  DONE     bang                                        a process is done: after its score (and a selector's commands)
     4  STATUS   <name> algo_loaded <file>                   dumpout: what happened, debugging, errors
@@ -184,7 +184,7 @@ function createEngine(max) {
    */
   function setType(next, quiet = false) {
     const had = type;
-    if (type && type.deleted) type.deleted();
+    if (type && type.deleted) type.deleted(true);  // replaced: it closes what it left open (processing)
     type = next;
     pending.cancel();
     state.changed = true;
@@ -197,10 +197,22 @@ function createEngine(max) {
     if (!state.text) return;
     const before = state.compiled;
     state.compiled = null;
-    if (had) tellPanel("clear");  // the old type's panel: a file of the new type rebuilds it
+    if (had) {
+      tellPanel("clear");  // the old type's panel: a file of the new type rebuilds it
+      tellSettings();      // a cleared panel is back at its defaults: the settings kept here, again
+    }
     compile(before);              // a file loaded before the first type compiles now
   }
 
+  /** Every setting the panel shows, as it is here: after a clear, which puts the panel back at its defaults. */
+  function tellSettings() {
+    tellPanel("bypass", state.bypass ? 1 : 0);
+    tellPanel("snap", state.snap);
+    tellPanel("source_mode", state.destructive ? 0 : 1);
+    tellPanel("process_only_selection", state.selectedOnly ? 1 : 0);
+    tellPanel("dump_selection_only", state.selectionOnly ? 1 : 0);
+    tellPanel("involutive", state.involutive ? 1 : 0);
+  }
   function hook(name, ...args) {
     return type && typeof type[name] === "function" ? type[name](...args) : undefined;
   }
@@ -551,7 +563,7 @@ function createEngine(max) {
     if (!hasLastScore()) return refuse("write_to_playground: no score sent yet");
     const playground = state.path.replace(/[^\/:]*$/, "").replace(/[^\/:]+[\/:]$/, "");
     const path = playground + "scores/" + state.name + ".json";
-    if (!files.write(path, lastScore.stringify())) return fail(`could not write ${path}`);
+    if (!files.write(path, lastScore.stringify())) return refuse(`write_to_playground: could not write ${path}`);
     tellPanel("status", "ok", `score written to ${path}`);
   }
 

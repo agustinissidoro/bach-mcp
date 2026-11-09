@@ -22,7 +22,7 @@ the messages.
 Outlets, the same for every type:
   0  only scores: dictionary <name> (bachjson-complete)
   1  to bach.roll: dump (asks for its score), clearselection, sel note [v c n] ...
-  2  to bachmcp.gui.params: spec, set, status, source, and every setting's value back
+  2  to bachmcp.gui.params: spec, set, status, type, and every setting's value back
   3  bang: a process is done, after its score (and a selector's commands)
   4  dumpout: <name> algo_loaded / algo_done / algo_error / error / processing / timeout / specs
 
@@ -99,11 +99,11 @@ const TYPES = {
 };
 
 const engine = createEngine({
-  outlet: (...a) => outlet(...a), post: (...a) => post(...a), messnamed: (...a) => messnamed(...a), Dict, Task, File,
+  outlet: (...a) => outlet(...a), post: (...a) => post(...a), Dict, Task, File,
 });
 
 try {
-  setinletassist(0, "type, load_algo <path>, bang, [param] <param> <value>, dictionary <name>, capture ...");
+  setinletassist(0, "type, load_algo <path>, bang, param <param> <value>, dictionary <name>, capture ...");
   setoutletassist(0, "dictionary <name>: the score (bachjson-complete)");
   setoutletassist(1, "to bach.roll: dump, clearselection, sel note ...");
   setoutletassist(2, "to the parameter panel (bachmcp.gui.params)");

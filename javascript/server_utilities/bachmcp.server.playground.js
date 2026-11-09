@@ -1,5 +1,5 @@
 /*
-bachmcp.playground.js
+bachmcp.server.playground.js
 ---------------------
 Node for Max ([node.script]): makes sure a playground folder is there, with
 
@@ -13,11 +13,11 @@ Whatever is missing is created, the folder itself included.
 
 Out of the outlet, once it is done:
 
-    exists                  everything was already there
-    created <path>          something was missing and is there now
+    "playground found at: "          everything was already there
+    "playground created at" <path>   something was missing and is there now
     error <message>         it could not be made (a file in the way, no permission)
 
-Outside Max, `node bachmcp.playground.js <path>` prints the same messages.
+Outside Max, `node bachmcp.server.playground.js <path>` prints the same messages.
 */
 
 "use strict";
@@ -58,7 +58,7 @@ async function playground(folder) {
         const missing = dirs.filter(dir => !isFolder(dir));
         for (const dir of missing) await fs.promises.mkdir(dir, { recursive: true });
         if (missing.length) await out("playground created at", root);
-        else await out("playground found.");
+        else await out("playground found at: ");
     } catch (e) {
         process.exitCode = 1;
         await out("error", ...e.message.split(" "));

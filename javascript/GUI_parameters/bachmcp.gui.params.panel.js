@@ -48,7 +48,6 @@ var THEME = base.THEME,
   scaled = base.scaled,
   scaleFor = base.scaleFor,
   clamp = base.clamp,
-  snap = base.snap,
   copy = base.copy,
   same = base.same,
   inside = base.inside,
@@ -120,11 +119,6 @@ Panel.prototype.setType = function (type) {
 /** Transformers and selectors work on a source: they have the source card. */
 Panel.prototype.hasSource = function () {
   return this.type === "transformer" || this.type === "selector";
-};
-
-/** The two segments of the source mode, and whether the right one is on. */
-Panel.prototype.modes = function () {
-  return { left: "non-destructive", right: "destructive", on: this.sourceMode === "destructive" };
 };
 
 /**
@@ -438,11 +432,6 @@ Panel.prototype.modeRect = function (width) {
 /** The button that sets every parameter back to its declared value. */
 Panel.prototype.resetRect = function (width) {
   return this.ui(width).reset;
-};
-
-Panel.prototype.hasGrid = function () {
-  for (var i = 0; i < this.items.length; i++) if (this.items[i].grid > 0) return true;
-  return false;
 };
 
 Panel.prototype.valueWidth = function () {

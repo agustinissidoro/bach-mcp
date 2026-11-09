@@ -3,7 +3,7 @@ algo_tools.py
 -------------
 send_algorithm: the model writes the algorithm that generates the music, not the
 notes. The code is a JavaScript file run in Max by an algorithm instance (v8),
-with the algorithmic core library in scope (max/bach-mcp/javascript/
+with the algorithmic core library in scope (javascript/
 algorithmic_core_library, listed in bachmcp.lib.index.js). Its
 declared parameters become a panel (GUI_parameters/) the user plays with; every
 change runs the algorithm again.
@@ -36,13 +36,13 @@ import re
 import shutil
 import subprocess
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from mcp.server.fastmcp import FastMCP
 
 from ..bridge.buffer import ServerBuffer
 from ..bridge.max import MaxBridge
-from ..bridge.protocol import line, words
+from ..bridge.protocol import line
 from ..music.compress import count_notes, describe
 from .session import NoTarget, Target, target
 
