@@ -156,3 +156,23 @@ test("type: after the runner's type changes, the cleared panel is the new type's
   assert.equal(p.type, "selector");
   assert.equal(p.hasSource(), true, "a selector's base panel, ready for a selector's file");
 });
+
+test("get_specs: a panel that was not listening at load gets the spec, with the values set since", () => {
+  const runner = load("bachmcp.runner.js", { args: ["generator"] });
+  runner.send("load", file(FILES.generator));
+  runner.send("param", "times", 9);
+  const panel = load("bachmcp.gui.params.v8ui.js", { legacy: true, width: 320, height: 2000 });  // not listening at load
+  const before = runner.out.length;
+  runner.send("get_specs");
+  const specs = runner.out.slice(before);
+  assert.deepEqual(specs.map((o) => o.slice(0, 2)), [[2, "spec"], [4, "algo"]]);
+  assert.deepEqual(specs[1].slice(2), ["specs", 1], "it says so on dumpout");
+  panel.send("spec", specs[0][2]);
+  assert.equal(panel.ctx.panel.title, "algo");
+  assert.equal(panel.ctx.panel.items.find((it) => it.name === "times").value, 9, "the current value, not the declared one");
+  assert.deepEqual(runner.out.slice(before + 2).filter((o) => o[0] === 0 || o[0] === 4), [], "no run, no algo_loaded");
+
+  const empty = load("bachmcp.runner.js", { args: ["transformer"] });
+  empty.send("get_specs");
+  assert.deepEqual(empty.out, [[4, "algo", "specs", 0]], "nothing loaded: no spec, and it says so");
+});

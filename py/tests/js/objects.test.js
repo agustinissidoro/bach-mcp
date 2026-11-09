@@ -655,7 +655,9 @@ test("a message the type does not take is refused with error; a runner without a
   assert.match(last(t.out, 4)[3], /clear_selection: a transformer does not take it/);
   const none = load("bachmcp.runner.js");
   none.send("load", tempFile(ALGO));
-  assert.match(last(none.out, 4)[3], /no type/);
+  assert.deepEqual(none.out.filter((o) => o[0] === 4), [], "loaded before the type: waits, no error");
+  none.send("type", "generator");
+  assert.equal(last(none.out, 4)[2], "algo_loaded", "the type came: it loads");
   const at = load("bachmcp.runner.js", { args: ["@type", "selector"] });
   at.send("load", tempFile(SELECTOR));
   assert.equal(JSON.parse(last(at.out, 2, "spec")[2]).type, "selector");
@@ -751,4 +753,58 @@ test("settings: every runner takes them, before its type too, and keeps them acr
   assert.equal(m.out.filter((o) => o[0] === 1 && o[1] === "dump").length, dumps + 1, "source_mode 0, sent before the type: destructive");
   m.send("source_mode", 2);
   assert.match(last(m.out, 4)[3], /source_mode is 0 \(destructive\) or 1/);
+});
+
+test("try_load_algo before the type: kept, loaded when the type comes; skipped silently if of another type", () => {
+  const file = tempFile(ALGO);
+  const m = load("bachmcp.runner.js");  // a patch initialising: the playground and the name came first
+  m.send("set_name", "hello");
+  m.send("try_load_algo", file);
+  assert.deepEqual(m.out, [], "nothing yet, and no error");
+  m.send("type", "generator");
+  assert.deepEqual(last(m.out, 4), [4, "hello", "algo_loaded", "test_algo.js"]);
+  assert.ok(last(m.out, 2, "spec"));
+
+  const other = load("bachmcp.runner.js");
+  other.send("try_load_algo", tempFile(TRANSFORMER));
+  other.send("type", "generator");
+  assert.deepEqual(other.out.filter((o) => o[0] === 4 || o[1] === "spec"), [], "a transformer's file for a generator: skipped, silently");
+
+  const told = load("bachmcp.runner.js");
+  told.send("verbose", 1);
+  told.send("try_load_algo", "/nowhere/x.js");
+  told.send("try_load_algo", tempFile(TRANSFORMER));
+  told.send("type", "generator");
+  told.send("try_load_algo", tempFile("function produce(p) { return ; "));
+  assert.deepEqual(told.posts.map((t) => t.replace(/^runner algo: |^generator algo: /, "").trim().replace(/: .*$/, (s) => s.slice(0, 40))), [
+    "try_load_algo: no file at /nowhere/x.js",
+    "try_load_algo: test_algo.js waits for the type",
+    "try_load_algo: test_algo.js skipped, it is a transformer, this runner a generator",
+    "try_load_algo: test_algo.js skipped, it does not compile: Unexpected token '}'",
+  ].map((s) => s.replace(/: .*$/, (x) => x.slice(0, 40))), "verbose 1 says why");
+  const plain = load("bachmcp.runner.js", { args: ["generator"] });
+  plain.send("try_load_algo", "/nowhere/x.js");
+  assert.deepEqual(plain.posts, [], "verbose 0: silent");
+});
+
+test("load and type in either order: the file waits for the type, no error; a wrong type is said when it comes", () => {
+  for (const msg of ["load", "load_algo"]) {
+    const m = load("bachmcp.runner.js");
+    m.send("set_name", "hello");
+    m.send(msg, tempFile(ALGO));
+    assert.deepEqual(m.out.filter((o) => o[0] === 4 || o[1] === "status"), [], `${msg} before the type: no error`);
+    m.send("type", "generator");
+    assert.deepEqual(m.out.filter((o) => o[0] === 2).map((o) => o[1]), ["type", "spec"], "no clear: there was no type before");
+    assert.deepEqual(last(m.out, 4), [4, "hello", "algo_loaded", "test_algo.js"]);
+    m.send("get_specs");
+    assert.deepEqual(last(m.out, 4), [4, "hello", "specs", 1]);
+  }
+  const wrong = load("bachmcp.runner.js");
+  wrong.send("load", tempFile(TRANSFORMER));
+  wrong.send("type", "generator");
+  assert.match(last(wrong.out, 4)[3], /this is a generator: the file must define function produce/);
+  const after = load("bachmcp.runner.js");
+  after.send("type", "generator");
+  after.send("load", tempFile(ALGO));
+  assert.equal(last(after.out, 4)[2], "algo_loaded", "the other order, as before");
 });

@@ -42,6 +42,7 @@ The outlets, the same for every type:
                 <name> algo_error <message>                 the algorithm could not load or run
                 <name> error <message>                      a message the runner cannot take
                 <name> processing 0|1, <name> timeout 1     waiting for the roll's score
+                <name> specs 1|0                            get_specs: the spec sent again, or none loaded
 
 Running. A load is not a run: it compiles the file and says algo_loaded (outlet
 4); a patch that wants a score then sends bang. bang outputs the score the
@@ -122,6 +123,7 @@ function createEngine(max) {
     changed: true,       // something changed since the last run: bang runs instead of sending the last score
     watching: true,
     loading: false,      // inside load_algo: a file that does not compile is "impossible to load"
+    waiting: null,       // try_load_algo before the type: {path, text}, tried again when the type comes
     bypass: false,       // bypass 1: runs do nothing, inputs pass through
     snap: 3,             // the output's pitches: 0 semitones, 1 quarter tones, 3 free
     // Settings of the types with a source (transformer, selector), kept here so that every
@@ -181,16 +183,22 @@ function createEngine(max) {
    * quiet: nothing to the panel (the box's argument, while the patch is still loading).
    */
   function setType(next, quiet = false) {
+    const had = type;
     if (type && type.deleted) type.deleted();
     type = next;
     pending.cancel();
     state.changed = true;
     if (!quiet) tellPanel("type", type.name);
+    if (state.waiting && !state.text) {  // a try_load_algo that came before the type
+      const { path, text } = state.waiting;
+      state.waiting = null;
+      return tryTake(path, text);
+    }
     if (!state.text) return;
     const before = state.compiled;
     state.compiled = null;
-    tellPanel("clear");  // the old type's panel: a file of the new type rebuilds it
-    compile(before);
+    if (had) tellPanel("clear");  // the old type's panel: a file of the new type rebuilds it
+    compile(before);              // a file loaded before the first type compiles now
   }
 
   function hook(name, ...args) {
@@ -224,20 +232,36 @@ function createEngine(max) {
     }
   }
 
-  /** load, silently: a file that cannot be read, or is not a working file of this type, is ignored. */
+  /**
+   * load, silently: a file that cannot be read, or is not a working file of this type, is
+   * ignored (verbose 1 says why). Before the runner has a type (a patch still initialising),
+   * the file is kept and tried when the type comes: the order things arrive in does not matter.
+   */
   function tryLoadAlgo(path) {
-    if (path === undefined || !type) return;
+    if (path === undefined) return;
     const text = files.read(String(path));
-    if (text === null) return;
-    try {
-      if (loader.compile(text).type !== type.name) return;
-    } catch (e) {
-      return;
+    if (text === null) return say(`try_load_algo: no file at ${path}`);
+    if (!type) {
+      state.waiting = { path: String(path), text };
+      return say(`try_load_algo: ${basename(path)} waits for the type`);
     }
+    tryTake(path, text);
+  }
+
+  /** take a file of this type; anything else is skipped, said only with verbose 1. */
+  function tryTake(path, text) {
+    let found;
+    try {
+      found = loader.compile(text).type;
+    } catch (e) {
+      return say(`try_load_algo: ${basename(path)} skipped, it does not compile: ${e.message || e}`);
+    }
+    if (found !== type.name) return say(`try_load_algo: ${basename(path)} skipped, it is a ${found}, this runner a ${type.name}`);
     take(path, text);
   }
 
   function take(path, text) {
+    state.waiting = null;  // a file loaded: an earlier try_load_algo waits no more
     state.path = String(path);
     state.text = text;
     compile();
@@ -399,8 +423,12 @@ function createEngine(max) {
 
   // ── Compiling and running ─────────────────────────────────────────────── //
 
+  /**
+   * The file in hand, compiled for this type. Before the runner has a type the file waits:
+   * setType compiles it, so a load and the type can come in either order.
+   */
   function compile(before = state.compiled) {
-    if (!type) return fail("no type: send type generator, transformer or selector");
+    if (!type) return say(`${basename(state.path)} waits for the type`);
     let next;
     try {
       next = loader.compile(state.text);
@@ -413,13 +441,30 @@ function createEngine(max) {
     state.values = keptValues(next, before);
     state.compiled = next;
     state.changed = true;
-    const params = next.specs.map((s) => Object.assign({}, s, { value: state.values[s.name] }));
-    tellPanel("spec", JSON.stringify(Object.assign({
-      title: basename(state.path).replace(/\.js$/, ""), description: next.description || "", path: state.path,
-      type: next.type, params,
-    }, hook("spec") || {})));
+    sendSpec();
     say(`loaded ${basename(state.path)}: ${paramspec.describe(next.specs, state.values).join("; ")}`);
     status("algo_loaded", basename(state.path));  // a load is not a run: bang for a score
+  }
+
+  /** The loaded algorithm's spec to the panel, with the current values: on every load, and on get_specs. */
+  function sendSpec() {
+    const compiled = state.compiled;
+    const params = compiled.specs.map((s) => Object.assign({}, s, { value: state.values[s.name] }));
+    tellPanel("spec", JSON.stringify(Object.assign({
+      title: basename(state.path).replace(/\.js$/, ""), description: compiled.description || "", path: state.path,
+      type: compiled.type, params,
+    }, hook("spec") || {})));
+  }
+
+  /**
+   * get_specs: the spec again, out of outlet 2 (a panel that came later, or was cleared). It
+   * always answers on dumpout, as get_name and get_type do: <name> specs 1 (sent), or
+   * <name> specs 0 (no algorithm loaded, nothing sent).
+   */
+  function getSpecs() {
+    if (!state.compiled) return status("specs", 0);
+    sendSpec();
+    status("specs", 1);
   }
 
   /**
@@ -523,7 +568,7 @@ function createEngine(max) {
   return {
     OUT, state, files, max,
     say, fail, refuse, status, tellPanel, flag,
-    setType, setname, load, loadAlgo, tryLoadAlgo, reload, autoDump, verbose, watch, setParam,
+    setType, setname, getSpecs, load, loadAlgo, tryLoadAlgo, reload, autoDump, verbose, watch, setParam,
     changed, quietly, setBypass, setSourceMode, setProcessOnlySelection, setDumpSelectionOnly, setInvolutive, setSnap, passThrough, bang, repeat, runNow, process, schedule, sendScore, writeScore, deleted,
     get type() { return type; },
   };

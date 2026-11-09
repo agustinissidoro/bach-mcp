@@ -24,7 +24,7 @@ Outlets, the same for every type:
   1  to bach.roll: dump (asks for its score), clearselection, sel note [v c n] ...
   2  to bachmcp.gui.params: spec, set, status, source, and every setting's value back
   3  bang: a process is done, after its score (and a selector's commands)
-  4  dumpout: <name> algo_loaded / algo_done / algo_error / error / processing / timeout
+  4  dumpout: <name> algo_loaded / algo_done / algo_error / error / processing / timeout / specs
 
 A load is not a run: it says algo_loaded (outlet 4), and nothing goes out
 until a bang (a patch that wants a score on load catches algo_loaded). bang outputs the score of the current settings: the last one again if nothing
@@ -38,6 +38,9 @@ Messages, every type:
   load_algo <path>          the same; a failure is "error: impossible to load ..."
   try_load_algo <path>      the same, silent: a file that cannot be loaded is ignored
   reload                    read the file again
+  get_specs                 the loaded algorithm's spec again, out of outlet 2, with the current values
+                            (for a panel that was not listening at load); always answers on dumpout:
+                            <name> specs 1 (sent) or <name> specs 0 (no algorithm loaded)
   bang, dump                the score of the current settings (see above)
   run                       run the algorithm now, changed or not
   repeat                    the last score sent, again
@@ -147,6 +150,7 @@ function load(path) { engine.load(path); }
 function load_algo(path) { engine.loadAlgo(path); }
 function try_load_algo(path) { engine.tryLoadAlgo(path); }
 function reload() { engine.reload(); }
+function get_specs() { engine.getSpecs(); }
 function bang() { engine.bang(); }
 function dump() { engine.bang(); }
 function run() { engine.runNow(); }
