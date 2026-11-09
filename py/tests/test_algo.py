@@ -291,7 +291,7 @@ class LibraryTests(unittest.TestCase):
                     f.write(block)
                 result = check_algorithm(path, node=NODE)
                 self.assertTrue(result.get("ok"), f"example {i}: {result}")
-                self.assertEqual(result["kind"], ("producer", "transformer", "selector", "transformer")[i])
+                self.assertEqual(result["type"], ("generator", "transformer", "selector", "transformer")[i])
 
     def test_the_skill_names_every_library_function(self):
         program = "process.stdout.write(JSON.stringify(require(process.argv[1]).LIBRARY))"

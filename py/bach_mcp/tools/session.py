@@ -15,7 +15,7 @@ model: they ask target(), which the hub (chat/hub.py) answers, with the
 instance of the prompt being answered, else the active one. A Claude written
 to directly chooses the active one itself (instances(): instance_tools.py).
 
-    Target(name, kind, playground)
+    Target(name, type, playground)
       .algorithms .scores .prompts           the playground's folders
       .algorithm_file .roll_file             <name>.js, <name>.json in them
 """
@@ -27,7 +27,7 @@ import threading
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional, Protocol, Tuple
 
-KINDS = ("generator", "transformer", "selector", "writer")
+TYPES = ("generator", "transformer", "selector", "writer")
 
 _lock = threading.Lock()
 _number = 0
@@ -60,7 +60,7 @@ class NoTarget(Exception):
 @dataclass(frozen=True)
 class Target:
     name: str        # the instance, as the patch names it
-    kind: str        # one of KINDS
+    type: str        # one of TYPES
     playground: str  # the playground folder (absolute)
 
     @property
@@ -127,5 +127,5 @@ def instances() -> Instances:
     return _instances
 
 
-__all__ = ["KINDS", "Target", "NoTarget", "serve_targets", "target", "Instances", "serve_instances",
+__all__ = ["TYPES", "Target", "NoTarget", "serve_targets", "target", "Instances", "serve_instances",
            "instances", "new_conversation", "use_conversation", "conversation"]

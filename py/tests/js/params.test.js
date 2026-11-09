@@ -209,7 +209,7 @@ test("a new spec keeps the values of parameters with the same name and type, and
   next.params[4].range = [0, 1];
   next.params[4].value = 0;
   m.send("spec", JSON.stringify(next));
-  assert.deepEqual(sent(m), [["times", 32]], "clamped to the new range; mode changed type, so not kept");
+  assert.deepEqual(sent(m), [["sync", "param", "times", 32]], "clamped to the new range; mode changed type, so not kept; sync: it runs nothing");
 });
 
 test("status line, reset and bang", () => {
@@ -236,7 +236,7 @@ test("saved with the patch: restore rebuilds the panel and sends nothing", () =>
   assert.deepEqual(sent(fresh), [], "no load on restore");
   // the runner answers with its spec at the declared values; the panel sends back what it kept
   fresh.send("spec", JSON.stringify(SPEC));
-  assert.deepEqual(sent(fresh), [["times", 33]]);
+  assert.deepEqual(sent(fresh), [["sync", "param", "times", 33]]);
 });
 
 test("pattr: getvalueof and setvalueof round trip", () => {
@@ -319,23 +319,22 @@ test("the panel uses no ES2015 built-ins", () => {
   panel.restore(panel.snapshot());
 });
 
-test("a transformer's panel shows its source and a capture button", () => {
-  const m = panelWith(Object.assign({}, SPEC, { kind: "transformer", source: { notes: 893, from: "file" } }));
+test("a transformer's panel has its source row and a capture button", () => {
+  const m = panelWith(Object.assign({}, SPEC, { type: "transformer" }));
   m.ctx.paint();
   const texts = m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
   assert.ok(texts.includes("capture"));
-  assert.ok(texts.includes("SOURCE · 893 NOTES · FILE"));
+  assert.ok(texts.includes("SOURCE"), "the source row, without its notes (for now)");
   const b = m.ctx.panel.captureRect(320);
   m.ctx.onclick(b.x + 5, b.y + 5, 1, 0, 0, 0, 0, 0);
   assert.deepEqual(sent(m), [["capture"]]);
   const w = m.ctx.panel.writeRect(320);
   m.ctx.onclick(w.x + 5, w.y + 5, 1, 0, 0, 0, 0, 0);
   assert.deepEqual(sent(m), [["write_to_playground"]]);
-  m.send("source", 12, "inlet");
-  assert.equal(m.ctx.panel.source.notes, 12);
-  const producer = panelWith();
-  producer.ctx.paint();
-  assert.ok(!producer.ctx.mgraphics.calls.some((c) => c[0] === "show_text" && c[1] === "capture"));
+  m.send("source", 12, "inlet");  // an old runner's message: taken, shown nowhere
+  const generator = panelWith();
+  generator.ctx.paint();
+  assert.ok(!generator.ctx.mgraphics.calls.some((c) => c[0] === "show_text" && c[1] === "capture"));
 });
 
 const KINDS = {
@@ -425,7 +424,7 @@ test("the display is saved with the patch, and kept when the code is reloaded", 
 });
 
 test("a transformer's source mode: click to switch, sent to the runner, kept with the patch", () => {
-  const spec = Object.assign({}, SPEC, { kind: "transformer", source: { notes: 4, from: "file" } });
+  const spec = Object.assign({}, SPEC, { type: "transformer" });
   const m = panelWith(spec);
   const r = m.ctx.panel.modeRect(m.ctx.panel.width);
   assert.ok(texts(m).includes("destructive"), "a toggle, off: non-destructive");
@@ -433,7 +432,7 @@ test("a transformer's source mode: click to switch, sent to the runner, kept wit
   release(m);
   assert.deepEqual(sent(m), [["source_mode", 0]]);
   m.send("spec", JSON.stringify(spec));
-  assert.deepEqual(sent(m).filter((x) => x[0] === "source_mode"), [["source_mode", 0]], "a reload tells the runner");
+  assert.deepEqual(sent(m).filter((x) => x[1] === "source_mode"), [["sync", "source_mode", 0]], "a reload tells the runner");
   m.send("source_mode", 1);
   assert.equal(m.ctx.panel.sourceMode, "nondestructive");
   assert.deepEqual(sent(m), [], "the runner's echo is not sent back");
@@ -527,7 +526,7 @@ test("the panel goes compact when its parameters do not fit the box: one line ea
 
 test("process sel. toggles process_only_selection on a transformer's and a selector's source row", () => {
   for (const kind of ["transformer", "selector"]) {
-    const m = panelWith(Object.assign({}, SPEC, { kind, source: { notes: 4, from: "inlet" } }));
+    const m = panelWith(Object.assign({}, SPEC, { type: kind }));
     const r = m.ctx.panel.ui(m.ctx.panel.width).within;
     assert.ok(texts(m).includes("process sel."));
     m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
@@ -638,4 +637,56 @@ test("bigger controls are more precise: finer marks, free values to the pixel", 
   const g = loadPanel({ width: 600, height: 2000 });
   g.send("spec", JSON.stringify(SPEC));
   g.ctx.paint();
+});
+
+// ── set_type: the base panel of a type, before any algorithm ───────────── //
+
+test("set_type: the base panel of each type before any algorithm; kept by clear and with the patch", () => {
+  const plain = loadPanel({ width: 320, height: 400 });
+  assert.deepEqual(texts(plain).filter((t) => /algorithm|capture|generator|transformer/.test(t)), ["No algorithm loaded."],
+    "no type: only the line");
+  for (const [type, hasSource, dumpSel] of [["generator", false, false], ["transformer", true, false],
+    ["selector", true, true]]) {
+    const m = loadPanel({ width: 320, height: 400 });
+    m.send("set_name", "a1");
+    m.send("set_type", type);
+    const p = m.ctx.panel;
+    assert.equal(p.type, type);
+    const shown = texts(m);
+    assert.ok(shown.includes(type), `${type}: the type in the title row`);
+    assert.ok(shown.includes("a1") && shown.includes("No algorithm loaded.") && shown.includes("bypass"), type);
+    assert.equal(shown.includes("capture"), hasSource, `${type}: the source row`);
+    assert.equal(shown.includes("dump sel."), dumpSel, type);
+    m.send("clear");
+    assert.equal(p.type, type, "clear keeps the type");
+    m.ctx.save();
+    const again = loadPanel({ width: 320, height: 400 });
+    again.send("restore", m.embedded.pop()[1]);
+    assert.equal(again.ctx.panel.type, type, "saved with the patch");
+    assert.equal(again.ctx.panel.hasSource(), hasSource);
+  }
+});
+
+test("set_type: a base panel's controls work before a load; a bad type is said once", () => {
+  const m = loadPanel({ width: 320, height: 400 });
+  m.send("set_type", "transformer");
+  texts(m);
+  const r = m.ctx.panel.captureRect(m.ctx.panel.width);
+  m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  assert.deepEqual(sent(m), [["capture"]]);
+  m.send("set_type", "sorter");
+  assert.match(m.posts.join(""), /set_type is generator, transformer or selector, got sorter/);
+  assert.equal(m.ctx.panel.type, "transformer");
+  m.send("spec", JSON.stringify(Object.assign({}, SPEC, { type: "transformer" })));
+  assert.ok(texts(m).includes("transformer"));
+  assert.ok(!texts(m).includes("No algorithm loaded."));
+});
+
+test("a panel saved before the spec said type: its kind gives the type", () => {
+  for (const [kind, type] of [["producer", "generator"], ["transformer", "transformer"], ["selector", "selector"]]) {
+    const m = loadPanel({ width: 320, height: 400 });
+    m.send("restore", JSON.stringify(Object.assign({}, SPEC, { kind })));
+    assert.equal(m.ctx.panel.type, type, kind);
+  }
 });

@@ -78,10 +78,10 @@ purpose.
 <!-- algo -->
 ## Algorithms
 
-Each instance of the patch runs one kind of algorithm:
+Each instance of the patch runs one type of algorithm:
 
 <!-- generator -->
-- A **producer** makes music from nothing: `function produce(p) { ... }`. It
+- A **generator** makes music from nothing: `function produce(p) { ... }`. It
   returns a score.
 <!-- transformer -->
 - A **transformer** changes music already in the score (the user's, or an

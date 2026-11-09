@@ -317,7 +317,7 @@ def check_algorithm_code(code: str, node: str = "node") -> Tuple[List[Check], Op
     gaps = [b - a for a, b in zip(onsets, onsets[1:])]
     return [
         ("passes the check at every parameter edge", True, f"{result['runs']} runs"),
-        ("a producer", result.get("kind") == "producer", str(result.get("kind"))),
+        ("a generator", result.get("type") == "generator", str(result.get("type"))),
         ("at least 2 parameters", len(result["params"]) >= 2, ", ".join(p["name"] for p in result["params"])),
         ("gets faster", len(gaps) >= 2 and gaps[-1] < gaps[0], f"first gap {gaps[0]:.0f} ms, last {gaps[-1]:.0f} ms" if gaps else "no gaps"),
     ], score

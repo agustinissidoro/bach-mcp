@@ -49,7 +49,7 @@ from mcp.server.fastmcp import FastMCP
 from ..config import Config
 from ..model.client import ModelClient, Reply, ToolCall
 from ..prompt.docs import DocLibrary
-from ..prompt.modes import DEFAULT_MODE, KIND_MODE, instance_skill, split_prefix, tools_for
+from ..prompt.modes import DEFAULT_MODE, TYPE_MODE, instance_skill, split_prefix, tools_for
 from ..tools.inprocess import LocalTools
 from ..tools.session import new_conversation, use_conversation
 
@@ -63,23 +63,23 @@ LOOP_RETRIES = 1
 class Conversation:
     """The history of one chat, its mode and the docs it has already read.
 
-    kind: the type of the instance it is for (session.KINDS), which fixes the mode; None
+    instance_type: the type of the instance it is for (session.TYPES), which fixes the mode; None
     for a chat whose mode the /score and /algo prefixes choose."""
 
     def __init__(self, client: ModelClient, tools: LocalTools, skill: str,
-                 docs: Optional[DocLibrary] = None, max_tool_rounds: int = 8, kind: Optional[str] = None) -> None:
+                 docs: Optional[DocLibrary] = None, max_tool_rounds: int = 8, instance_type: Optional[str] = None) -> None:
         self.client = client
         self.tools = tools
         self.skill = skill  # the skill file, with its mode markers
         self.docs = docs
         self.max_tool_rounds = max_tool_rounds
-        self.kind = kind
+        self.instance_type = instance_type
         self._specs = tools.specs()
         self.new()
 
     def new(self) -> None:
         """Start a new chat: no history, the default mode, no docs read yet."""
-        self.mode = KIND_MODE[self.kind] if self.kind else DEFAULT_MODE
+        self.mode = TYPE_MODE[self.instance_type] if self.instance_type else DEFAULT_MODE
         self.history: List[Dict[str, Any]] = []
         self.seen_docs: Set[str] = set()
         self.number = new_conversation()
@@ -89,7 +89,7 @@ class Conversation:
         self.client.cancel()
 
     def system_prompt(self) -> str:
-        return instance_skill(self.skill, self.mode, self.kind)
+        return instance_skill(self.skill, self.mode, self.instance_type)
 
     def mode_tools(self) -> List[Dict[str, Any]]:
         return tools_for(self._specs, self.mode)
@@ -97,7 +97,7 @@ class Conversation:
     def send(self, text: str, max_tokens: Optional[int] = None) -> Iterator[Event]:
         """Send one user message and follow the model until it answers. Yields events."""
         use_conversation(self.number)
-        mode, rest = split_prefix(text) if self.kind is None else (None, text)
+        mode, rest = split_prefix(text) if self.instance_type is None else (None, text)
         if mode:
             self.mode = mode
             yield {"type": "mode", "mode": mode}
@@ -278,11 +278,11 @@ def _assistant_message(reply: Reply) -> Dict[str, Any]:
     return message
 
 
-def build_conversation(config: Config, client: ModelClient, app: FastMCP, kind: Optional[str] = None) -> Conversation:
+def build_conversation(config: Config, client: ModelClient, app: FastMCP, instance_type: Optional[str] = None) -> Conversation:
     """A conversation set up from bachmcp.toml, using the tools of `app` (tools/registry.py);
-    with `kind`, for an instance of that type."""
+    with `instance_type`, for an instance of that type."""
     return Conversation(client, LocalTools(app), config.skill_source(),
-                        DocLibrary() if config.chat.docs else None, config.chat.max_tool_rounds, kind)
+                        DocLibrary() if config.chat.docs else None, config.chat.max_tool_rounds, instance_type)
 
 
 __all__ = ["Conversation", "build_conversation", "Event", "LOOP_RETRIES"]

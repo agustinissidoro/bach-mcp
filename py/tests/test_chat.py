@@ -36,7 +36,7 @@ class EngineTest(unittest.TestCase):
         self.client = FakeClient(*replies)
         return Conversation(self.client, self.tools, RAW, DocLibrary() if docs else None, rounds)
 
-    def kinds(self, events):
+    def types(self, events):
         return [e["type"] for e in events]
 
     def tool_names(self, request):
@@ -97,7 +97,7 @@ class DocsTests(EngineTest):
         self.assertIn("woodwinds/alto-flute", events[0]["added"])
         self.assertIn("# Cello", self.client.requests[0]["messages"][1]["content"])
         events = list(conversation.send("now only the cello"))
-        self.assertNotIn("docs", self.kinds(events))
+        self.assertNotIn("docs", self.types(events))
 
 
 class ToolLoopTests(EngineTest):
@@ -105,7 +105,7 @@ class ToolLoopTests(EngineTest):
         conversation = self.chat(tool_reply("p2mc", {"pitches": ["C4", "E4"]}, text="The pitches first."),
                                  text_reply("Written."))
         events = list(conversation.send("a major third"))
-        self.assertEqual([k for k in self.kinds(events) if k not in ("text", "calling", "stage")],
+        self.assertEqual([k for k in self.types(events) if k not in ("text", "calling", "stage")],
                          ["round", "tool_call", "tool_result", "round", "done"])
         result = next(e for e in events if e["type"] == "tool_result")
         self.assertEqual(json.loads(result["result"]), [6000, 6400])
@@ -133,17 +133,17 @@ class ToolLoopTests(EngineTest):
                   chunk(finish="length")]
         conversation = self.chat(looped, text_reply("Fine now."))
         events = list(conversation.send("a long piece"))
-        self.assertIn("retry", self.kinds(events))
+        self.assertIn("retry", self.types(events))
         self.assertEqual(events[-1], {"type": "done", "finish": "stop"})
         conversation = self.chat(looped, looped)
         events = list(conversation.send("a long piece"))
-        self.assertEqual(self.kinds(events).count("retry"), 1)
+        self.assertEqual(self.types(events).count("retry"), 1)
         self.assertEqual(events[-1], {"type": "done", "finish": "length"})
 
     def test_tool_rounds_are_limited(self):
         conversation = self.chat(*[tool_reply("p2mc", {"pitches": [f"C{i}"]}, call_id=f"c{i}") for i in range(4)], rounds=2)
         events = list(conversation.send("go"))
-        self.assertEqual(self.kinds(events).count("round"), 3, "two rounds of tools, then one request to answer")
+        self.assertEqual(self.types(events).count("round"), 3, "two rounds of tools, then one request to answer")
         self.assertEqual(events[-1], {"type": "done", "finish": "rounds"})
 
     def test_after_the_last_round_of_tools_the_model_answers(self):
@@ -161,15 +161,15 @@ class ToolLoopTests(EngineTest):
 class KindTests(EngineTest):
     def test_an_instance_type_fixes_the_mode_and_says_what_it_takes(self):
         self.client = FakeClient(text_reply("A canon."), text_reply("Notes."))
-        conversation = Conversation(self.client, self.tools, RAW, None, 8, kind="transformer")
+        conversation = Conversation(self.client, self.tools, RAW, None, 8, instance_type="transformer")
         events = list(conversation.send("/score a canon"))
         self.assertNotIn("mode", [e["type"] for e in events], "no prefix switches an instance's mode")
         request = self.client.requests[0]
         self.assertEqual(request["messages"][1]["content"], "/score a canon")
-        self.assertTrue(request["messages"][0]["content"].startswith(skill_for(RAW, "algo", kind="transformer").rstrip()))
+        self.assertTrue(request["messages"][0]["content"].startswith(skill_for(RAW, "algo", instance_type="transformer").rstrip()))
         self.assertIn("You are writing for a transformer", request["messages"][0]["content"])
         self.assertEqual(self.tool_names(request), ["send_algorithm"])
-        writer = Conversation(self.client, self.tools, RAW, None, 8, kind="writer")
+        writer = Conversation(self.client, self.tools, RAW, None, 8, instance_type="writer")
         list(writer.send("three notes"))
         self.assertIn("write_score", self.tool_names(self.client.requests[1]))
 

@@ -47,7 +47,7 @@
                         370.0,
                         22.0
                     ],
-                    "text": "v8 bachmcp.bpatcher.replace.js bachmcp.bpatcher.generator 288 365"
+                    "text": "v8 bachmcp.bpatcher.replace.js bachmcp.bpatcher.algorithm 288 365 generator"
                 }
             },
             {
@@ -63,7 +63,7 @@
                         47.0
                     ],
                     "linecount": 3,
-                    "text": "[bachmcp.generator t1] becomes [bpatcher @name bachmcp.bpatcher.generator @args t1]: typed arguments go to @args (bachmcp.bpatcher.replace.js)."
+                    "text": "[bachmcp.generator t1] becomes [bpatcher @name bachmcp.bpatcher.algorithm @args t1 generator]: the typed name is #1, the type #2 (bachmcp.bpatcher.replace.js)."
                 }
             },
             {

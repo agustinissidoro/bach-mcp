@@ -96,7 +96,7 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 from ..bridge.protocol import Word, line, words
 from ..tools.playground import prepare
-from ..tools.session import KINDS, NoTarget, Target, serve_instances, serve_targets
+from ..tools.session import TYPES, NoTarget, Target, serve_instances, serve_targets
 from .engine import Conversation
 
 SERVER_COMMANDS = ("set_playground", "clear_instance_names_map", "add_instance_names_map", "set_active_instance",
@@ -193,7 +193,7 @@ class Hub:
             if self.playground:
                 out.append(line("set_playground", self.playground))
             out.append(line("clear_instance_names_map"))
-            out += [line("add_instance_names_map", name, kind) for name, kind in self.instances.items()]
+            out += [line("add_instance_names_map", name, instance_type) for name, instance_type in self.instances.items()]
             if self.active:
                 out.append(line("set_active_instance", self.active))
             for name in self.instances:
@@ -259,37 +259,37 @@ class Hub:
         if len(args) < 2:
             self._warn("add_instance_names_map needs a name and a type")
             return
-        name, kind = args[0], args[1]
-        if kind not in KINDS:
-            self._warn(f"{name}: unknown type {kind} (one of {', '.join(KINDS)})")
+        name, instance_type = args[0], args[1]
+        if instance_type not in TYPES:
+            self._warn(f"{name}: unknown type {instance_type} (one of {', '.join(TYPES)})")
             return
         with self._lock:
-            if self.instances.get(name) not in (None, kind):
+            if self.instances.get(name) not in (None, instance_type):
                 self._start_over(name)
-            self.instances[name] = kind
+            self.instances[name] = instance_type
             first = not self.active  # so that Claude's tools always have an instance
             if first:
                 self.active = name
-        self._send("add_instance_names_map", name, kind, to_max=echo)
+        self._send("add_instance_names_map", name, instance_type, to_max=echo)
         self._histories([name])
         if first:
             self._send("set_active_instance", name, to_max=echo)
 
-    def _set_active(self, name: str, kind: str, echo: bool) -> None:
+    def _set_active(self, name: str, instance_type: str, echo: bool) -> None:
         """The active instance. With its type (Max sends it), a name not yet in the map joins
         it: Max may say so before it sends the map again."""
-        if kind:
-            if kind not in KINDS:
-                self._warn(f"{name}: unknown type {kind} (one of {', '.join(KINDS)})")
+        if instance_type:
+            if instance_type not in TYPES:
+                self._warn(f"{name}: unknown type {instance_type} (one of {', '.join(TYPES)})")
                 return
             with self._lock:
-                joins = self.instances.get(name) != kind
+                joins = self.instances.get(name) != instance_type
                 if joins:
                     if name in self.instances:
                         self._start_over(name)
-                    self.instances[name] = kind
+                    self.instances[name] = instance_type
             if joins:
-                self._send("add_instance_names_map", name, kind, to_max=echo)
+                self._send("add_instance_names_map", name, instance_type, to_max=echo)
                 self._histories([name])
         with self._lock:
             known = name in self.instances
@@ -304,13 +304,13 @@ class Hub:
         """Max's whole map (`instances <name> <type> ...`): it replaces the hub's, and the pages
         get it as usual. An active instance no longer there gives way to the first."""
         pairs = [(args[i], args[i + 1]) for i in range(0, len(args) - 1, 2)]
-        bad = [f"{name} {kind}" for name, kind in pairs if kind not in KINDS]
+        bad = [f"{name} {instance_type}" for name, instance_type in pairs if instance_type not in TYPES]
         if len(args) % 2 or bad:
             self._warn(f"instances: expected <name> <type> pairs, got {' '.join(args)}")
         with self._lock:
-            fresh = {name: kind for name, kind in pairs if kind in KINDS}
-            for name, kind in self.instances.items():
-                if fresh.get(name) not in (None, kind):
+            fresh = {name: instance_type for name, instance_type in pairs if instance_type in TYPES}
+            for name, instance_type in self.instances.items():
+                if fresh.get(name) not in (None, instance_type):
                     self._start_over(name)
                 elif name not in fresh:
                     self._conversations.pop(name, None)  # gone from the patch: its file stays for its return
@@ -320,8 +320,8 @@ class Hub:
                 self.active = next(iter(fresh), "")
             active = self.active
         self._send("clear_instance_names_map", to_max=False)
-        for name, kind in fresh.items():
-            self._send("add_instance_names_map", name, kind, to_max=False)
+        for name, instance_type in fresh.items():
+            self._send("add_instance_names_map", name, instance_type, to_max=False)
         self._histories(list(fresh))
         if moved and active:
             self._send("set_active_instance", active, to_max=False)
@@ -351,8 +351,8 @@ class Hub:
 
     def _refusal(self, name: str) -> str:
         """Why a prompt to this instance cannot be answered now, or ""."""
-        kind = self.instances.get(name)
-        if kind is None:
+        instance_type = self.instances.get(name)
+        if instance_type is None:
             return f"no instance {name} in the map"
         if not self.playground:
             return "no playground: the patch sends set_playground <folder>"
@@ -446,10 +446,10 @@ class Hub:
                 raise NoTarget("no playground: the patch sends set_playground <folder>")
             if not self.active:
                 raise NoTarget("no instance is active: select one (set_active_instance <name>)")
-            kind = self.instances.get(self.active)
-            if kind is None:
+            instance_type = self.instances.get(self.active)
+            if instance_type is None:
                 raise NoTarget(f"the active instance {self.active} is not in the map: choose one (set_active_instance <name>)")
-            return Target(self.active, kind, self.playground)
+            return Target(self.active, instance_type, self.playground)
 
     # ── Answering ──────────────────────────────────────────────────────── #
 
@@ -590,7 +590,7 @@ class Hub:
         conversation = self._conversations.get(target.name)
         if conversation is None:
             assert self.make is not None
-            conversation = self.make(target.kind)
+            conversation = self.make(target.type)
             saved = self._saved(target.name)
             conversation.history = [{k: v for k, v in m.items() if k not in ("prompt", "session")} for m in saved]
             conversation.session = next((m["session"] for m in reversed(saved) if m.get("session")), "")  # Claude Code's

@@ -169,6 +169,7 @@ function load(script, options = {}) {
     require: options.legacy ? legacyRequire : (name) => require(onSearchPath(name)),
     mgraphics: makeMgraphics(options.width || 300, options.height || 100),
   };
+  Object.assign(ctx, options.globals || {});  // what a test adds, e.g. this.patcher
   ctx.globalThis = ctx;
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(onSearchPath(script), "utf8"), ctx, { filename: script });

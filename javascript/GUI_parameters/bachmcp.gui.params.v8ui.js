@@ -5,7 +5,8 @@ Create it as [v8ui bachmcp.gui.params.v8ui.js] (its box must not ignore clicks),
 [bachmcp.gui.params] (init/bachmcp-objectmappings.txt); a first argument is the
 name (as set_name), e.g. [bachmcp.gui.params t1]. Then:
   a runner's middle outlet  ->  this inlet           (spec, set, status, source, source_mode)
-  this outlet               ->  the runner's inlet   (param <name> <value...>, ...)
+  this outlet               ->  the runner's inlet   (param <name> <value...>, ...; after a spec,
+                                                     sync <message...>: the values it holds, which run nothing)
 
 The panel builds itself from the spec the runner sends when it loads a file
 (bachmcp.gui.params.panel.js, with the elements of bachmcp.gui.params.elements.js):
@@ -31,12 +32,17 @@ The algorithm's one-line description comes in the spec (the // comment that open
 its file) and is drawn under the title row; one_line_description <text...> replaces
 it by hand (no text removes it).
 
-The prompt's progress: one animated icon left of the kind, fed by bachmcp.server's
+The prompt's progress: one animated icon left of the type, fed by bachmcp.server's
 prompt info for this instance:
   prompt <stage> [detail...]
 Stages: received, queued, starting, sent (grey), thinking (a swelling dot), writing,
 calling / running <tool> (spinners), done (a check), stopped (a square): both fade
 after 4 s; error (a cross) stays. prompt idle removes the icon.
+
+set_type generator|transformer|selector: the base panel of that type before any
+algorithm is loaded (title row, output and, for a transformer or a selector, the
+source row); kept by clear and saved with the patch. The runner's type echo does
+the same.
 
 Other messages: reset (all parameters to their declared values), bang (send
 every value), clear, autosize 0/1, set_name [name] (drawn while no algorithm is
@@ -100,7 +106,8 @@ function spec(text) {
   }
   const kept = panel.setSpec(data);
   refresh();
-  emit(kept);
+  // the values this panel holds, back to the runner: sync, so that they run nothing (a load is not a run)
+  emit(kept.map((m) => ["sync", ...m]));
 }
 
 function set_name(name) {
@@ -111,10 +118,11 @@ function set(name, ...atoms) {
   if (panel && panel.setValue(String(name), atoms)) mgraphics.redraw();
 }
 
-function source(notes, from) {
-  if (!panel) return;
-  panel.setSource(notes, from);
-  mgraphics.redraw();
+// the source's notes: commented out for now (the runner does not send it, the panel does not show it)
+function source() {
+  // if (!panel) return;
+  // panel.setSource(notes, from);
+  // mgraphics.redraw();
 }
 
 // the runner's request for a score (capture), meant for the roll beside the panel
@@ -146,6 +154,22 @@ function dump_selection_only(flag) {
 
 // a transformer's input_mode echo: nothing to show
 function input_mode() {}
+
+/** set_type generator|transformer|selector: the base panel of that type, before any algorithm is loaded. */
+function set_type(t) {
+  if (!panel) return;
+  const changed = panel.setType(t);
+  if (changed === null) return post(`bachmcp.gui.params: set_type is generator, transformer or selector, got ${t}\n`);
+  if (changed) refresh();
+}
+
+// the runner's type echo: the same
+function type(t) {
+  set_type(t);
+}
+
+// the runner's auto_dump echo: nothing to show yet
+function auto_dump() {}
 
 function one_line_description(...text) {
   if (panel && panel.setDescription(text.join(" "))) refresh();
@@ -256,7 +280,7 @@ onidleout.local = 1;
 
 function save() {
   if (!panel) return;
-  if (panel.items.length || panel.path) embedmessage("restore", JSON.stringify(panel.snapshot()));
+  if (panel.items.length || panel.path || panel.type) embedmessage("restore", JSON.stringify(panel.snapshot()));
 }
 
 function restore(text) {

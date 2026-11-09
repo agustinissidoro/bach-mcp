@@ -6,9 +6,9 @@ Loads and runs an algorithm file, with the algorithmic core library in scope
 (v8, in the runners: runners/bachmcp.runner.engine.js) and in Node (the check before a file reaches Max), so
 an algorithm behaves identically in both.
 
-An algorithm is one of three kinds:
+An algorithm is of one of three types:
 
-    a producer makes a score from nothing       function produce(p) { ... return s; }
+    a generator makes a score from nothing      function produce(p) { ... return s; }
     a transformer changes a score it is given   function transform(source, p) { ... return out; }
     a selector picks notes of a score           function select(source, p) { ... return notes; }
 
@@ -26,15 +26,15 @@ and declares its parameters first (bachmcp.runner.paramspec.js):
 
 `p` holds the current value of every parameter. `source` is the original score
 (JSON) a transformer works on: the runner keeps it, so every run starts again
-from it, never from the transformer's own output. A producer and a transformer return a JSON score.
-(An older file with `function generate(p, input)` is a producer.)
+from it, never from the transformer's own output. A generator and a transformer return a JSON score.
+(An older file with `function generate(p, input)` is a generator.)
 
 It says what it does in the comment that opens it (its first // lines, before
 any code), shown on its panel as one line:
 
     // A canon whose voices drift apart in tempo.
 
-    compile(code)                  the file -> {specs, kind, fn, description, state}; throws AlgoError
+    compile(code)                  the file -> {specs, type, fn, description, state}; throws AlgoError
     run(compiled, values, source)  one run -> {score, notes, ms}
 
 Scores are bachjson-complete, as every object passes them: the loader does not
@@ -105,7 +105,7 @@ function describeFile(code) {
   return openingComment(code).split(/\s+/).join(" ").trim().slice(0, DESCRIPTION_MAX);
 }
 
-/** Algorithm source text -> {specs, kind, fn, description, state}. Throws AlgoError. */
+/** Algorithm source text -> {specs, type, fn, description, state}. Throws AlgoError. */
 function compile(code) {
   const state = { seed: 0, streams: new Map() };
   const lib = makeLibrary(state);
@@ -126,15 +126,15 @@ function compile(code) {
   const select = typeof parts.select === "function" ? parts.select : null;
   const generate = typeof parts.generate === "function" ? parts.generate : null;
   if ([produce, transform, select].filter(Boolean).length > 1) {
-    throw new AlgoError("define one of produce, transform or select: a producer makes a score, a transformer changes its source, a selector picks notes of it");
+    throw new AlgoError("define one of produce, transform or select: a generator makes a score, a transformer changes its source, a selector picks notes of it");
   }
   if (!produce && !transform && !select && !generate) {
-    throw new AlgoError("function produce(p) { ... } (a producer), function transform(source, p) { ... } (a transformer) or function select(source, p) { ... } (a selector) is missing");
+    throw new AlgoError("function produce(p) { ... } (a generator), function transform(source, p) { ... } (a transformer) or function select(source, p) { ... } (a selector) is missing");
   }
   const specs = normalizeParams(parts.params);
-  const kind = transform ? "transformer" : (select ? "selector" : "producer");
+  const type = transform ? "transformer" : (select ? "selector" : "generator");
   const description = describeFile(code);
-  return { specs, kind, fn: transform || select || produce || generate, description,
+  return { specs, type, fn: transform || select || produce || generate, description,
     legacy: !produce && !transform && !select, state };
 }
 
@@ -148,10 +148,10 @@ function run(compiled, values, source) {
   const seedSpec = compiled.specs.find((s) => s.type === "seed");
   compiled.state.seed = seedSpec ? (values[seedSpec.name] !== undefined ? values[seedSpec.name] : seedSpec.default) : 0;
   compiled.state.streams = new Map();
-  const name = { transformer: "transform", selector: "select" }[compiled.kind] || (compiled.legacy ? "generate" : "produce");
-  const given = compiled.kind === "transformer" || compiled.kind === "selector";
+  const name = { transformer: "transform", selector: "select" }[compiled.type] || (compiled.legacy ? "generate" : "produce");
+  const given = compiled.type === "transformer" || compiled.type === "selector";
   if (given && !source) {
-    throw new AlgoError(`this ${compiled.kind} has no source score yet: send it one (input dictionary <name>)`);
+    throw new AlgoError(`this ${compiled.type} has no source score yet: send it one (dictionary <name>)`);
   }
   let result;
   let input = null;
@@ -165,9 +165,9 @@ function run(compiled, values, source) {
     throw new AlgoError(`error in ${name}: ${e.message}`, lineOf(e));
   }
   if (result === undefined || result === null) {
-    throw new AlgoError(`${name}() returned nothing: it must end by returning ${compiled.kind === "selector" ? "the notes it picks" : "the score"}`);
+    throw new AlgoError(`${name}() returned nothing: it must end by returning ${compiled.type === "selector" ? "the notes it picks" : "the score"}`);
   }
-  if (compiled.kind === "selector") {
+  if (compiled.type === "selector") {
     const selection = addresses(input, result, name);
     return { selection, notes: selection.length, ms: Date.now() - start };
   }

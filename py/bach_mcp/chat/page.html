@@ -62,7 +62,7 @@
   .instance:hover { background: var(--bg); }
   .instance.on { background: var(--select); }
   .instance .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
-  .instance .kind { font-size: 11px; color: var(--muted); }
+  .instance .type { font-size: 11px; color: var(--muted); }
   .instance .dot { visibility: hidden; }
   .instance .dot.busy { visibility: visible; background: var(--busy); }
   .instance .dot.unread { visibility: visible; background: var(--accent); }
@@ -380,14 +380,14 @@ function render() {
   const aside = $("instances");
   aside.innerHTML = "<h2>Instances</h2>";
   if (!instances.size) aside.appendChild(add("div", "empty", "none yet: the patch sends them"));
-  for (const [name, kind] of instances) {
+  for (const [name, type] of instances) {
     const b = add("button", "instance" + (name === active ? " on" : ""));
     b.type = "button";
     const log = logs.get(name);
     const mark = busy.has(name) ? " busy" : (log && log.unread ? " unread" : "");
-    b.innerHTML = `<i class="dot${mark}"></i><span class="name"></span><span class="kind"></span>`;
+    b.innerHTML = `<i class="dot${mark}"></i><span class="name"></span><span class="type"></span>`;
     b.querySelector(".name").textContent = name;
-    b.querySelector(".kind").textContent = kind;
+    b.querySelector(".type").textContent = type;
     b.addEventListener("click", () => { if (name !== active) say("set_active_instance", name); });
     aside.appendChild(b);
   }

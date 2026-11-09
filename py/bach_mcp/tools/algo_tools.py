@@ -93,17 +93,17 @@ def _kind_error(t: Target, code: str) -> Optional[str]:
     """Why this code cannot be this instance's algorithm, or None."""
     transformer = bool(_TRANSFORMER.search(code))
     selector = bool(_SELECTOR.search(code))
-    if t.kind == "writer":
+    if t.type == "writer":
         return f"{t.name} is a writer: it takes notes (write_score), not an algorithm"
-    if t.kind == "selector" and not selector:
+    if t.type == "selector" and not selector:
         return (f"{t.name} is a selector: it picks notes of the score in its roll. "
                 "Write function select(source, p) { ... } returning the notes it picks")
-    if t.kind != "selector" and selector:
-        return f"{t.name} is a {t.kind}, not a selector: do not write function select"
-    if t.kind == "generator" and transformer:
+    if t.type != "selector" and selector:
+        return f"{t.name} is a {t.type}, not a selector: do not write function select"
+    if t.type == "generator" and transformer:
         return (f"{t.name} is a generator: it makes music from nothing. "
                 "Write function produce(p) { ... }, not transform")
-    if t.kind == "transformer" and not transformer:
+    if t.type == "transformer" and not transformer:
         return (f"{t.name} is a transformer: it changes the score in its roll. "
                 "Write function transform(source, p) { ... }")
     return None
@@ -159,7 +159,7 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
         with open(draft, "w", encoding="utf-8") as f:
             f.write(code.rstrip() + "\n")
 
-        source, origin = _source_for(t) if t.kind in ("transformer", "selector") else (None, "")
+        source, origin = _source_for(t) if t.type in ("transformer", "selector") else (None, "")
         result = check_algorithm(draft, node=node, source=source)
         if not result.get("ok"):
             os.remove(draft)
@@ -185,8 +185,8 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
 
         params = "\n".join(f"  {p}" for p in result["describe"]) or "  (none)"
         shown = f'Shown above its panel: "{result["description"]}"\n' if result.get("description") else ""
-        kind = ""
-        if result.get("kind") == "selector":
+        about = ""
+        if result.get("type") == "selector":
             picked = ", ".join(f"[{v} {c} {n}]" for v, c, n in (result.get("selection") or [])[:24])
             more = " ..." if len(result.get("selection") or []) > 24 else ""
             return (
@@ -197,11 +197,11 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
                 f"Checked in {result['runs']} runs (every slider at its minimum and maximum, every option).\n"
                 f"At the declared values it picks {result['notes']} notes ([voice chord note]): {picked or 'none'}{more}"
             )
-        if result.get("kind") == "transformer":
-            kind = (f"Transformer, checked on {origin} ({result['source']['notes']} notes). In Max its source "
+        if result.get("type") == "transformer":
+            about = (f"Transformer, checked on {origin} ({result['source']['notes']} notes). In Max its source "
                     f"lives in memory (non-destructive: every run starts again from it).\n")
         return (
-            f"OK. Algorithm saved as algorithms/{file} {status}.\n{shown}{kind}"
+            f"OK. Algorithm saved as algorithms/{file} {status}.\n{shown}{about}"
             f"Parameters (now a panel in Max):\n{params}\n"
             f"Checked in {result['runs']} runs (every slider at its minimum and maximum, every option).\n"
             f"Score at the declared values ({result['notes']} notes, {result['ms']} ms):\n{describe(result['score'])}"

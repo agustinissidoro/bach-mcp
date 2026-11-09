@@ -121,7 +121,7 @@ def serve(config: Config, stdio: bool = False) -> None:
         mcp = mcp_app(config, bridge)
         headless = [] if stdio else headless_apps(config, bridge)
         command = None if stdio else find_claude_code()
-        make = None if stdio else lambda kind: ClaudeConversation(command, config, kind)
+        make = None if stdio else lambda instance_type: ClaudeConversation(command, config, instance_type)
         hub = Hub(bridge, status, make)
         status.on_quit(hub.close)
         if stdio:

@@ -11,9 +11,9 @@ const { load } = require("./maxmock.js");
 
 const BODY = "\nfunction produce(p) { return score(); }";
 
-/** A generator runner and a panel, wired: runner outlet 1 -> panel, panel outlet 0 -> runner. */
+/** A generator runner and a panel, wired: runner outlet 2 -> panel, panel outlet 0 -> runner. */
 function wire(file, panelOptions = {}) {
-  const runner = load("bachmcp.runner.generator.js");
+  const runner = load("bachmcp.runner.js", { args: ["generator"] });
   const panel = load("bachmcp.gui.params.v8ui.js", Object.assign({ legacy: true, width: 320, height: 2000 }, panelOptions));
   let fromRunner = 0, fromPanel = 0;
   function pump() {
@@ -21,7 +21,7 @@ function wire(file, panelOptions = {}) {
       let moved = false;
       while (fromRunner < runner.out.length) {
         const [i, selector, ...args] = runner.out[fromRunner++];
-        if (i === 1) {
+        if (i === 2) {
           panel.send(selector, ...args);
           moved = true;
         }
@@ -60,12 +60,12 @@ function start(params) {
 
 /** What the runner holds: its last spec's values, then every "set" it echoed since. */
 function runnerValues(w) {
-  const specs = w.runner.out.filter((o) => o[0] === 1 && o[1] === "spec");
+  const specs = w.runner.out.filter((o) => o[0] === 2 && o[1] === "spec");
   const last = specs[specs.length - 1];
   const values = {};
   for (const p of JSON.parse(last[2]).params) values[p.name] = [].concat(...[].concat(p.value).map((x) => [].concat(x)));
   for (const o of w.runner.out.slice(w.runner.out.indexOf(last))) {
-    if (o[0] === 1 && o[1] === "set") values[o[2]] = o.slice(3);
+    if (o[0] === 2 && o[1] === "set") values[o[2]] = o.slice(3);
   }
   for (const k in values) values[k] = values[k].map((x) => (typeof x === "boolean" ? (x ? 1 : 0) : x));
   return values;

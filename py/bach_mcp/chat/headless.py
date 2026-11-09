@@ -41,7 +41,7 @@ from typing import Any, Dict, Iterator, List, Optional, Set
 from ..claude import login_command
 from ..config import Config
 from ..prompt.docs import DocLibrary
-from ..prompt.modes import KIND_MODE, MODE_TOOLS, instance_skill
+from ..prompt.modes import TYPE_MODE, MODE_TOOLS, instance_skill
 from ..tools.session import new_conversation, use_conversation
 from .engine import Event
 
@@ -62,14 +62,14 @@ def _workdir() -> str:
 class ClaudeConversation:
     """The history of one instance's chat with Claude Code. command: the `claude` program, or None."""
 
-    def __init__(self, command: Optional[str], config: Config, kind: str) -> None:
+    def __init__(self, command: Optional[str], config: Config, instance_type: str) -> None:
         self.command = command
         self.skill = config.skill_source()
         self.docs = DocLibrary() if config.chat.docs else None
         self.max_tool_rounds = config.chat.max_tool_rounds
-        self.kind = kind
+        self.instance_type = instance_type
         self.claude = config.claude  # [claude] claude_model, claude_effort, claude_code_prompt
-        self.mode = KIND_MODE[kind]
+        self.mode = TYPE_MODE[instance_type]
         self.url = config.headless_mcp_url(self.mode)  # this mode's tools, no instructions
         self.history: List[Dict[str, Any]] = []
         self.seen_docs: Set[str] = set()
@@ -84,7 +84,7 @@ class ClaudeConversation:
             process.terminate()
 
     def system_prompt(self) -> str:
-        return instance_skill(self.skill, self.mode, self.kind)
+        return instance_skill(self.skill, self.mode, self.instance_type)
 
     def command_line(self) -> List[str]:
         config = {"mcpServers": {SERVER: {"type": "http", "url": self.url}}}

@@ -100,10 +100,10 @@ class HubTest(unittest.TestCase):
         hub.subscribe(lambda m: self.clients.append(m))
         return hub
 
-    def make(self, kind):
+    def make(self, instance_type):
         self.client = HeldClient(self.go, *self.replies)
         docs = DocLibrary() if getattr(self, "with_docs", False) else None
-        return Conversation(self.client, self.tools, RAW, docs, 8, kind)
+        return Conversation(self.client, self.tools, RAW, docs, 8, instance_type)
 
     def heard(self, web_only=None):
         """What the pages heard, without the stage reports (stages() has them)."""
@@ -206,7 +206,7 @@ class MapTests(HubTest):
         self.assertEqual(target().name, "notes1", "a later one does not take over")
         self.hub.handle("set_active_instance scales1", "web")
         t = target()
-        self.assertEqual((t.name, t.kind, t.algorithm_file), ("scales1", "generator",
+        self.assertEqual((t.name, t.type, t.algorithm_file), ("scales1", "generator",
                                                             os.path.join(self.playground, "algorithms", "scales1.js")))
 
 

@@ -143,8 +143,8 @@ def add_chords(base: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
 def _writer() -> Target:
     """The instance being served, if it is a writer; else NoTarget saying what it takes instead."""
     t = target()
-    if t.kind != "writer":
-        raise NoTarget(f"{t.name} is a {t.kind}: it takes an algorithm (send_algorithm), not notes")
+    if t.type != "writer":
+        raise NoTarget(f"{t.name} is a {t.type}: it takes an algorithm (send_algorithm), not notes")
     return t
 
 
