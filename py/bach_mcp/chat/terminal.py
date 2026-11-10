@@ -76,7 +76,7 @@ def run(config: Config) -> None:
         status.started()
         client = ModelClient(server.base_url, config.generation, server.request_model)
         app = create_tools(bridge, config.algo.node, config.server.tool_log)
-        hub = Hub(bridge, status, lambda kind: build_conversation(config, client, app, kind))
+        hub = Hub(bridge, status, lambda instance_type: build_conversation(config, client, app, instance_type))
         hub.subscribe(Printer())
         print(f"\nBach — {server.label}. Type lines as Max sends them, e.g.\n"
               "  set_playground ~/bach-playground\n  add_instance_names_map scales1 generator\n"

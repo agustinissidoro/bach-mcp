@@ -1,5 +1,5 @@
 /*
-bachmcp.download.js
+bachmcp.server.download.js
 -------------------
 Node for Max ([node.script]): puts a model in a folder, one subfolder per model,
 as py/bach_mcp/utilities/download.py does.
@@ -24,7 +24,7 @@ Out of the outlet:
     error <message>                       before anything was downloaded
 
 While it runs, `stop` (or `script stop`) interrupts it. A download that stops can be
-started again: it goes on where it was. Outside Max, `node bachmcp.download.js download
+started again: it goes on where it was. Outside Max, `node bachmcp.server.download.js download
 <model> <folder>` (or `model_catalog <folder>`) prints the same messages. HF_TOKEN in the environment opens gated repos.
 */
 

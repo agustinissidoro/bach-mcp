@@ -47,7 +47,7 @@
                         370.0,
                         22.0
                     ],
-                    "text": "v8 bachmcp.bpatcher.replace.js bachmcp.bpatcher.transformer 288 365"
+                    "text": "v8 bachmcp.bpatcher.replace.js bachmcp.bpatcher.algorithm 288 365 transformer"
                 }
             },
             {
@@ -63,7 +63,7 @@
                         47.0
                     ],
                     "linecount": 3,
-                    "text": "[bachmcp.transformer t1] becomes [bpatcher @name bachmcp.bpatcher.transformer @args t1]: typed arguments go to @args (bachmcp.bpatcher.replace.js)."
+                    "text": "[bachmcp.transformer t1] becomes [bpatcher @name bachmcp.bpatcher.algorithm @args t1 transformer]: the typed name is #1, the type #2 (bachmcp.bpatcher.replace.js)."
                 }
             },
             {

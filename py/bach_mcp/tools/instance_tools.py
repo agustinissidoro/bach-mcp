@@ -30,7 +30,7 @@ def describe(names: Dict[str, str], active: str) -> str:
     if not names:
         return "no instances: the patch has sent none"
     head = f"active: {active} ({names[active]})" if active in names else "active: none"
-    return "\n".join([head, *(f"{name} {kind}" for name, kind in names.items())])
+    return "\n".join([head, *(f"{name} {instance_type}" for name, instance_type in names.items())])
 
 
 def register_instance_tools(mcp: FastMCP) -> None:

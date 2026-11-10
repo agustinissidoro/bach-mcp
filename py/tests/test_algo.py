@@ -153,6 +153,13 @@ class SendAlgorithmTests(PlaygroundTest):
         self.assertEqual(len([h for h in os.listdir(self.history) if h.startswith("turn-")]), 1,
                          "an unchanged file is not kept twice")
 
+    def test_the_same_code_with_other_comments_is_named(self):
+        self.assertNotIn("NOTHING CHANGED", self.send(code=GOOD))
+        reply = self.send(code=GOOD.replace("const s = score();", "const s = score();  // now corrected"))
+        self.assertTrue(reply.startswith("OK."), reply)
+        self.assertIn("NOTHING CHANGED: apart from comments this is the same code", reply)
+        self.assertNotIn("NOTHING CHANGED", self.send(code=GOOD.replace("value: 8", "value: 9")))
+
     def test_errors_load_nothing_and_say_where(self):
         cases = [
             (GOOD.replace("const s = score();", "const s = score(;"), "ERROR in turn.js line 7: syntax error"),
@@ -177,8 +184,8 @@ class SendAlgorithmTests(PlaygroundTest):
     def test_the_instance_type_decides_what_is_taken(self):
         self.assertIn("turn is a generator: it makes music from nothing. Write function produce(p)",
                       self.send(code=TRANSFORMER))
-        self.target = Target("turn", "writer", self.folder)
-        self.assertIn("turn is a writer: it takes notes (write_score)", self.send(code=GOOD))
+        self.target = Target("turn", "score", self.folder)
+        self.assertIn("turn is a score instance: it takes notes (write_score)", self.send(code=GOOD))
         self.target = Target("turn", "selector", self.folder)
         self.assertIn("turn is a selector: it picks notes of the score in its roll", self.send(code=GOOD))
         self.target = Target("turn", "transformer", self.folder)
@@ -291,7 +298,7 @@ class LibraryTests(unittest.TestCase):
                     f.write(block)
                 result = check_algorithm(path, node=NODE)
                 self.assertTrue(result.get("ok"), f"example {i}: {result}")
-                self.assertEqual(result["kind"], ("producer", "transformer", "selector", "transformer")[i])
+                self.assertEqual(result["type"], ("generator", "transformer", "selector", "transformer")[i])
 
     def test_the_skill_names_every_library_function(self):
         program = "process.stdout.write(JSON.stringify(require(process.argv[1]).LIBRARY))"

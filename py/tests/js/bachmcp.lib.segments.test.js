@@ -10,6 +10,9 @@ test("phrases and sections", () => {
   assert.deepEqual(lib.phrases(s, 400).map((p) => p[0].onset), [0, 2000, 4000]);
   assert.deepEqual(lib.phrases(s.voices[0].chords, 400).map((p) => p.length), [4, 4, 2]);
   assert.deepEqual(lib.sections(s).map((p) => p.length), [10, 2], "at the markers, all voices");
+  const inHeader = Object.assign({}, s, { header: { markers: s.markers } });
+  delete inHeader.markers;
+  assert.deepEqual(lib.sections(inHeader).map((p) => p.length), [10, 2], "at the markers in the header, as a real score has them");
   delete s.markers;
   assert.deepEqual(lib.sections(s, 600).map((p) => p.length), [5, 5, 2], "at long silences without markers");
 });

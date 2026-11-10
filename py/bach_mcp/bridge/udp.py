@@ -2,7 +2,7 @@
 udp.py
 ------
 The bridge to Max over UDP. Everything here is plain text: one message is one
-line such as `mcp_buffer_written q3 "/path/buffer.txt"`. [udpreceive] only
+line such as `scales1 load_algo scales1.js`. [udpreceive] only
 reads OSC packets, so `encode` packs the line into one (the first word is the
 message name, every other word an argument: a whole number, a decimal, or a
 symbol; a quoted part stays one symbol, see protocol.py), and Max outputs it as

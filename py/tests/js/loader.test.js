@@ -100,7 +100,6 @@ test("bad declarations are refused with a message the model can act on", () => {
     [{ times: { type: "slider" } }, /"range" must be \[low, high\]/],
     [{ times: { type: "dial", range: [5, 1] } }, /low < high/],
     [{ "two words": { type: "toggle" } }, /not a usable name/],
-    [{ load: { type: "toggle" } }, /Max uses for its own messages; rename/],
     [{ mode: { type: "menu" } }, /needs "options"/],
     [{ mode: { type: "menu", options: ["a"], value: "b" } }, /not one of the options/],
     [{ durs: { type: "list", range: [0, 1] } }, /a list needs "value"/],
@@ -162,14 +161,14 @@ test("names in the file can shadow the library", () => {
   assert.equal(loader.run(loader.compile(code), {}).score.voices[0].chords[0].notes[0].pitch, 6001);
 });
 
-test("producers and transformers", () => {
-  const producer = loader.compile(`const params = {};
+test("generators and transformers", () => {
+  const generator = loader.compile(`const params = {};
     function produce(p) { const s = score(); s.voice("A").note(0, 6000, 100); return s; }`);
-  assert.equal(producer.kind, "producer");
-  assert.equal(loader.run(producer, {}).notes, 1);
+  assert.equal(generator.type, "generator");
+  assert.equal(loader.run(generator, {}).notes, 1);
   const legacy = loader.compile(`const params = {};
     function generate(p, input) { const s = score(); s.voice("A").note(0, input ? 7000 : 6000, 100); return s; }`);
-  assert.equal(legacy.kind, "producer");
+  assert.equal(legacy.type, "generator");
   assert.equal(loader.run(legacy, {}, { voices: [] }).score.voices[0].chords[0].notes[0].pitch, 7000);
   assert.throws(() => loader.compile("const params = {}; function produce(p) {} function transform(s, p) {}"), /define one of produce, transform or select/);
 });
@@ -177,7 +176,7 @@ test("producers and transformers", () => {
 test("a transformer always starts again from the original source", () => {
   const t = loader.compile(`const params = { shift: { type: "slider", range: [-1200, 1200], value: 100 } };
     function transform(source, p) { eachNote(source, (n) => { n.pitch += p.shift; }); return source; }`);
-  assert.equal(t.kind, "transformer");
+  assert.equal(t.type, "transformer");
   const source = { voices: [{ chords: [{ onset: 0, notes: [{ pitch: 6000, dur: 100 }] }] }] };
   const pitch = (r) => r.score.voices[0].chords[0].notes[0].pitch;
   assert.equal(pitch(loader.run(t, { shift: 100 }, source)), 6100);

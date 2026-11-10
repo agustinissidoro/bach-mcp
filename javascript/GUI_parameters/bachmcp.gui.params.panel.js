@@ -1,11 +1,11 @@
 /*
 bachmcp.gui.params.panel.js
 ---------------------------
-The Panel: a title row (the algorithm, its kind, bypass and "set active": the
+The Panel: a title row (the algorithm, its type, bypass and "set active": the
 instance Claude's tools work for, sent as "set_as_active_instance"), under it the
 algorithm's one-line description when its file has one (the spec's description:
 the // comment that opens the file), then two sections.
-Left of the kind, one animated icon follows the instance's prompt (setPrompt).
+Left of the type, one animated icon follows the instance's prompt (setPrompt).
 Drags land on each slider's grid; alt lets one through. "Options": reset
 all; then bypass ("bypass 0|1"), repeat ("repeat"); pitch cards toggle ½ | ¼ | free ("snap 0|1|3"), time cards 100ms | 10ms | free; a transformer adds its source card: how many notes, write
 (write_to_playground), capture and the source mode as two
@@ -48,7 +48,6 @@ var THEME = base.THEME,
   scaled = base.scaled,
   scaleFor = base.scaleFor,
   clamp = base.clamp,
-  snap = base.snap,
   copy = base.copy,
   same = base.same,
   inside = base.inside,
@@ -60,8 +59,14 @@ var THEME = base.THEME,
   color = base.color;
 var makeElement = elements.makeElement;
 
+// The algorithm's type (the spec's type), as the runner says it.
+var TYPES = { generator: true, transformer: true, selector: true };
+// Panels saved before the spec said type: their kind.
+var TYPE_OF_KIND = { producer: "generator", transformer: "transformer", selector: "selector" };
+
 function Panel() {
   this.name = "";  // set_name: shown while no algorithm is loaded; kept by clear
+  this.type = "";  // set_type: the base layout while no algorithm is loaded; kept by clear
   this.prompt = { stage: "", detail: "", at: 0 };  // the prompt's progress (setPrompt); kept by clear
   this.clear();
 }
@@ -78,8 +83,7 @@ Panel.prototype.clear = function () {
   this.title = "";
   this.description = "";  // one line on what the algorithm does: the comment that opens its file
   this.path = "";
-  this.kind = "producer";
-  this.source = null;  // transformers: {notes, from}
+  // this.source = null;  // transformers: {notes, from}. Commented out for now: the panel does not show the source
   this.items = [];
   this.rows = [];
   this.state = { kind: "", text: "" };
@@ -97,14 +101,24 @@ Panel.prototype.clear = function () {
   this.timeSnap = 0;   // time sliders: 0 their own grid, 1 100 ms, 2 10 ms
 };
 
-/** Transformers and selectors work on a source: they have the source card. */
-Panel.prototype.hasSource = function () {
-  return this.kind === "transformer" || this.kind === "selector";
+/**
+ * set_type generator|transformer|selector: the panel of that type, before any algorithm
+ * (its title row, output and, for a transformer or a selector, its source row).
+ * Returns null for an unknown type, else whether anything changed.
+ */
+Panel.prototype.setType = function (type) {
+  var t = String(type);
+  if (!TYPES[t]) return null;
+  if (t === this.type) return false;
+  this.type = t;
+  this.places = null;
+  this.width = 0;
+  return true;
 };
 
-/** The two segments of the source mode, and whether the right one is on. */
-Panel.prototype.modes = function () {
-  return { left: "non-destructive", right: "destructive", on: this.sourceMode === "destructive" };
+/** Transformers and selectors work on a source: they have the source card. */
+Panel.prototype.hasSource = function () {
+  return this.type === "transformer" || this.type === "selector";
 };
 
 /**
@@ -119,10 +133,11 @@ Panel.prototype.setSpec = function (spec) {
   var old = {}, i;
   for (i = 0; i < this.items.length; i++) old[this.items[i].name] = this.items[i];
   this.title = spec.title || "";
+  var type = spec.type || TYPE_OF_KIND[spec.kind];
+  if (TYPES[type]) this.type = type;
   this.setDescription(spec.description);
   this.path = spec.path || "";
-  this.kind = spec.kind || "producer";
-  this.source = spec.source || null;
+  // this.source = spec.source || null;  // commented out for now: the panel does not show the source
   this.items = [];
   var messages = [];
   var params = spec.params || [];
@@ -144,7 +159,7 @@ Panel.prototype.setSpec = function (spec) {
   this.places = null;
   // the runner starts nondestructive: tell it the mode this panel is in
   if (this.hasSource() && this.sourceMode !== "nondestructive") messages.push(["source_mode", 0]);
-  if (this.kind === "selector" && !this.selectionOnly) messages.push(["dump_selection_only", 0]);
+  if (this.type === "selector" && !this.selectionOnly) messages.push(["dump_selection_only", 0]);
   if (this.bypass) messages.push(["bypass", 1]);
   if (this.hasSource() && this.withinSelection) messages.push(["process_only_selection", 1]);
   if (this.pitchSnap !== 3) messages.push(["snap", this.pitchSnap]);
@@ -386,10 +401,12 @@ Panel.prototype.setStatus = function (kind, text) {
   this.state = { kind: String(kind || ""), text: String(text || "") };
 };
 
-/** A transformer's source score: how many notes, and where it was taken from. */
+/* Commented out for now: the panel does not show the source.
+// A transformer's source score: how many notes, and where it was taken from.
 Panel.prototype.setSource = function (notes, from) {
   this.source = { notes: Number(notes) || 0, from: String(from || "") };
 };
+*/
 
 /** Where the options are, for this width: computed by layout(). */
 Panel.prototype.ui = function (width) {
@@ -417,11 +434,6 @@ Panel.prototype.resetRect = function (width) {
   return this.ui(width).reset;
 };
 
-Panel.prototype.hasGrid = function () {
-  for (var i = 0; i < this.items.length; i++) if (this.items[i].grid > 0) return true;
-  return false;
-};
-
 Panel.prototype.valueWidth = function () {
   var longest = 0;
   for (var i = 0; i < this.items.length; i++) longest = Math.max(longest, this.items[i].widest().length);
@@ -431,7 +443,7 @@ Panel.prototype.valueWidth = function () {
 
 /**
  * Place everything for this width (and height, when known); returns the height
- * the panel needs. Title row: the algorithm, its kind, the bypass toggle and
+ * the panel needs. Title row: the algorithm, its type, the bypass toggle and
  * "set active" (always: to make this instance the one Claude works on again, or
  * the one it starts on before it has an algorithm).
  * "output": repeat, write. Pitch and time cards carry their snap toggle
@@ -487,7 +499,7 @@ Panel.prototype.place = function (width, compact, s, extra) {
   var section = compact ? v(14) : k.section;
   var y = k.title + this.descriptionHeight() + k.gap;
   p.setActive = { x: width - k.pad - v(62), y: (k.title - k.button) / 2, w: v(62), h: k.button };
-  if (!this.items.length && !this.title) return y + k.row + k.status;
+  if (!this.items.length && !this.title && !this.type) return y + k.row + k.status;
   p.bypass = { x: p.setActive.x - v(4) - v(56), y: (k.title - k.button) / 2, w: v(56), h: k.button };
   // output
   p.sections.push({ text: "output", y: y, h: section });
@@ -499,7 +511,7 @@ Panel.prototype.place = function (width, compact, s, extra) {
   if (this.hasSource()) {
     p.sections.push({ text: "source", y: y, h: section, source: true });
     y += section;
-    var n = this.kind === "selector" ? 4 : 3, gap = v(4), w = (inner - (n - 1) * gap) / n;
+    var n = this.type === "selector" ? 4 : 3, gap = v(4), w = (inner - (n - 1) * gap) / n;
     p.capture = { x: m.pad, y: y, w: w, h: k.button };
     p.mode = { x: m.pad + w + gap, y: y, w: w, h: k.button };
     p.within = { x: m.pad + 2 * (w + gap), y: y, w: w, h: k.button };
@@ -568,7 +580,7 @@ Panel.prototype.paint = function (g, width, height) {
   // title row
   box(g, 0, 0, width, k.title, THEME.header);
   box(g, 0, k.title - 1, width, 1, THEME.line);
-  var kindText = this.title ? ({ transformer: "transformer", selector: "selector" }[this.kind] || "generator") : "";
+  var kindText = this.title || this.type ? this.type || "generator" : "";
   var titleRight = p.bypass ? p.bypass.x - v(6) : p.setActive ? p.setActive.x - v(6) : width - k.pad;
   if (kindText) {
     var kw = v(kindText.length * 6 + 14);
@@ -577,7 +589,7 @@ Panel.prototype.paint = function (g, width, height) {
     label(g, kindText, kr, "center", THEME.dim, v(THEME.smallSize));
     titleRight = kr.x - v(6);
   }
-  // the prompt's progress: one icon left of the kind
+  // the prompt's progress: one icon left of the type
   if (this.promptShown()) {
     promptIcon(g, this.prompt.stage, titleRight - v(7), k.title / 2, v(6), this.clock() - this.prompt.at);
     titleRight -= v(20);
@@ -590,7 +602,7 @@ Panel.prototype.paint = function (g, width, height) {
   if (this.description) {
     label(g, this.description, { x: k.pad + v(2), y: k.title + v(1), w: width - 2 * k.pad - v(4), h: k.row }, "left", THEME.dim, v(11));
   }
-  if (!this.items.length && !this.title) {
+  if (!this.items.length && !this.title && !this.type) {
     label(g, "No algorithm loaded.", { x: k.pad + v(2), y: k.title + this.descriptionHeight() + k.gap, w: width - 2 * k.pad, h: k.row },
       "left", THEME.dim, v(THEME.fontSize));
   }
@@ -599,11 +611,13 @@ Panel.prototype.paint = function (g, width, height) {
   for (var q = 0; q < p.sections.length; q++) {
     var sec = p.sections[q];
     var text = sec.text.toUpperCase(), tc = THEME.faint;
+    /* Commented out for now: the panel does not show the source.
     if (sec.source) {
       var has = this.source && this.source.notes;
       text += has ? " · " + this.source.notes + " notes" + (this.source.from ? " · " + this.source.from : "") : " · none";
       if (!has) tc = THEME.error;
     }
+    */
     label(g, text.toUpperCase(), { x: k.pad + v(2), y: sec.y, w: width - 2 * k.pad, h: sec.h - v(4) }, "left", tc, v(THEME.smallSize), THEME.bold);
   }
   if (p.repeat) button(g, p.repeat, "repeat", false, this.hot(p.repeat), C);
@@ -613,8 +627,8 @@ Panel.prototype.paint = function (g, width, height) {
   if (p.within) button(g, p.within, "process sel.", this.withinSelection, this.hot(p.within), C);
   if (p.only) button(g, p.only, "dump sel.", this.selectionOnly, this.hot(p.only), C);
   if (p.reset) button(g, p.reset, "reset", false, this.hot(p.reset), C);
-  if (this.title && !this.items.length) {
-    label(g, "no parameters", { x: k.pad + v(2), y: (p.sections.length ? p.sections[p.sections.length - 1].y : k.title) + k.section,
+  if ((this.title || this.type) && !this.items.length) {
+    label(g, this.title ? "no parameters" : "No algorithm loaded.", { x: k.pad + v(2), y: (p.sections.length ? p.sections[p.sections.length - 1].y : k.title) + k.section,
       w: width - 2 * k.pad, h: k.row }, "left", THEME.dim, v(THEME.fontSize));
   }
   for (var i = 0; i < this.rows.length; i++) {
@@ -757,13 +771,13 @@ Panel.prototype.snapshot = function () {
       options: it.options, value: copy(it.value), "default": copy(it.def),
       kind: it.kind, grid: it.baseGrid !== undefined ? it.baseGrid : it.grid, display: it.display });
   }
-  return { title: this.title, description: this.description, path: this.path, kind: this.kind, source: this.source, params: params, snap: this.snap,
+  return { title: this.title, description: this.description, path: this.path, type: this.type, params: params, snap: this.snap,
     sourceMode: this.sourceMode, involutive: this.involutive, selectionOnly: this.selectionOnly,
     bypass: this.bypass, withinSelection: this.withinSelection, pitchSnap: this.pitchSnap, timeSnap: this.timeSnap };
 };
 
 Panel.prototype.restore = function (snapshot) {
-  this.setSpec({ title: snapshot.title, path: snapshot.path, kind: snapshot.kind, params: [] });
+  this.setSpec({ title: snapshot.title, path: snapshot.path, type: snapshot.type, kind: snapshot.kind, params: [] });
   this.sourceMode = snapshot.sourceMode === "destructive" ? "destructive" : "nondestructive";
   this.involutive = snapshot.involutive === true;
   this.selectionOnly = snapshot.selectionOnly !== false;

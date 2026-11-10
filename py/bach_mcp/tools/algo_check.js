@@ -11,7 +11,7 @@ reachable from the panel is known to work.
 A transformer or a selector runs on the --source score (a bachjson-complete
 file), or on a small built-in score without one.
 Prints one JSON line:
-    {"ok": true, "kind": "producer" | "transformer" | "selector", "source": {"notes": n, "given": true} | null,
+    {"ok": true, "type": "generator" | "transformer" | "selector", "source": {"notes": n, "given": true} | null,
      "params": [...], "describe": [...], "score": {...}, "notes": n, "ms": t, "runs": k}
     (a selector: "selection": [[voice, chord, note], ...] in place of "score", "notes" the notes picked)
     {"ok": false, "error": "...", "line": n, "context": "with times = 111 (its maximum)"}
@@ -116,7 +116,7 @@ function main() {
   }
 
   let source = null;
-  if (compiled.kind === "transformer" || compiled.kind === "selector") {
+  if (compiled.type === "transformer" || compiled.type === "selector") {
     try {
       source = sourceFile ? readSource(sourceFile) : SAMPLE_SOURCE;
     } catch (e) {
@@ -151,7 +151,7 @@ function main() {
 
   reply({
     ok: true,
-    kind: compiled.kind,
+    type: compiled.type,
     description: compiled.description,
     source: source ? { notes: countNotes(source), given: Boolean(sourceFile) } : null,
     params: compiled.specs,

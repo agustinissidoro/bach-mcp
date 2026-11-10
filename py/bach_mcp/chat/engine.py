@@ -49,7 +49,7 @@ from mcp.server.fastmcp import FastMCP
 from ..config import Config
 from ..model.client import ModelClient, Reply, ToolCall
 from ..prompt.docs import DocLibrary
-from ..prompt.modes import DEFAULT_MODE, KIND_MODE, instance_skill, split_prefix, tools_for
+from ..prompt.modes import DEFAULT_MODE, TYPE_MODE, instance_skill, split_prefix, tools_for
 from ..tools.inprocess import LocalTools
 from ..tools.session import new_conversation, use_conversation
 
@@ -63,23 +63,23 @@ LOOP_RETRIES = 1
 class Conversation:
     """The history of one chat, its mode and the docs it has already read.
 
-    kind: the type of the instance it is for (session.KINDS), which fixes the mode; None
+    instance_type: the type of the instance it is for (session.TYPES), which fixes the mode; None
     for a chat whose mode the /score and /algo prefixes choose."""
 
     def __init__(self, client: ModelClient, tools: LocalTools, skill: str,
-                 docs: Optional[DocLibrary] = None, max_tool_rounds: int = 8, kind: Optional[str] = None) -> None:
+                 docs: Optional[DocLibrary] = None, max_tool_rounds: int = 8, instance_type: Optional[str] = None) -> None:
         self.client = client
         self.tools = tools
         self.skill = skill  # the skill file, with its mode markers
         self.docs = docs
         self.max_tool_rounds = max_tool_rounds
-        self.kind = kind
+        self.instance_type = instance_type
         self._specs = tools.specs()
         self.new()
 
     def new(self) -> None:
         """Start a new chat: no history, the default mode, no docs read yet."""
-        self.mode = KIND_MODE[self.kind] if self.kind else DEFAULT_MODE
+        self.mode = TYPE_MODE[self.instance_type] if self.instance_type else DEFAULT_MODE
         self.history: List[Dict[str, Any]] = []
         self.seen_docs: Set[str] = set()
         self.number = new_conversation()
@@ -89,7 +89,7 @@ class Conversation:
         self.client.cancel()
 
     def system_prompt(self) -> str:
-        return instance_skill(self.skill, self.mode, self.kind)
+        return instance_skill(self.skill, self.mode, self.instance_type)
 
     def mode_tools(self) -> List[Dict[str, Any]]:
         return tools_for(self._specs, self.mode)
@@ -97,7 +97,7 @@ class Conversation:
     def send(self, text: str, max_tokens: Optional[int] = None) -> Iterator[Event]:
         """Send one user message and follow the model until it answers. Yields events."""
         use_conversation(self.number)
-        mode, rest = split_prefix(text) if self.kind is None else (None, text)
+        mode, rest = split_prefix(text) if self.instance_type is None else (None, text)
         if mode:
             self.mode = mode
             yield {"type": "mode", "mode": mode}
@@ -112,25 +112,31 @@ class Conversation:
         self.history.append({"role": "user", "content": text})
 
         seen_calls: Set[str] = set()
+        repeated = 0  # replies in a row whose calls all ran nothing: repeats, unknown tools, broken arguments
         for _ in range(self.max_tool_rounds + 1):  # the rounds of tools, then the answer
-            reply = yield from self._ask(max_tokens)
+            # After a second such reply the model is stuck: it is asked
+            # once more without tools, so it can only answer.
+            reply = yield from self._ask(max_tokens, with_tools=repeated < 2)
             if reply is None:
                 return
             self.history.append(_assistant_message(reply))
             if reply.finish == "length" or not reply.tool_calls:
                 yield {"type": "done", "finish": "length" if reply.finish == "length" else "stop"}
                 return
+            fresh = False
             for call in reply.tool_calls:
                 yield {"type": "tool_call", "id": call.id, "name": call.name, "arguments": call.arguments}
-                result = self._run(call, seen_calls)
+                result, ran = self._run(call, seen_calls)
+                fresh = fresh or ran
                 self.history.append({"role": "tool", "tool_call_id": call.id, "content": result})
                 yield {"type": "tool_result", "id": call.id, "name": call.name, "result": result}
+            repeated = 0 if fresh else repeated + 1
         yield {"type": "done", "finish": "rounds"}
 
-    def _ask(self, max_tokens: Optional[int]) -> Iterator[Event]:
+    def _ask(self, max_tokens: Optional[int], with_tools: bool = True) -> Iterator[Event]:
         """One request to the model, streamed as events; returns its Reply (None after an error)."""
         messages = [{"role": "system", "content": self.system_prompt()}] + without_replaced(self.history)
-        tools = self.mode_tools()
+        tools = self.mode_tools() if with_tools else []
         for attempt in range(1 + LOOP_RETRIES):
             started = time.time()
             reply: Optional[Reply] = None
@@ -157,14 +163,32 @@ class Conversation:
             return reply
         return None
 
-    def _run(self, call: ToolCall, seen: Set[str]) -> str:
+    def _run(self, call: ToolCall, seen: Set[str]) -> Tuple[str, bool]:
+        """The answer to one call, and whether it was run (False: broken, unknown or a repeat)."""
         if call.error:
-            return f"ERROR: {call.error}. Nothing was run. Call {call.name} again with the whole arguments."
+            return f"ERROR: {call.error}. Nothing was run. Call {call.name} again with the whole arguments.", False
+        names = [t["function"]["name"] for t in self.mode_tools()]
+        if call.name not in names:  # a tool the model knows from elsewhere (grep, read, exec ...)
+            return (f"ERROR: there is no tool named {call.name}. Your only tools are: {', '.join(names)}. "
+                    f"Nothing was run."), False
         signature = json.dumps([call.name, call.arguments], sort_keys=True, default=str)
         if signature in seen:
-            return "You already made this exact call in this turn and have its result. Do not repeat it: answer now."
+            return _repeat_text(call.name), False
         seen.add(signature)
-        return self.tools.call(call.name, call.arguments)
+        return self.tools.call(call.name, call.arguments), True
+
+
+def _repeat_text(name: str) -> str:
+    """The answer to a call identical to one already made in this turn."""
+    if name in ("send_algorithm", "write_score"):
+        what = "code" if name == "send_algorithm" else "score"
+        return (f"NOT SENT: this {what} is identical, character for character, to the one you already sent "
+                f"in this turn, so nothing changed and nothing was sent again. The first send is the one in Max. "
+                f"If you wanted to correct something, you have not changed it yet: find the line that causes "
+                f"it, change it, and send the corrected {what}. If the first result was right, do not call "
+                f"again: answer the user.")
+    return (f"NOT RUN: you already made this exact {name} call in this turn; its answer is above. "
+            f"Use that answer instead of calling again.")
 
 
 OLD_CODE = "(an earlier version of the file: a later send_algorithm replaced it)"
@@ -278,11 +302,11 @@ def _assistant_message(reply: Reply) -> Dict[str, Any]:
     return message
 
 
-def build_conversation(config: Config, client: ModelClient, app: FastMCP, kind: Optional[str] = None) -> Conversation:
+def build_conversation(config: Config, client: ModelClient, app: FastMCP, instance_type: Optional[str] = None) -> Conversation:
     """A conversation set up from bachmcp.toml, using the tools of `app` (tools/registry.py);
-    with `kind`, for an instance of that type."""
+    with `instance_type`, for an instance of that type."""
     return Conversation(client, LocalTools(app), config.skill_source(),
-                        DocLibrary() if config.chat.docs else None, config.chat.max_tool_rounds, kind)
+                        DocLibrary() if config.chat.docs else None, config.chat.max_tool_rounds, instance_type)
 
 
 __all__ = ["Conversation", "build_conversation", "Event", "LOOP_RETRIES"]

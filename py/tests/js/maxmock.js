@@ -1,5 +1,5 @@
 /*
-A small stand-in for Max's JavaScript environment, enough to run the bach.mcp
+A small stand-in for Max's JavaScript environment, enough to run the bachmcp
 scripts (v8 and jsui) in Node: outlets, post, Dict, Task, File, messagename,
 messnamed, mgraphics and box. Tasks run only when the test calls flush().
 */
@@ -169,6 +169,7 @@ function load(script, options = {}) {
     require: options.legacy ? legacyRequire : (name) => require(onSearchPath(name)),
     mgraphics: makeMgraphics(options.width || 300, options.height || 100),
   };
+  Object.assign(ctx, options.globals || {});  // what a test adds, e.g. this.patcher
   ctx.globalThis = ctx;
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(onSearchPath(script), "utf8"), ctx, { filename: script });

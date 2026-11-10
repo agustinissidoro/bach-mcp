@@ -9,25 +9,28 @@ of repeating 14,000 tokens. A chat that has not seen that answer must not get
 being answered says so (use_conversation) before it calls a tool.
 
 Instance. Every product carries the name of the instance it is for, and the
-instance's type decides what the tools accept (a writer writes notes, a
+instance's type decides what the tools accept (a score instance writes notes, a
 generator or a transformer an algorithm). The tools never get a name from the
 model: they ask target(), which the hub (chat/hub.py) answers, with the
 instance of the prompt being answered, else the active one. A Claude written
-to directly chooses the active one itself (instances(): instance_tools.py).
+to directly chooses the active one itself (instances(): instance_tools.py), and
+its calls are always for the active one, also while another instance's prompt is
+being answered: the app it reaches marks them (calling_directly, registry.py).
 
-    Target(name, kind, playground)
+    Target(name, type, playground)
       .algorithms .scores .prompts           the playground's folders
       .algorithm_file .roll_file             <name>.js, <name>.json in them
 """
 
 from __future__ import annotations
 
+import contextlib
 import os
 import threading
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Protocol, Tuple
+from typing import Callable, Dict, Iterator, Optional, Protocol, Tuple
 
-KINDS = ("generator", "transformer", "selector", "writer")
+TYPES = ("generator", "transformer", "selector", "score")
 
 _lock = threading.Lock()
 _number = 0
@@ -53,6 +56,25 @@ def conversation() -> int:
     return _current
 
 
+_caller = threading.local()
+
+
+@contextlib.contextmanager
+def calling_directly() -> Iterator[None]:
+    """While a tool runs for a Claude written to directly (/mcp), on this thread: its instance
+    is the active one, never the one whose prompt is being answered."""
+    _caller.direct = True
+    try:
+        yield
+    finally:
+        _caller.direct = False
+
+
+def direct() -> bool:
+    """Whether the tool running on this thread was called by a Claude written to directly."""
+    return getattr(_caller, "direct", False)
+
+
 class NoTarget(Exception):
     """The tools cannot tell which instance they serve; the message says what to do."""
 
@@ -60,7 +82,7 @@ class NoTarget(Exception):
 @dataclass(frozen=True)
 class Target:
     name: str        # the instance, as the patch names it
-    kind: str        # one of KINDS
+    type: str        # one of TYPES
     playground: str  # the playground folder (absolute)
 
     @property
@@ -127,5 +149,5 @@ def instances() -> Instances:
     return _instances
 
 
-__all__ = ["KINDS", "Target", "NoTarget", "serve_targets", "target", "Instances", "serve_instances",
-           "instances", "new_conversation", "use_conversation", "conversation"]
+__all__ = ["TYPES", "Target", "NoTarget", "serve_targets", "target", "Instances", "serve_instances",
+           "instances", "new_conversation", "use_conversation", "conversation", "calling_directly", "direct"]

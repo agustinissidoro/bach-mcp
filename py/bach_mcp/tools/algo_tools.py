@@ -3,7 +3,7 @@ algo_tools.py
 -------------
 send_algorithm: the model writes the algorithm that generates the music, not the
 notes. The code is a JavaScript file run in Max by an algorithm instance (v8),
-with the algorithmic core library in scope (max/bach-mcp/javascript/
+with the algorithmic core library in scope (javascript/
 algorithmic_core_library, listed in bachmcp.lib.index.js). Its
 declared parameters become a panel (GUI_parameters/) the user plays with; every
 change runs the algorithm again.
@@ -36,13 +36,13 @@ import re
 import shutil
 import subprocess
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from mcp.server.fastmcp import FastMCP
 
 from ..bridge.buffer import ServerBuffer
 from ..bridge.max import MaxBridge
-from ..bridge.protocol import line, words
+from ..bridge.protocol import line
 from ..music.compress import count_notes, describe
 from .session import NoTarget, Target, target
 
@@ -93,20 +93,28 @@ def _kind_error(t: Target, code: str) -> Optional[str]:
     """Why this code cannot be this instance's algorithm, or None."""
     transformer = bool(_TRANSFORMER.search(code))
     selector = bool(_SELECTOR.search(code))
-    if t.kind == "writer":
-        return f"{t.name} is a writer: it takes notes (write_score), not an algorithm"
-    if t.kind == "selector" and not selector:
+    if t.type == "score":
+        return f"{t.name} is a score instance: it takes notes (write_score), not an algorithm"
+    if t.type == "selector" and not selector:
         return (f"{t.name} is a selector: it picks notes of the score in its roll. "
                 "Write function select(source, p) { ... } returning the notes it picks")
-    if t.kind != "selector" and selector:
-        return f"{t.name} is a {t.kind}, not a selector: do not write function select"
-    if t.kind == "generator" and transformer:
+    if t.type != "selector" and selector:
+        return f"{t.name} is a {t.type}, not a selector: do not write function select"
+    if t.type == "generator" and transformer:
         return (f"{t.name} is a generator: it makes music from nothing. "
                 "Write function produce(p) { ... }, not transform")
-    if t.kind == "transformer" and not transformer:
+    if t.type == "transformer" and not transformer:
         return (f"{t.name} is a transformer: it changes the score in its roll. "
                 "Write function transform(source, p) { ... }")
     return None
+
+
+_COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+
+
+def _bare(code: str) -> str:
+    """The code without comments and whitespace: two files with the same bare text make the same music."""
+    return re.sub(r"\s+", "", _COMMENT.sub("", code or ""))
 
 
 _DOC = """Write the music as an algorithm: a JavaScript file that generates the score
@@ -159,7 +167,7 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
         with open(draft, "w", encoding="utf-8") as f:
             f.write(code.rstrip() + "\n")
 
-        source, origin = _source_for(t) if t.kind in ("transformer", "selector") else (None, "")
+        source, origin = _source_for(t) if t.type in ("transformer", "selector") else (None, "")
         result = check_algorithm(draft, node=node, source=source)
         if not result.get("ok"):
             os.remove(draft)
@@ -168,9 +176,15 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
             os.remove(draft)
             return ("ERROR: the file must open with a // comment: what the algorithm does, in one line "
                     "(shown above its panel). Nothing was loaded.")
+        same = ""
         if os.path.exists(final):
             with open(final, encoding="utf-8") as f:
-                unchanged = f.read() == code.rstrip() + "\n"
+                previous = f.read()
+            unchanged = previous == code.rstrip() + "\n"
+            if _bare(previous) == _bare(code):
+                same = ("\nNOTHING CHANGED: apart from comments this is the same code as the file it replaces, so "
+                        "the music is the same as before. If you meant to correct something, the line that "
+                        "causes it is still there: change that line. Otherwise do not send again.")
             if not unchanged:
                 stamp = time.strftime("%Y%m%d-%H%M%S")
                 shutil.copy2(final, os.path.join(folder, ".history", f"{name}-{stamp}.js"))
@@ -185,8 +199,8 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
 
         params = "\n".join(f"  {p}" for p in result["describe"]) or "  (none)"
         shown = f'Shown above its panel: "{result["description"]}"\n' if result.get("description") else ""
-        kind = ""
-        if result.get("kind") == "selector":
+        about = ""
+        if result.get("type") == "selector":
             picked = ", ".join(f"[{v} {c} {n}]" for v, c, n in (result.get("selection") or [])[:24])
             more = " ..." if len(result.get("selection") or []) > 24 else ""
             return (
@@ -195,16 +209,16 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
                 f"asks the roll for its score and selects in it.\n"
                 f"Parameters (now a panel in Max):\n{params}\n"
                 f"Checked in {result['runs']} runs (every slider at its minimum and maximum, every option).\n"
-                f"At the declared values it picks {result['notes']} notes ([voice chord note]): {picked or 'none'}{more}"
+                f"At the declared values it picks {result['notes']} notes ([voice chord note]): {picked or 'none'}{more}{same}"
             )
-        if result.get("kind") == "transformer":
-            kind = (f"Transformer, checked on {origin} ({result['source']['notes']} notes). In Max its source "
+        if result.get("type") == "transformer":
+            about = (f"Transformer, checked on {origin} ({result['source']['notes']} notes). In Max its source "
                     f"lives in memory (non-destructive: every run starts again from it).\n")
         return (
-            f"OK. Algorithm saved as algorithms/{file} {status}.\n{shown}{kind}"
+            f"OK. Algorithm saved as algorithms/{file} {status}.\n{shown}{about}"
             f"Parameters (now a panel in Max):\n{params}\n"
             f"Checked in {result['runs']} runs (every slider at its minimum and maximum, every option).\n"
-            f"Score at the declared values ({result['notes']} notes, {result['ms']} ms):\n{describe(result['score'])}"
+            f"Score at the declared values ({result['notes']} notes, {result['ms']} ms):\n{describe(result['score'])}{same}"
         )
 
 

@@ -36,7 +36,7 @@ class EngineTest(unittest.TestCase):
         self.client = FakeClient(*replies)
         return Conversation(self.client, self.tools, RAW, DocLibrary() if docs else None, rounds)
 
-    def kinds(self, events):
+    def types(self, events):
         return [e["type"] for e in events]
 
     def tool_names(self, request):
@@ -59,10 +59,10 @@ class ModeTests(EngineTest):
         list(conversation.send("denser"))
         list(conversation.send("/score three notes"))
         first, second, third = self.client.requests
-        self.assertEqual(self.tool_names(first), ["send_algorithm"])
+        self.assertEqual(self.tool_names(first), ["read_score", "send_algorithm"])
         self.assertEqual(first["messages"][0]["content"], skill_for(RAW, "algo"))
         self.assertEqual(first["messages"][1], {"role": "user", "content": "a canon"})
-        self.assertEqual(self.tool_names(second), ["send_algorithm"])
+        self.assertEqual(self.tool_names(second), ["read_score", "send_algorithm"])
         self.assertIn("write_score", self.tool_names(third))
 
     def test_only_a_prefix_switches_without_asking_the_model(self):
@@ -97,7 +97,7 @@ class DocsTests(EngineTest):
         self.assertIn("woodwinds/alto-flute", events[0]["added"])
         self.assertIn("# Cello", self.client.requests[0]["messages"][1]["content"])
         events = list(conversation.send("now only the cello"))
-        self.assertNotIn("docs", self.kinds(events))
+        self.assertNotIn("docs", self.types(events))
 
 
 class ToolLoopTests(EngineTest):
@@ -105,7 +105,7 @@ class ToolLoopTests(EngineTest):
         conversation = self.chat(tool_reply("p2mc", {"pitches": ["C4", "E4"]}, text="The pitches first."),
                                  text_reply("Written."))
         events = list(conversation.send("a major third"))
-        self.assertEqual([k for k in self.kinds(events) if k not in ("text", "calling", "stage")],
+        self.assertEqual([k for k in self.types(events) if k not in ("text", "calling", "stage")],
                          ["round", "tool_call", "tool_result", "round", "done"])
         result = next(e for e in events if e["type"] == "tool_result")
         self.assertEqual(json.loads(result["result"]), [6000, 6400])
@@ -120,7 +120,31 @@ class ToolLoopTests(EngineTest):
         conversation = self.chat(tool_reply("p2mc", call), tool_reply("p2mc", call, call_id="call_2"), text_reply("ok"))
         results = [e["result"] for e in conversation.send("C") if e["type"] == "tool_result"]
         self.assertEqual(results[0], "[6000]")
-        self.assertIn("already made this exact call", results[1])
+        self.assertTrue(results[1].startswith("NOT RUN: you already made this exact p2mc call"))
+
+    def test_a_model_that_only_repeats_is_asked_once_more_without_tools(self):
+        call = {"pitches": ["C4"]}
+        conversation = self.chat(tool_reply("p2mc", call), tool_reply("p2mc", call, call_id="call_2"),
+                                 tool_reply("p2mc", call, call_id="call_3"), text_reply("C4 is 6000."))
+        events = list(conversation.send("C"))
+        self.assertEqual(events[-1], {"type": "done", "finish": "stop"})
+        self.assertEqual([bool(r.get("tools")) for r in self.client.requests], [True, True, True, False])
+
+    def test_a_tool_that_does_not_exist_is_answered_with_the_tools_there_are(self):
+        conversation = self.chat(tool_reply("grep", {"pattern": "voice"}),
+                                 tool_reply("read", {"path": "/x"}, call_id="call_2"), text_reply("ok"))
+        results = [e["result"] for e in conversation.send("C") if e["type"] == "tool_result"]
+        self.assertTrue(results[0].startswith("ERROR: there is no tool named grep. Your only tools are: "), results[0])
+        self.assertIn("p2mc", results[0])
+        self.assertEqual([bool(r.get("tools")) for r in self.client.requests], [True, True, False])
+
+    def test_a_new_call_between_repeats_keeps_the_tools(self):
+        call = {"pitches": ["C4"]}
+        conversation = self.chat(tool_reply("p2mc", call), tool_reply("p2mc", call, call_id="call_2"),
+                                 tool_reply("p2mc", {"pitches": ["D4"]}, call_id="call_3"),
+                                 tool_reply("p2mc", call, call_id="call_4"), text_reply("ok"))
+        list(conversation.send("C"))
+        self.assertTrue(all(r.get("tools") for r in self.client.requests))
 
     def test_cut_off_arguments_are_not_run(self):
         broken = tool_reply("p2mc", '{"pitches": ["C4"', call_id="c1")
@@ -133,17 +157,17 @@ class ToolLoopTests(EngineTest):
                   chunk(finish="length")]
         conversation = self.chat(looped, text_reply("Fine now."))
         events = list(conversation.send("a long piece"))
-        self.assertIn("retry", self.kinds(events))
+        self.assertIn("retry", self.types(events))
         self.assertEqual(events[-1], {"type": "done", "finish": "stop"})
         conversation = self.chat(looped, looped)
         events = list(conversation.send("a long piece"))
-        self.assertEqual(self.kinds(events).count("retry"), 1)
+        self.assertEqual(self.types(events).count("retry"), 1)
         self.assertEqual(events[-1], {"type": "done", "finish": "length"})
 
     def test_tool_rounds_are_limited(self):
         conversation = self.chat(*[tool_reply("p2mc", {"pitches": [f"C{i}"]}, call_id=f"c{i}") for i in range(4)], rounds=2)
         events = list(conversation.send("go"))
-        self.assertEqual(self.kinds(events).count("round"), 3, "two rounds of tools, then one request to answer")
+        self.assertEqual(self.types(events).count("round"), 3, "two rounds of tools, then one request to answer")
         self.assertEqual(events[-1], {"type": "done", "finish": "rounds"})
 
     def test_after_the_last_round_of_tools_the_model_answers(self):
@@ -161,15 +185,15 @@ class ToolLoopTests(EngineTest):
 class KindTests(EngineTest):
     def test_an_instance_type_fixes_the_mode_and_says_what_it_takes(self):
         self.client = FakeClient(text_reply("A canon."), text_reply("Notes."))
-        conversation = Conversation(self.client, self.tools, RAW, None, 8, kind="transformer")
+        conversation = Conversation(self.client, self.tools, RAW, None, 8, instance_type="transformer")
         events = list(conversation.send("/score a canon"))
         self.assertNotIn("mode", [e["type"] for e in events], "no prefix switches an instance's mode")
         request = self.client.requests[0]
         self.assertEqual(request["messages"][1]["content"], "/score a canon")
-        self.assertTrue(request["messages"][0]["content"].startswith(skill_for(RAW, "algo", kind="transformer").rstrip()))
+        self.assertTrue(request["messages"][0]["content"].startswith(skill_for(RAW, "algo", instance_type="transformer").rstrip()))
         self.assertIn("You are writing for a transformer", request["messages"][0]["content"])
-        self.assertEqual(self.tool_names(request), ["send_algorithm"])
-        writer = Conversation(self.client, self.tools, RAW, None, 8, kind="writer")
+        self.assertEqual(self.tool_names(request), ["read_score", "send_algorithm"])
+        writer = Conversation(self.client, self.tools, RAW, None, 8, instance_type="score")
         list(writer.send("three notes"))
         self.assertIn("write_score", self.tool_names(self.client.requests[1]))
 

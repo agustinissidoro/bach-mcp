@@ -57,12 +57,12 @@ class SkillTests(unittest.TestCase):
         self.assertLess(len(score), 0.7 * len(FULL))
 
     def test_an_instance_reads_only_its_types_part(self):
-        parts = {kind: skill_for(RAW, "algo", kind=kind) for kind in ("generator", "transformer", "selector")}
+        parts = {instance_type: skill_for(RAW, "algo", instance_type=instance_type) for instance_type in ("generator", "transformer", "selector")}
         own = {"generator": "function produce(p) {\n", "transformer": "function transform(source, p) {\n",
                "selector": "function select(source, p) {\n"}
-        for kind, text in parts.items():
+        for instance_type, text in parts.items():
             for other, example in own.items():
-                (self.assertIn if other == kind else self.assertNotIn)(example, text, f"{kind} and {other}'s example")
+                (self.assertIn if other == instance_type else self.assertNotIn)(example, text, f"{instance_type} and {other}'s example")
             self.assertNotIn("<!--", text)
             self.assertNotRegex(text, r"\n\n\n")
             self.assertIn("**Parameters.**", text)
@@ -74,7 +74,7 @@ class SkillTests(unittest.TestCase):
         algo = skill_for(RAW, "algo")
         self.assertTrue(all(example in algo for example in own.values()), "no instance: every type's part")
         self.assertLess(len(parts["generator"]), 0.75 * len(algo))
-        self.assertEqual(skill_for(RAW, "score", kind="writer"), skill_for(RAW, "score"))
+        self.assertEqual(skill_for(RAW, "score", instance_type="score"), skill_for(RAW, "score"))
 
     def test_a_skill_without_markers_is_the_same_in_every_mode(self):
         text = "# My own skill\n\nWrite music.\n"
@@ -93,11 +93,11 @@ class ToolsTests(unittest.TestCase):
     def test_each_mode_gets_only_its_tools(self):
         tools = [tool(n) for n in ("write_score", "read_score", "clear_score", "p2mc", "send_algorithm")]
         names = lambda ts: [t["function"]["name"] for t in ts]  # noqa: E731
-        self.assertEqual(names(tools_for(tools, "algo")), ["send_algorithm"])
+        self.assertEqual(names(tools_for(tools, "algo")), ["read_score", "send_algorithm"])
         self.assertEqual(names(tools_for(tools, "score")), ["write_score", "read_score", "clear_score", "p2mc"])
 
-    def test_every_tool_belongs_to_one_mode(self):
-        self.assertFalse(set(MODE_TOOLS["score"]) & set(MODE_TOOLS["algo"]))
+    def test_the_modes_share_only_read_score(self):
+        self.assertEqual(set(MODE_TOOLS["score"]) & set(MODE_TOOLS["algo"]), {"read_score"})
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@
                         370.0,
                         22.0
                     ],
-                    "text": "v8 bachmcp.bpatcher.replace.js bachmcp.bpatcher.selector 288 365"
+                    "text": "v8 bachmcp.bpatcher.replace.js bachmcp.bpatcher.algorithm 288 365 selector"
                 }
             },
             {
@@ -63,7 +63,7 @@
                         47.0
                     ],
                     "linecount": 3,
-                    "text": "[bachmcp.selector t1] becomes [bpatcher @name bachmcp.bpatcher.selector @args t1]: typed arguments go to @args (bachmcp.bpatcher.replace.js)."
+                    "text": "[bachmcp.selector t1] becomes [bpatcher @name bachmcp.bpatcher.algorithm @args t1 selector]: the typed name is #1, the type #2 (bachmcp.bpatcher.replace.js)."
                 }
             },
             {

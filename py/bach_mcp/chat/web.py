@@ -169,7 +169,7 @@ def run(config: Config) -> None:
             server.start()
             status.on_quit(server.stop)
             client = ModelClient(server.base_url, config.generation, server.request_model)
-            make = lambda kind: build_conversation(config, client, mcp, kind)  # noqa: E731
+            make = lambda instance_type: build_conversation(config, client, mcp, instance_type)  # noqa: E731
         print(f"  docs      {'added to messages that name an instrument' if config.chat.docs else 'off'}")
         print(f"  max       answers bach status|settings|models|catalog|download_model|quit|help on UDP {config.max.receive_port}")
         hub = Hub(bridge, status, make)

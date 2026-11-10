@@ -1,5 +1,5 @@
 /*
-bachmcp.modelcheck.js
+bachmcp.server.modelcheck.js
 ---------------------
 Node for Max ([node.script]): says whether a model is there.
 
@@ -15,7 +15,7 @@ Out of the outlet:
     using <model> at <path>
     <model> not found
 
-Outside Max, `node bachmcp.modelcheck.js <model> <model folder>` prints the same messages.
+Outside Max, `node bachmcp.server.modelcheck.js <model> <model folder>` prints the same messages.
 */
 
 "use strict";

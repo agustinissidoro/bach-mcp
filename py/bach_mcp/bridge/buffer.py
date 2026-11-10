@@ -12,7 +12,8 @@ One short message each way drives it (over the UDP bridge, udp.py), prefixed
 with the instance's name like everything for an instance; <file> is the file's
 name in scores/:
 
-    <name> load_roll <file>       the server has written the file: the roll takes it
+    <name> score_done             the server has written the complete score to
+                                  scores/<name>.json: the score instance takes it
     <name> write_roll <file>      the server wants the score: the patch writes it there,
                                   then Max answers <name> roll_written <file>
     <name> tonedivision <n>       before a load whose pitches need it (microtones)
@@ -78,7 +79,7 @@ class RollBuffer:
             if not self.bridge.send(line(self.name, "tonedivision", tonedivision)):
                 return False
             time.sleep(_POLL_SECONDS)
-        return self.bridge.send(line(self.name, "load_roll", self.file))
+        return self.bridge.send(line(self.name, "score_done"))
 
     def fetch(self, timeout_seconds: float = 5.0) -> Optional[Dict[str, Any]]:
         """Have the patch write the roll's score to the file and return it, or None if it does not."""

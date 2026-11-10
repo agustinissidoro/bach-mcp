@@ -4,12 +4,12 @@ playground.py
 The playground: the folder where everything a model makes is kept, set by the
 patch with `set_playground <path>`. It always has three folders:
 
-    <path>/algorithms   <name>.js (and .history/), <name>.source.json
+    <path>/algorithms   <name>.js (and .history/)
     <path>/scores       <name>.json, each roll's score (bachjson-complete)
     <path>/prompts      <name>.jsonl, the conversation of each instance
 
 Whatever is missing is made, the folder itself included (as the patch's
-bachmcp.playground.js does). Max may send the path as "Macintosh HD:/Users/...":
+bachmcp.server.playground.js does). Max may send the path as "Macintosh HD:/Users/...":
 the volume is dropped.
 """
 

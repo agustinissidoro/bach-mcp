@@ -8,7 +8,7 @@ The file marks its parts with lines of their own:
     <!-- algo -->    what follows is for /algo only
     <!-- score -->   for /score only
     <!-- both -->    for both (the default at the top of the file)
-    <!-- transformer selector -->   for these types of instance only (MODE_KINDS)
+    <!-- transformer selector -->   for these types of instance only (MODE_TYPES)
 A mode gets its own part and the shared one (see modes.py), and an instance
 only what its type reads: a generator never reads how a transformer works. A
 chat in a mode with no instance (a /algo prefix) gets every type's part; without
@@ -29,10 +29,10 @@ from typing import List, Optional, Set
 
 SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "BACH_SKILL.md")
 
-# The types of instance (tools/session.py KINDS) that work in each mode.
-MODE_KINDS = {"algo": ("generator", "transformer", "selector"), "score": ("writer",)}
-_KINDS = [kind for kinds in MODE_KINDS.values() for kind in kinds]
-_WORD = "|".join(["both", *MODE_KINDS, *_KINDS])
+# The types of instance (tools/session.py TYPES) that work in each mode.
+MODE_TYPES = {"algo": ("generator", "transformer", "selector"), "score": ("score",)}
+_TYPES = [instance_type for types in MODE_TYPES.values() for instance_type in types]
+_WORD = "|".join(["both", *MODE_TYPES, *_TYPES])
 _MARKER = re.compile(rf"^<!--\s*((?:{_WORD})(?:\s+(?:{_WORD}))*)\s*-->[ \t]*\n?", re.M)
 
 
@@ -64,18 +64,18 @@ def _readers(marker: str) -> Set[str]:
     """The types of instance a marker's part is for."""
     out: Set[str] = set()
     for word in marker.split():
-        out |= set(_KINDS) if word == "both" else set(MODE_KINDS.get(word, (word,)))
+        out |= set(_TYPES) if word == "both" else set(MODE_TYPES.get(word, (word,)))
     return out
 
 
-def skill_for(text: str, mode: Optional[str] = None, verbose: bool = True, kind: Optional[str] = None) -> str:
+def skill_for(text: str, mode: Optional[str] = None, verbose: bool = True, instance_type: Optional[str] = None) -> str:
     """The parts of a skill text for this mode and type of instance (None: every type of the
     mode; no mode: all of it), markers removed. Verbosity markers still in it are resolved with
     `verbose` (Config.skill_source resolves them first with [algo] verbose, so then there are none left)."""
     text = with_verbosity(text, verbose)
-    wanted = {kind} if kind else set(MODE_KINDS[mode]) if mode else set(_KINDS)
+    wanted = {instance_type} if instance_type else set(MODE_TYPES[mode]) if mode else set(_TYPES)
     out: List[str] = []
-    readers, pos = set(_KINDS), 0
+    readers, pos = set(_TYPES), 0
     for m in _MARKER.finditer(text):
         if readers & wanted:
             out.append(text[pos:m.start()])
@@ -92,4 +92,4 @@ def load_skill(mode: Optional[str] = None, raw: bool = False, path: str = SKILL_
     return text if raw else skill_for(text, mode, verbose)
 
 
-__all__ = ["SKILL_PATH", "MODE_KINDS", "read_skill", "with_verbosity", "skill_for", "load_skill"]
+__all__ = ["SKILL_PATH", "MODE_TYPES", "read_skill", "with_verbosity", "skill_for", "load_skill"]

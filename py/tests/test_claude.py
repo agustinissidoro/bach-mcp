@@ -105,3 +105,73 @@ class RegisterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConnectTests(unittest.TestCase):
+    """connect: Claude Desktop's Bach hands its tool calls to the Bach Max started, over one session."""
+
+    def serve(self, port):
+        import threading
+        import time
+
+        import uvicorn
+
+        from bach_mcp.tools.registry import create_tools
+        app = create_tools(OfflineBridge(), log_calls=False).streamable_http_app()
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="critical",
+                                               timeout_graceful_shutdown=1))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        while not server.started:
+            time.sleep(0.02)
+
+        def stop():
+            server.should_exit = True
+            thread.join(5)
+        return stop
+
+    def setUp(self):
+        import socket
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            self.port = s.getsockname()[1]
+        self.config = Config()
+        self.config.server.port = self.port
+
+    def test_one_session_for_every_call_and_a_new_one_when_bach_restarts(self):
+        stop = self.serve(self.port)
+        said = {}
+
+        async def calls():
+            upstream = claude.Upstream(self.config.mcp_url)
+            said["first"] = (await upstream.call("get_instances", {})).content[0].text
+            task = upstream._task
+            await upstream.call("get_instances", {})
+            said["same session"] = upstream._task is task
+            stop()  # Bach goes off
+            with self.assertRaises(Exception):
+                await upstream.call("get_instances", {})
+            again = self.serve(self.port)  # and comes back
+            try:
+                said["after"] = (await upstream.call("get_instances", {})).content[0].text
+            finally:
+                await upstream.close()
+                again()
+
+        asyncio.run(calls())
+        self.assertTrue(said["first"].startswith("ERROR: no instances"), "the tool ran in the other Bach")
+        self.assertTrue(said["same session"])
+        self.assertEqual(said["after"], said["first"], "a new session, by itself")
+
+    def test_the_app_hands_calls_on_and_says_when_bach_is_off(self):
+        app = claude.connect_app(self.config)
+        self.assertIn("send_algorithm", {t.name for t in asyncio.run(app.list_tools())}, "listed here, Max on or off")
+        off = asyncio.run(app.call_tool("get_instances", {}))
+        self.assertTrue(off.isError)
+        self.assertIn("Bach is not running", off.content[0].text)
+        stop = self.serve(self.port)
+        try:
+            on = asyncio.run(app.call_tool("get_instances", {}))
+        finally:
+            stop()
+        self.assertTrue(on.content[0].text.startswith("ERROR: no instances"))

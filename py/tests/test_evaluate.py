@@ -127,7 +127,7 @@ function produce(p) {
 }
 """
 
-    def test_an_accelerating_producer_passes(self):
+    def test_an_accelerating_generator_passes(self):
         checks, _ = check_algorithm_code(self.ACCELERANDO)
         self.assertTrue(all(passed(checks).values()), checks)
 
