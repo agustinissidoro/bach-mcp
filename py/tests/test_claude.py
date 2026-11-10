@@ -24,13 +24,13 @@ class AppTests(unittest.TestCase):
 
     def test_the_tools_and_the_skill(self):
         names = [t.name for t in asyncio.run(self.app.list_tools())]
-        self.assertEqual(len(names), 15)
-        self.assertEqual(set(names), set(MODE_TOOLS["score"]) | set(MODE_TOOLS["algo"]) | set(INSTANCE_TOOLS))
+        self.assertEqual(len(names), 16)
+        self.assertEqual(set(names), set(MODE_TOOLS["score"]) | set(MODE_TOOLS["algo"]) | set(MODE_TOOLS["gen"]) | set(INSTANCE_TOOLS))
         self.assertTrue(self.app.instructions.startswith("# Bach"))
 
     def test_the_modes_are_prompts(self):
         prompts = {p.name: p for p in asyncio.run(self.app.list_prompts())}
-        self.assertEqual(set(prompts), {"score", "algo"})
+        self.assertEqual(set(prompts), {"score", "algo", "gen"})
         text = asyncio.run(self.app.get_prompt("algo", {"request": "a slow canon"})).messages[0].content.text
         self.assertIn("send_algorithm", text)
         self.assertTrue(text.endswith("a slow canon"))

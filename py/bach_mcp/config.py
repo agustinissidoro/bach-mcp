@@ -169,12 +169,12 @@ class Config:
     def skill_source(self) -> str:
         """The skill file with its mode markers: [chat] skill_file, else the built-in one,
         with the wording [algo] verbose chooses (see prompt/skill.py)."""
-        from .prompt.skill import read_skill, with_verbosity
+        from .prompt.skill import read_skill, with_gen, with_verbosity
         if not self.chat.skill_file:
-            return with_verbosity(read_skill(), self.algo.verbose)
+            return with_gen(with_verbosity(read_skill(), self.algo.verbose), self.algo.verbose)
         path = _from_repo(self.chat.skill_file)
         try:
-            return with_verbosity(read_skill(path), self.algo.verbose)
+            return with_gen(with_verbosity(read_skill(path), self.algo.verbose), self.algo.verbose)
         except OSError as exc:
             raise ConfigError(f"[chat] skill_file: cannot read {path} ({exc.strerror})") from None
 

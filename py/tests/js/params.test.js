@@ -690,3 +690,33 @@ test("a panel saved before the spec said type: its kind gives the type", () => {
     assert.equal(m.ctx.panel.type, type, kind);
   }
 });
+
+test("spec_file builds the panel from a .json file (as send_gen writes for a synth or an fx)", () => {
+  const folder = fs.mkdtempSync(path.join(require("os").tmpdir(), "bachmcp-spec "));  // a space in the path
+  const file = path.join(folder, "jeje.json");
+  fs.writeFileSync(file, JSON.stringify({
+    description: "Une voix FM très brillante.", type: "synth",
+    inlets: [{ index: 1, about: "pitch" }], outlets: [{ index: 1, about: "left" }],
+    params: [
+      { name: "ratio", type: "slider", kind: "", range: [0.5, 8], step: 0.01, value: 2, grid: 0.01, default: 2, send: 2 },
+      { name: "shape", type: "menu", options: ["sine", "saw"], value: "saw", default: "saw", send: 1 },
+      { name: "drive", type: "toggle", value: true, default: true, send: 1 },
+    ],
+    buffers: [],
+  }));
+  const m = loadPanel({ width: 320, height: 100 });
+  m.send("spec_file", ...file.split(" "));  // as Max hands it over: split at the space
+  assert.deepEqual(Array.from(m.ctx.panel.items, (it) => it.name), ["ratio", "shape", "drive"]);
+  assert.equal(m.ctx.panel.title, "jeje");
+  assert.equal(m.ctx.panel.path, file);
+  assert.equal(m.ctx.panel.description, "Une voix FM très brillante.");
+  assert.equal(m.posts.length, 0);
+
+  m.send("spec_file", path.join(folder, "nobody.json"));
+  assert.match(m.posts.pop(), /cannot open/);
+  fs.writeFileSync(file, "{ not json");
+  m.send("spec_file", file);
+  assert.match(m.posts.pop(), /is not JSON/);
+  assert.equal(m.ctx.panel.items.length, 3, "a file that cannot be read leaves the panel as it was");
+  fs.rmSync(folder, { recursive: true });
+});

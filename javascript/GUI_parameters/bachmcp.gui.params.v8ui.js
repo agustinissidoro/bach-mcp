@@ -9,7 +9,9 @@ name (as set_name), e.g. [bachmcp.gui.params t1]. Then:
                                                      sync <message...>: the values it holds, which run nothing)
 
 The panel builds itself from the spec the runner sends when it loads a file
-(bachmcp.gui.params.panel.js, with the elements of bachmcp.gui.params.elements.js):
+(bachmcp.gui.params.panel.js, with the elements of bachmcp.gui.params.elements.js),
+or from a file: spec_file <path> reads the same spec from a .json (the one send_gen writes
+for a synth or an fx, gen/<name>.json):
   title       set active ("set_as_active_instance": the instance Claude's tools work for), bypass;
   options     drags land on round values (alt lets one through; on a card set free, alt snaps it);
               reset all; a source's process sel. ("process_only_selection 0|1"); bypass ("bypass 0|1"), repeat; a pitch card's snap toggle ½ | ¼ | free ("snap 0|1|3"),
@@ -95,6 +97,14 @@ refresh.local = 1;
 
 // ── From the runner ────────────────────────────────────────────────────── //
 
+function build(data) {
+  const kept = panel.setSpec(data);
+  refresh();
+  // the values this panel holds, back to the runner: sync, so that they run nothing (a load is not a run)
+  emit(kept.map((m) => ["sync", ...m]));
+}
+build.local = 1;
+
 function spec(text) {
   if (!panel) return;
   let data;
@@ -104,10 +114,51 @@ function spec(text) {
     post("bachmcp.gui.params: unreadable spec\n");
     return;
   }
-  const kept = panel.setSpec(data);
-  refresh();
-  // the values this panel holds, back to the runner: sync, so that they run nothing (a load is not a run)
-  emit(kept.map((m) => ["sync", ...m]));
+  build(data);
+}
+
+/** The text of a file (UTF-8), or null if it cannot be opened. */
+function readText(path) {
+  const f = new File(path, "read");
+  if (!f.isopen) return null;
+  let bytes = "";
+  while (f.position < f.eof) {
+    const chunk = f.readbytes(Math.min(4096, f.eof - f.position));
+    if (!chunk || !chunk.length) break;
+    for (let i = 0; i < chunk.length; i++) bytes += String.fromCharCode(chunk[i] & 255);
+  }
+  f.close();
+  try {
+    return decodeURIComponent(escape(bytes));
+  } catch (e) {
+    return bytes;  // not UTF-8: as it is
+  }
+}
+readText.local = 1;
+
+/**
+ * spec_file <path>: the spec read from a JSON file ({"description", "params": [...]}, as send_gen
+ * writes gen/<name>.json). The path may come in pieces (a message is split at its spaces). A file
+ * without a title or a path gets them from where it is: <name>.json is titled <name>.
+ */
+function spec_file(...pieces) {
+  if (!panel) return;
+  const path = pieces.join(" ");
+  if (!path) return post("bachmcp.gui.params: spec_file needs the path of a .json file\n");
+  const text = readText(path);
+  if (text === null) return post(`bachmcp.gui.params: spec_file cannot open ${path}\n`);
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    return post(`bachmcp.gui.params: spec_file ${path} is not JSON (${e.message})\n`);
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return post(`bachmcp.gui.params: spec_file ${path} must hold an object with "params"\n`);
+  }
+  if (!data.title) data.title = path.split(/[\/:]/).pop().replace(/\.json$/i, "");
+  if (!data.path) data.path = path;
+  build(data);
 }
 
 function set_name(name) {

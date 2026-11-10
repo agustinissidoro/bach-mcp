@@ -95,6 +95,8 @@ def _kind_error(t: Target, code: str) -> Optional[str]:
     selector = bool(_SELECTOR.search(code))
     if t.type == "score":
         return f"{t.name} is a score instance: it takes notes (write_score), not an algorithm"
+    if t.type in ("synth", "fx"):
+        return f"{t.name} is a {t.type}: it takes gen~ code (send_gen), not an algorithm of the score"
     if t.type == "selector" and not selector:
         return (f"{t.name} is a selector: it picks notes of the score in its roll. "
                 "Write function select(source, p) { ... } returning the notes it picks")

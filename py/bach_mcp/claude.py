@@ -63,6 +63,8 @@ _MODE_PROMPTS = {
              "Use only these tools: {tools}.",
     "algo": "Work in /algo mode: write the algorithm that generates the music, as a JavaScript file with its "
             "parameters exposed. Use only {tools}; do not write the notes with write_score.",
+    "gen": "Work in /gen mode: write sound, as GenExpr code for the gen~ of a synth or an fx instance. "
+           "Use only {tools}; the tools of the score do not apply.",
 }
 
 
@@ -125,7 +127,7 @@ def serve(config: Config, stdio: bool = False) -> None:
         headless = [] if stdio else headless_apps(config, bridge)
         command = None if stdio else find_claude_code()
         make = None if stdio else lambda instance_type: ClaudeConversation(command, config, instance_type)
-        hub = Hub(bridge, status, make)
+        hub = Hub(bridge, status, make, verbose=config.algo.verbose)
         status.on_quit(hub.close)
         if stdio:
             status.started()

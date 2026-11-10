@@ -2,11 +2,22 @@
 playground.py
 -------------
 The playground: the folder where everything a model makes is kept, set by the
-patch with `set_playground <path>`. It always has three folders:
+patch with `set_playground <path>`. It always has these folders:
 
-    <path>/algorithms   <name>.js (and .history/)
-    <path>/scores       <name>.json, each roll's score (bachjson-complete)
-    <path>/prompts      <name>.jsonl, the conversation of each instance
+    <path>/algorithms       <name>.js (and .history/)
+    <path>/scores           <name>.json, each roll's score (bachjson-complete)
+    <path>/prompts          <name>.jsonl, the conversation of each instance
+    <path>/gen
+    <path>/skills           <name>.md, the skill files the model's skill is built from
+    <path>/skills/profiles  <name>.json, lists of skills
+
+and these files, made only when missing (once there, they are the user's to edit):
+
+    <path>/skills/core-algorithmic.md                       a copy of the package's skill (prompt/BACH_SKILL.md)
+    <path>/skills/core-electronic.md                        a copy of the sound skill (prompt/GEN_SKILL.md): gen~,
+                                                            for synth and fx instances
+    <path>/skills/profiles/minimal-algorithmic-composer.json  {"skills": ["core-algorithmic"]}
+    <path>/skills/profiles/minimal-electronic-composer.json   {"skills": ["core-electronic"]}
 
 Whatever is missing is made, the folder itself included (as the patch's
 bachmcp.server.playground.js does). Max may send the path as "Macintosh HD:/Users/...":
@@ -15,10 +26,20 @@ the volume is dropped.
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import shutil
 
-FOLDERS = ("algorithms", "scores", "prompts")
+from ..prompt.skill import GEN_SKILL_PATH, SKILL_PATH
+
+FOLDERS = ("algorithms", "scores", "prompts", "gen", "skills", os.path.join("skills", "profiles"))
+CORE = os.path.join("skills", "core-algorithmic.md")
+PROFILE = os.path.join("skills", "profiles", "minimal-algorithmic-composer.json")
+PROFILE_SKILLS = {"skills": ["core-algorithmic"]}
+GEN_CORE = os.path.join("skills", "core-electronic.md")
+GEN_PROFILE = os.path.join("skills", "profiles", "minimal-electronic-composer.json")
+GEN_PROFILE_SKILLS = {"skills": ["core-electronic"]}
 
 _MAX_VOLUME = re.compile(r"^[^/:]+:(/.*)$")
 
@@ -42,7 +63,22 @@ def prepare(path: str) -> str:
             os.makedirs(folder, exist_ok=True)
         except OSError as exc:
             raise ValueError(f"cannot make {folder}: {exc.strerror}") from None
+    for source, copy in ((SKILL_PATH, CORE), (GEN_SKILL_PATH, GEN_CORE)):
+        core = os.path.join(root, copy)
+        if not os.path.exists(core):
+            try:
+                shutil.copyfile(source, core)
+            except OSError as exc:
+                raise ValueError(f"cannot copy the skill to {core}: {exc.strerror}") from None
+    for file, skills in ((PROFILE, PROFILE_SKILLS), (GEN_PROFILE, GEN_PROFILE_SKILLS)):
+        profile = os.path.join(root, file)
+        if not os.path.exists(profile):
+            try:
+                with open(profile, "w", encoding="utf-8") as f:
+                    f.write(json.dumps(skills, indent=2) + "\n")
+            except OSError as exc:
+                raise ValueError(f"cannot write {profile}: {exc.strerror}") from None
     return root
 
 
-__all__ = ["FOLDERS", "local_path", "prepare"]
+__all__ = ["FOLDERS", "CORE", "PROFILE", "GEN_CORE", "GEN_PROFILE", "local_path", "prepare"]
