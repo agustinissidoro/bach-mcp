@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 92.0, 1531.0, 954.0 ],
+        "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
         "boxes": [
             {
                 "box": {
@@ -142,8 +142,8 @@
                     "numinlets": 2,
                     "numoutlets": 3,
                     "outlettype": [ "signal", "", "" ],
-                    "patching_rect": [ 1155.0, 357.0, 181.0, 22.0 ],
-                    "text": "bachmcp.audio spectral-delay fx"
+                    "patching_rect": [ 1155.0, 357.0, 208.0, 22.0 ],
+                    "text": "bachmcp.algorithm~ spectral-delay fx"
                 }
             },
             {
