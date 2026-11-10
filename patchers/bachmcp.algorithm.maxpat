@@ -81,7 +81,7 @@
                                     "numinlets": 0,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 233.0, 182.0, 89.0, 22.0 ],
+                                    "patching_rect": [ 233.0, 182.0, 102.0, 22.0 ],
                                     "text": "r #0playground"
                                 }
                             },
@@ -114,8 +114,8 @@
                                     "numinlets": 2,
                                     "numoutlets": 2,
                                     "outlettype": [ "", "" ],
-                                    "patching_rect": [ 214.0, 567.0, 150.0, 22.0 ],
-                                    "text": "combine folder playground"
+                                    "patching_rect": [ 214.0, 567.0, 153.0, 22.0 ],
+                                    "text": "combine folder playground/"
                                 }
                             },
                             {
@@ -657,8 +657,8 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 784.2, 260.0, 93.0, 22.0 ],
-                    "text": "hello-claude"
+                    "patching_rect": [ 784.2, 260.0, 97.0, 22.0 ],
+                    "text": "dont-prompt-him"
                 }
             },
             {
@@ -729,6 +729,7 @@
                             {
                                 "box": {
                                     "id": "obj-35",
+                                    "linecount": 2,
                                     "maxclass": "message",
                                     "numinlets": 2,
                                     "numoutlets": 1,
@@ -825,6 +826,7 @@
                             {
                                 "box": {
                                     "id": "obj-7",
+                                    "linecount": 3,
                                     "maxclass": "message",
                                     "numinlets": 2,
                                     "numoutlets": 1,
@@ -1142,7 +1144,7 @@
                 "box": {
                     "comment": "bang on processed",
                     "id": "obj-55",
-                    "index": 0,
+                    "index": 4,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -1212,7 +1214,7 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 55.0, 167.0, 237.0, 22.0 ],
+                    "patching_rect": [ 55.0, 167.0, 251.0, 22.0 ],
                     "text": "set_active_instance #1 #2"
                 }
             },
@@ -2225,7 +2227,7 @@
                 "box": {
                     "comment": "to bach.roll",
                     "id": "obj-46",
-                    "index": 0,
+                    "index": 2,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -2245,7 +2247,7 @@
                 "box": {
                     "comment": "dumpout",
                     "id": "obj-43",
-                    "index": 0,
+                    "index": 5,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -2279,7 +2281,7 @@
                 "box": {
                     "comment": "bachmcp.gui.params",
                     "id": "obj-37",
-                    "index": 0,
+                    "index": 3,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -2290,7 +2292,7 @@
                 "box": {
                     "comment": "score (dict)",
                     "id": "obj-35",
-                    "index": 0,
+                    "index": 1,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -2595,6 +2597,7 @@
                             {
                                 "box": {
                                     "id": "obj-7",
+                                    "linecount": 3,
                                     "maxclass": "message",
                                     "numinlets": 2,
                                     "numoutlets": 1,
@@ -3135,7 +3138,7 @@
                 "box": {
                     "comment": "",
                     "id": "obj-15",
-                    "index": 0,
+                    "index": 1,
                     "maxclass": "inlet",
                     "numinlets": 0,
                     "numoutlets": 1,
@@ -3516,7 +3519,6 @@
                     "source": [ "obj-78", 0 ]
                 }
             }
-        ],
-        "autosave": 0
+        ]
     }
 }

@@ -9,7 +9,7 @@ of repeating 14,000 tokens. A chat that has not seen that answer must not get
 being answered says so (use_conversation) before it calls a tool.
 
 Instance. Every product carries the name of the instance it is for, and the
-instance's type decides what the tools accept (a writer writes notes, a
+instance's type decides what the tools accept (a score instance writes notes, a
 generator or a transformer an algorithm). The tools never get a name from the
 model: they ask target(), which the hub (chat/hub.py) answers, with the
 instance of the prompt being answered, else the active one. A Claude written
@@ -30,7 +30,7 @@ import threading
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterator, Optional, Protocol, Tuple
 
-TYPES = ("generator", "transformer", "selector", "writer")
+TYPES = ("generator", "transformer", "selector", "score")
 
 _lock = threading.Lock()
 _number = 0

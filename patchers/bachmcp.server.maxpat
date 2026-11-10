@@ -13,16 +13,6 @@
         "boxes": [
             {
                 "box": {
-                    "id": "obj-7",
-                    "maxclass": "newobj",
-                    "numinlets": 1,
-                    "numoutlets": 0,
-                    "patching_rect": [ 573.0, 552.0, 55.0, 22.0 ],
-                    "text": "print out!"
-                }
-            },
-            {
-                "box": {
                     "bgcolor": [ 1.0, 0.0, 0.0, 1.0 ],
                     "id": "obj-77",
                     "linecount": 4,
@@ -313,7 +303,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 291.33333333333337, 452.0, 82.0, 22.0 ],
+                    "patching_rect": [ 298.8571428571429, 452.0, 82.0, 22.0 ],
                     "text": "p prompt_info"
                 }
             },
@@ -523,7 +513,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 345.1666666666667, 502.0, 111.0, 22.0 ],
+                    "patching_rect": [ 354.57142857142856, 502.0, 111.0, 22.0 ],
                     "text": "p get_all_instances"
                 }
             },
@@ -619,7 +609,6 @@
                                 "box": {
                                     "color": [ 1.0, 0.0, 0.0, 1.0 ],
                                     "id": "obj-3",
-                                    "linecount": 2,
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 1,
@@ -1109,7 +1098,7 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 573.0, 384.0, 57.0, 22.0 ],
+                    "patching_rect": [ 657.0, 399.0, 57.0, 22.0 ],
                     "text": "bach quit"
                 }
             },
@@ -1120,7 +1109,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "bang" ],
-                    "patching_rect": [ 573.0, 345.0, 63.0, 22.0 ],
+                    "patching_rect": [ 657.0, 360.0, 63.0, 22.0 ],
                     "text": "closebang"
                 }
             },
@@ -1370,7 +1359,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 239.0, 384.0, 57.0, 22.0 ],
+                    "patching_rect": [ 243.14285714285714, 384.5, 57.0, 22.0 ],
                     "text": "p answer"
                 }
             },
@@ -1687,7 +1676,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 183.66666666666669, 423.0, 165.0, 22.0 ],
+                    "patching_rect": [ 187.42857142857144, 425.0, 165.0, 22.0 ],
                     "text": "p write_buffer_convert_report"
                 }
             },
@@ -1695,11 +1684,11 @@
                 "box": {
                     "comment": "connect to bach.roll",
                     "id": "obj-8",
-                    "index": 1,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 183.66666666666669, 498.0, 30.0, 30.0 ]
+                    "patching_rect": [ 187.42857142857144, 507.0, 30.0, 30.0 ]
                 }
             },
             {
@@ -2463,6 +2452,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.playground.js",
@@ -3095,6 +3086,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.download.js",
@@ -3363,6 +3356,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.modelcheck.js",
@@ -4097,7 +4092,7 @@
                 "box": {
                     "comment": "dumpout",
                     "id": "obj-21",
-                    "index": 3,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -6227,6 +6222,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.config.js",
@@ -6927,7 +6924,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 399.0, 423.0, 84.0, 22.0 ],
+                    "patching_rect": [ 410.28571428571433, 334.0, 84.0, 22.0 ],
                     "text": "print bachmcp"
                 }
             },
@@ -6937,7 +6934,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 131.0, 349.0, 134.0, 22.0 ],
+                    "patching_rect": [ 131.71428571428572, 334.0, 134.0, 22.0 ],
                     "text": "print bachmcp @level 1"
                 }
             },
@@ -7060,7 +7057,7 @@
                     "numinlets": 7,
                     "numoutlets": 7,
                     "outlettype": [ "", "", "", "", "", "", "" ],
-                    "patching_rect": [ 76.0, 267.0, 342.0, 22.0 ],
+                    "patching_rect": [ 76.0, 267.0, 353.28571428571433, 22.0 ],
                     "text": "route status warning write_buffer answer prompt get_instances"
                 }
             },
@@ -7068,11 +7065,11 @@
                 "box": {
                     "comment": "answers from MCP (dict)",
                     "id": "obj-11",
-                    "index": 2,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 239.0, 498.0, 30.0, 30.0 ]
+                    "patching_rect": [ 243.14285714285714, 507.0, 30.0, 30.0 ]
                 }
             },
             {
@@ -7182,7 +7179,7 @@
                 "box": {
                     "comment": "",
                     "id": "obj-1",
-                    "index": 1,
+                    "index": 0,
                     "maxclass": "inlet",
                     "numinlets": 0,
                     "numoutlets": 1,
@@ -7201,7 +7198,7 @@
             {
                 "patchline": {
                     "destination": [ "obj-11", 0 ],
-                    "midpoints": [ 248.5, 456.58203125, 248.5, 456.58203125 ],
+                    "midpoints": [ 252.64285714285714, 456.58203125, 252.64285714285714, 456.58203125 ],
                     "source": [ "obj-10", 0 ]
                 }
             },
@@ -7258,14 +7255,6 @@
             {
                 "patchline": {
                     "destination": [ "obj-56", 0 ],
-                    "order": 1,
-                    "source": [ "obj-17", 0 ]
-                }
-            },
-            {
-                "patchline": {
-                    "destination": [ "obj-7", 0 ],
-                    "order": 0,
                     "source": [ "obj-17", 0 ]
                 }
             },
@@ -7497,7 +7486,7 @@
                 "patchline": {
                     "color": [ 1.0, 0.1491314173, 0.0, 1.0 ],
                     "destination": [ "obj-2", 0 ],
-                    "midpoints": [ 582.5, 432.0, 749.5, 432.0 ],
+                    "midpoints": [ 666.5, 432.0, 749.5, 432.0 ],
                     "source": [ "obj-56", 0 ]
                 }
             },
@@ -7585,6 +7574,7 @@
                     "source": [ "obj-9", 0 ]
                 }
             }
-        ]
+        ],
+        "autosave": 0
     }
 }

@@ -30,7 +30,7 @@ from typing import List, Optional, Set
 SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "BACH_SKILL.md")
 
 # The types of instance (tools/session.py TYPES) that work in each mode.
-MODE_TYPES = {"algo": ("generator", "transformer", "selector"), "score": ("writer",)}
+MODE_TYPES = {"algo": ("generator", "transformer", "selector"), "score": ("score",)}
 _TYPES = [instance_type for types in MODE_TYPES.values() for instance_type in types]
 _WORD = "|".join(["both", *MODE_TYPES, *_TYPES])
 _MARKER = re.compile(rf"^<!--\s*((?:{_WORD})(?:\s+(?:{_WORD}))*)\s*-->[ \t]*\n?", re.M)

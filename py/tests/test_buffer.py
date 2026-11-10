@@ -34,7 +34,7 @@ ROLL = {
 
 
 class FakeMax:
-    """The patch around one instance's roll: on <name> load_roll it takes the file, on
+    """The patch around one instance's roll: on <name> score_done it takes scores/<name>.json, on
     <name> write_roll it writes its score there and answers <name> roll_written; on
     server write_buffer it writes the score to buffer.json and answers server buffer_done."""
 
@@ -52,8 +52,8 @@ class FakeMax:
             with open(buffer_module.BUFFER_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.score, f)
             self.queue.append("server buffer_done")
-        elif command == "load_roll":
-            self.score = read_json(os.path.join(self.rolls, args[0]))
+        elif command == "score_done":
+            self.score = read_json(os.path.join(self.rolls, f"{name}.json"))
         elif command == "write_roll":
             with open(os.path.join(self.rolls, args[0]), "w", encoding="utf-8") as f:
                 json.dump(self.score, f)
@@ -84,7 +84,7 @@ class ScoreToolTests(unittest.TestCase):
     def setUp(self):
         self.folder = prepare(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.folder)
-        self.target = Target("notes1", "writer", self.folder)
+        self.target = Target("notes1", "score", self.folder)
         serve_targets(lambda: self.target)
         self.addCleanup(serve_targets, None)
         self.max = FakeMax(self.target.scores)
@@ -124,7 +124,7 @@ class ScoreToolTests(unittest.TestCase):
         reply = self.tools["write_score"](score=written)
         self.assertTrue(reply.startswith("OK. Score written."), reply)
         self.assertIn("voice 1 (Oboe): 2 notes in 2 chords, 0-1000 ms, pitch 6950-7000", reply)
-        self.assertEqual(self.max.sent[-2:], ["notes1 tonedivision 4", "notes1 load_roll notes1.json"])
+        self.assertEqual(self.max.sent[-2:], ["notes1 tonedivision 4", "notes1 score_done"])
         roll = self.max.score
         self.assertEqual(roll["header"]["slotinfo"], ROLL["header"]["slotinfo"], "what the model never saw is kept")
         self.assertEqual(roll["header"]["clefs"], ["G", "F"])
@@ -155,7 +155,7 @@ class ScoreToolTests(unittest.TestCase):
         reply = self.tools["write_score"](score='{"voices": [{"chords": [[0, [6000, 500, 80]] }]}]')
         self.assertTrue(reply.startswith("OK. Score written."), reply)
 
-    def test_only_a_writer_writes_notes(self):
+    def test_only_a_score_instance_writes_notes(self):
         self.target = Target("scales1", "generator", self.folder)
         reply = self.tools["write_score"](score={"voices": [{"chords": [[0, [6000, 500, 80]]]}]})
         self.assertIn("scales1 is a generator: it takes an algorithm (send_algorithm), not notes", reply)

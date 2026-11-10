@@ -106,9 +106,9 @@ class HeadlessTests(unittest.TestCase):
         self.assertNotIn("--system-prompt", args)
         config = Config()
         config.claude.claude_code_prompt = False
-        args = ClaudeConversation(self.command, config, "writer").command_line()
+        args = ClaudeConversation(self.command, config, "score").command_line()
         self.assertNotIn("--append-system-prompt", args)
-        self.assertIn("You are writing for a writer", args[args.index("--system-prompt") + 1])
+        self.assertIn("You are writing for a score instance", args[args.index("--system-prompt") + 1])
 
     def test_the_prompt_is_sent_anew_on_every_resume(self):
         self.chat.session = "s1"
@@ -122,7 +122,7 @@ class HeadlessTests(unittest.TestCase):
         self.assertNotIn("--effort", args)
         config = Config()
         config.claude.claude_model, config.claude.claude_effort = "sonnet", "low"
-        args = ClaudeConversation(self.command, config, "writer").command_line()
+        args = ClaudeConversation(self.command, config, "score").command_line()
         self.assertEqual(args[args.index("--model") + 1], "sonnet")
         self.assertEqual(args[args.index("--effort") + 1], "low")
 

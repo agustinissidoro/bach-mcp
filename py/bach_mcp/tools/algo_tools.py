@@ -93,8 +93,8 @@ def _kind_error(t: Target, code: str) -> Optional[str]:
     """Why this code cannot be this instance's algorithm, or None."""
     transformer = bool(_TRANSFORMER.search(code))
     selector = bool(_SELECTOR.search(code))
-    if t.type == "writer":
-        return f"{t.name} is a writer: it takes notes (write_score), not an algorithm"
+    if t.type == "score":
+        return f"{t.name} is a score instance: it takes notes (write_score), not an algorithm"
     if t.type == "selector" and not selector:
         return (f"{t.name} is a selector: it picks notes of the score in its roll. "
                 "Write function select(source, p) { ... } returning the notes it picks")
@@ -107,6 +107,14 @@ def _kind_error(t: Target, code: str) -> Optional[str]:
         return (f"{t.name} is a transformer: it changes the score in its roll. "
                 "Write function transform(source, p) { ... }")
     return None
+
+
+_COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+
+
+def _bare(code: str) -> str:
+    """The code without comments and whitespace: two files with the same bare text make the same music."""
+    return re.sub(r"\s+", "", _COMMENT.sub("", code or ""))
 
 
 _DOC = """Write the music as an algorithm: a JavaScript file that generates the score
@@ -168,9 +176,15 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
             os.remove(draft)
             return ("ERROR: the file must open with a // comment: what the algorithm does, in one line "
                     "(shown above its panel). Nothing was loaded.")
+        same = ""
         if os.path.exists(final):
             with open(final, encoding="utf-8") as f:
-                unchanged = f.read() == code.rstrip() + "\n"
+                previous = f.read()
+            unchanged = previous == code.rstrip() + "\n"
+            if _bare(previous) == _bare(code):
+                same = ("\nNOTHING CHANGED: apart from comments this is the same code as the file it replaces, so "
+                        "the music is the same as before. If you meant to correct something, the line that "
+                        "causes it is still there: change that line. Otherwise do not send again.")
             if not unchanged:
                 stamp = time.strftime("%Y%m%d-%H%M%S")
                 shutil.copy2(final, os.path.join(folder, ".history", f"{name}-{stamp}.js"))
@@ -195,7 +209,7 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
                 f"asks the roll for its score and selects in it.\n"
                 f"Parameters (now a panel in Max):\n{params}\n"
                 f"Checked in {result['runs']} runs (every slider at its minimum and maximum, every option).\n"
-                f"At the declared values it picks {result['notes']} notes ([voice chord note]): {picked or 'none'}{more}"
+                f"At the declared values it picks {result['notes']} notes ([voice chord note]): {picked or 'none'}{more}{same}"
             )
         if result.get("type") == "transformer":
             about = (f"Transformer, checked on {origin} ({result['source']['notes']} notes). In Max its source "
@@ -204,7 +218,7 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
             f"OK. Algorithm saved as algorithms/{file} {status}.\n{shown}{about}"
             f"Parameters (now a panel in Max):\n{params}\n"
             f"Checked in {result['runs']} runs (every slider at its minimum and maximum, every option).\n"
-            f"Score at the declared values ({result['notes']} notes, {result['ms']} ms):\n{describe(result['score'])}"
+            f"Score at the declared values ({result['notes']} notes, {result['ms']} ms):\n{describe(result['score'])}{same}"
         )
 
 

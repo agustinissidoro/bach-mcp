@@ -26,7 +26,7 @@
                     "numvoices": 1,
                     "out": "nnnnnnnn",
                     "outlettype": [ "", "", "", "", "", "", "", "" ],
-                    "patching_rect": [ 19.0, 147.0, 526.0, 117.83333333333334 ],
+                    "patching_rect": [ 19.0, 159.0, 526.0, 117.83333333333334 ],
                     "pitcheditrange": [ "null" ],
                     "stafflines": [ 5 ],
                     "textcolor": [ 0.0, 0.0, 0.0, 1.0 ],
@@ -65,7 +65,7 @@
                     "numoutlets": 1,
                     "outlettype": [ "bang" ],
                     "parameter_enable": 0,
-                    "patching_rect": [ 578.0, 99.0, 24.0, 24.0 ]
+                    "patching_rect": [ 578.0, 131.0, 24.0, 24.0 ]
                 }
             },
             {
@@ -78,7 +78,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 578.0, 151.0, 420.0, 140.0 ],
+                    "patching_rect": [ 578.0, 183.0, 420.0, 140.0 ],
                     "prompt_sent": 1,
                     "prompt_text": "an algorithm that takes a score and transforms notes to chords. chords are constructed using mirroring intervals. provide control of the intervals and of the amount of notes."
                 }
@@ -89,7 +89,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 578.0, 815.0, 47.0, 22.0 ],
+                    "patching_rect": [ 578.0, 797.0, 47.0, 22.0 ],
                     "text": "s to.roll"
                 }
             },
@@ -100,7 +100,7 @@
                     "numinlets": 0,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 622.0, 296.0, 59.0, 22.0 ],
+                    "patching_rect": [ 578.0, 365.0, 59.0, 22.0 ],
                     "text": "r from.roll"
                 }
             },
@@ -110,7 +110,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 19.0, 292.0, 61.0, 22.0 ],
+                    "patching_rect": [ 19.0, 312.0, 61.0, 22.0 ],
                     "text": "s from.roll"
                 }
             },
@@ -170,22 +170,22 @@
             },
             {
                 "box": {
-                    "args": [ "chord-select" ],
+                    "args": [ "make-chords-bloom", "selector" ],
                     "bgmode": 0,
                     "border": 0,
                     "clickthrough": 0,
                     "enablehscroll": 0,
                     "enablevscroll": 0,
-                    "id": "obj-10",
+                    "id": "obj-8",
                     "lockeddragscroll": 0,
                     "lockedsize": 0,
                     "maxclass": "bpatcher",
-                    "name": "bachmcp.bpatcher.transformer.maxpat",
+                    "name": "bachmcp.bpatcher.algorithm.maxpat",
                     "numinlets": 1,
-                    "numoutlets": 1,
+                    "numoutlets": 4,
                     "offset": [ 0.0, 0.0 ],
-                    "outlettype": [ "" ],
-                    "patching_rect": [ 578.0, 328.0, 420.0, 468.0 ],
+                    "outlettype": [ "", "", "", "" ],
+                    "patching_rect": [ 578.0, 406.0, 288.0, 365.0 ],
                     "viewvisibility": 1
                 }
             }
@@ -199,25 +199,19 @@
             },
             {
                 "patchline": {
-                    "destination": [ "obj-14", 0 ],
-                    "source": [ "obj-10", 0 ]
-                }
-            },
-            {
-                "patchline": {
                     "destination": [ "obj-1", 0 ],
                     "source": [ "obj-11", 0 ]
                 }
             },
             {
                 "patchline": {
-                    "destination": [ "obj-10", 0 ],
+                    "destination": [ "obj-8", 0 ],
                     "source": [ "obj-13", 0 ]
                 }
             },
             {
                 "patchline": {
-                    "destination": [ "obj-10", 0 ],
+                    "destination": [ "obj-8", 0 ],
                     "source": [ "obj-15", 0 ]
                 }
             },
@@ -249,6 +243,12 @@
                 "patchline": {
                     "destination": [ "obj-4", 0 ],
                     "source": [ "obj-7", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-14", 0 ],
+                    "source": [ "obj-8", 0 ]
                 }
             }
         ],

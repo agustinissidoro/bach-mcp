@@ -11,9 +11,10 @@ onto the roll's score, so everything the model does not see (the header:
 slotinfo, clefs, keys ...) is kept.
 
 Each call is for one instance (session.py: the one whose prompt is being
-answered, else the active one): its score travels through its own file in the
-playground, scores/<name>.json (buffer.py), never as messages. Only a writer
-writes notes; any instance can have its roll read.
+answered, else the active one). Scores travel through files (buffer.py), never
+as messages: write_score writes the complete score to the instance's own file
+in the playground, scores/<name>.json, and sends `<name> score_done`. Only a
+score instance writes notes; any instance can have its roll read.
 """
 
 from __future__ import annotations
@@ -141,9 +142,9 @@ def add_chords(base: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _writer() -> Target:
-    """The instance being served, if it is a writer; else NoTarget saying what it takes instead."""
+    """The instance being served, if it is a score instance; else NoTarget saying what it takes instead."""
     t = target()
-    if t.type != "writer":
+    if t.type != "score":
         raise NoTarget(f"{t.name} is a {t.type}: it takes an algorithm (send_algorithm), not notes")
     return t
 
@@ -152,12 +153,9 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
     """Register the JSON score tools on `mcp`. Scores travel through each instance's file, signals through `bridge`."""
     state: Dict[str, Any] = {"last_read": None}
 
-    def _buffer(t: Target) -> RollBuffer:
-        return RollBuffer(bridge, t.name, t.roll_file)
-
     def _send_score(raw: Any, add: bool) -> str:
         try:
-            buffer = _buffer(_writer())
+            t = _writer()
         except NoTarget as exc:
             return f"ERROR: {exc}. Nothing was written."
         if isinstance(raw, str):  # the score arrived as text: read it, or say exactly where it breaks
@@ -178,7 +176,7 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
         score = add_chords(current, written) if add else written
         if count_notes(score) > MAX_NOTES:
             return f"ERROR: more than {MAX_NOTES} notes. Nothing was written."
-        if not buffer.load(score, tonedivision(score)):
+        if not RollBuffer(bridge, t.name, t.roll_file).load(score, tonedivision(score)):
             return "ERROR: could not reach Max. Is the patch open?"
         state["last_read"] = None
         status = "Added to the score" if add else "Score written"

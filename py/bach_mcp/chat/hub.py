@@ -21,7 +21,7 @@ Into the hub:
 
     set_playground <path>                     the folder for everything the model makes
     clear_instance_names_map                  empty the map
-    add_instance_names_map <name> <type>      generator | transformer | selector | writer; an instance
+    add_instance_names_map <name> <type>      generator | transformer | selector | score; an instance
                                               that changes type starts a new conversation, as with `new`
     set_active_instance <name> [<type>]       with the type, the instance joins the map if new
     instances <name> <type> ...               Max's answer to `server get_instances`: the whole map
@@ -440,7 +440,7 @@ class Hub:
     def _start_over(self, name: str) -> None:
         """The instance's next prompt starts a new conversation: the one in memory goes, and its
         file is kept beside it with the time (prompts/<name>-<date>-<time>.jsonl). Also when the
-        instance changes type: a writer's scores are no use to a generator, and Claude Code must
+        instance changes type: a score instance's scores are no use to a generator, and Claude Code must
         not resume a session made with the other type's skill. While the instance is answered
         or waiting, only the conversation in memory goes: the answer still saves into its file.
         Call with the lock held."""

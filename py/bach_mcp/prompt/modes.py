@@ -7,7 +7,7 @@ Two modes, chosen by the user with a prefix at the start of a message:
     /algo    the model writes the algorithm that generates them (send_algorithm)
 
 A mode lasts until the other prefix appears. Each mode gets only its own part
-of the skill (skill.py) and only its own tools, so the model reads less and
+of the skill (skill.py) and only its own tools (read_score is in both), so the model reads less and
 nothing that does not apply. A message that is only a prefix switches the
 mode without asking the model anything.
 
@@ -35,7 +35,7 @@ DEFAULT_MODE = "score"
 
 MODE_TOOLS = {
     "score": SCORE_TOOLS + PITCH_TOOLS,  # the notes, with exact pitch arithmetic
-    "algo": ALGO_TOOLS,
+    "algo": ALGO_TOOLS + ("read_score",),  # the algorithm, and a look at the score in the roll
 }
 
 TYPE_MODE = {instance_type: mode for mode, types in MODE_TYPES.items() for instance_type in types}  # generator -> algo ...
@@ -47,7 +47,7 @@ TYPE_NOTE = {
                    "`function transform(source, p) { ... }` and send it with send_algorithm.",
     "selector": "You are writing for a selector: it selects notes of the score already in its roll. Write "
                 "`function select(source, p) { ... }` returning the notes it picks, and send it with send_algorithm.",
-    "writer": "You are writing for a writer: write the notes themselves with write_score.",
+    "score": "You are writing for a score instance: write the notes themselves with write_score.",
 }
 
 _PREFIX = re.compile(r"^\s*/(algo|score)\b[ \t]*\n?", re.I)

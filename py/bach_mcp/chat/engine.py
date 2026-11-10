@@ -112,25 +112,31 @@ class Conversation:
         self.history.append({"role": "user", "content": text})
 
         seen_calls: Set[str] = set()
+        repeated = 0  # replies in a row whose calls all ran nothing: repeats, unknown tools, broken arguments
         for _ in range(self.max_tool_rounds + 1):  # the rounds of tools, then the answer
-            reply = yield from self._ask(max_tokens)
+            # After a second such reply the model is stuck: it is asked
+            # once more without tools, so it can only answer.
+            reply = yield from self._ask(max_tokens, with_tools=repeated < 2)
             if reply is None:
                 return
             self.history.append(_assistant_message(reply))
             if reply.finish == "length" or not reply.tool_calls:
                 yield {"type": "done", "finish": "length" if reply.finish == "length" else "stop"}
                 return
+            fresh = False
             for call in reply.tool_calls:
                 yield {"type": "tool_call", "id": call.id, "name": call.name, "arguments": call.arguments}
-                result = self._run(call, seen_calls)
+                result, ran = self._run(call, seen_calls)
+                fresh = fresh or ran
                 self.history.append({"role": "tool", "tool_call_id": call.id, "content": result})
                 yield {"type": "tool_result", "id": call.id, "name": call.name, "result": result}
+            repeated = 0 if fresh else repeated + 1
         yield {"type": "done", "finish": "rounds"}
 
-    def _ask(self, max_tokens: Optional[int]) -> Iterator[Event]:
+    def _ask(self, max_tokens: Optional[int], with_tools: bool = True) -> Iterator[Event]:
         """One request to the model, streamed as events; returns its Reply (None after an error)."""
         messages = [{"role": "system", "content": self.system_prompt()}] + without_replaced(self.history)
-        tools = self.mode_tools()
+        tools = self.mode_tools() if with_tools else []
         for attempt in range(1 + LOOP_RETRIES):
             started = time.time()
             reply: Optional[Reply] = None
@@ -157,14 +163,32 @@ class Conversation:
             return reply
         return None
 
-    def _run(self, call: ToolCall, seen: Set[str]) -> str:
+    def _run(self, call: ToolCall, seen: Set[str]) -> Tuple[str, bool]:
+        """The answer to one call, and whether it was run (False: broken, unknown or a repeat)."""
         if call.error:
-            return f"ERROR: {call.error}. Nothing was run. Call {call.name} again with the whole arguments."
+            return f"ERROR: {call.error}. Nothing was run. Call {call.name} again with the whole arguments.", False
+        names = [t["function"]["name"] for t in self.mode_tools()]
+        if call.name not in names:  # a tool the model knows from elsewhere (grep, read, exec ...)
+            return (f"ERROR: there is no tool named {call.name}. Your only tools are: {', '.join(names)}. "
+                    f"Nothing was run."), False
         signature = json.dumps([call.name, call.arguments], sort_keys=True, default=str)
         if signature in seen:
-            return "You already made this exact call in this turn and have its result. Do not repeat it: answer now."
+            return _repeat_text(call.name), False
         seen.add(signature)
-        return self.tools.call(call.name, call.arguments)
+        return self.tools.call(call.name, call.arguments), True
+
+
+def _repeat_text(name: str) -> str:
+    """The answer to a call identical to one already made in this turn."""
+    if name in ("send_algorithm", "write_score"):
+        what = "code" if name == "send_algorithm" else "score"
+        return (f"NOT SENT: this {what} is identical, character for character, to the one you already sent "
+                f"in this turn, so nothing changed and nothing was sent again. The first send is the one in Max. "
+                f"If you wanted to correct something, you have not changed it yet: find the line that causes "
+                f"it, change it, and send the corrected {what}. If the first result was right, do not call "
+                f"again: answer the user.")
+    return (f"NOT RUN: you already made this exact {name} call in this turn; its answer is above. "
+            f"Use that answer instead of calling again.")
 
 
 OLD_CODE = "(an earlier version of the file: a later send_algorithm replaced it)"

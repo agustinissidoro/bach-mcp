@@ -59,10 +59,10 @@ class ModeTests(EngineTest):
         list(conversation.send("denser"))
         list(conversation.send("/score three notes"))
         first, second, third = self.client.requests
-        self.assertEqual(self.tool_names(first), ["send_algorithm"])
+        self.assertEqual(self.tool_names(first), ["read_score", "send_algorithm"])
         self.assertEqual(first["messages"][0]["content"], skill_for(RAW, "algo"))
         self.assertEqual(first["messages"][1], {"role": "user", "content": "a canon"})
-        self.assertEqual(self.tool_names(second), ["send_algorithm"])
+        self.assertEqual(self.tool_names(second), ["read_score", "send_algorithm"])
         self.assertIn("write_score", self.tool_names(third))
 
     def test_only_a_prefix_switches_without_asking_the_model(self):
@@ -120,7 +120,31 @@ class ToolLoopTests(EngineTest):
         conversation = self.chat(tool_reply("p2mc", call), tool_reply("p2mc", call, call_id="call_2"), text_reply("ok"))
         results = [e["result"] for e in conversation.send("C") if e["type"] == "tool_result"]
         self.assertEqual(results[0], "[6000]")
-        self.assertIn("already made this exact call", results[1])
+        self.assertTrue(results[1].startswith("NOT RUN: you already made this exact p2mc call"))
+
+    def test_a_model_that_only_repeats_is_asked_once_more_without_tools(self):
+        call = {"pitches": ["C4"]}
+        conversation = self.chat(tool_reply("p2mc", call), tool_reply("p2mc", call, call_id="call_2"),
+                                 tool_reply("p2mc", call, call_id="call_3"), text_reply("C4 is 6000."))
+        events = list(conversation.send("C"))
+        self.assertEqual(events[-1], {"type": "done", "finish": "stop"})
+        self.assertEqual([bool(r.get("tools")) for r in self.client.requests], [True, True, True, False])
+
+    def test_a_tool_that_does_not_exist_is_answered_with_the_tools_there_are(self):
+        conversation = self.chat(tool_reply("grep", {"pattern": "voice"}),
+                                 tool_reply("read", {"path": "/x"}, call_id="call_2"), text_reply("ok"))
+        results = [e["result"] for e in conversation.send("C") if e["type"] == "tool_result"]
+        self.assertTrue(results[0].startswith("ERROR: there is no tool named grep. Your only tools are: "), results[0])
+        self.assertIn("p2mc", results[0])
+        self.assertEqual([bool(r.get("tools")) for r in self.client.requests], [True, True, False])
+
+    def test_a_new_call_between_repeats_keeps_the_tools(self):
+        call = {"pitches": ["C4"]}
+        conversation = self.chat(tool_reply("p2mc", call), tool_reply("p2mc", call, call_id="call_2"),
+                                 tool_reply("p2mc", {"pitches": ["D4"]}, call_id="call_3"),
+                                 tool_reply("p2mc", call, call_id="call_4"), text_reply("ok"))
+        list(conversation.send("C"))
+        self.assertTrue(all(r.get("tools") for r in self.client.requests))
 
     def test_cut_off_arguments_are_not_run(self):
         broken = tool_reply("p2mc", '{"pitches": ["C4"', call_id="c1")
@@ -168,8 +192,8 @@ class KindTests(EngineTest):
         self.assertEqual(request["messages"][1]["content"], "/score a canon")
         self.assertTrue(request["messages"][0]["content"].startswith(skill_for(RAW, "algo", instance_type="transformer").rstrip()))
         self.assertIn("You are writing for a transformer", request["messages"][0]["content"])
-        self.assertEqual(self.tool_names(request), ["send_algorithm"])
-        writer = Conversation(self.client, self.tools, RAW, None, 8, instance_type="writer")
+        self.assertEqual(self.tool_names(request), ["read_score", "send_algorithm"])
+        writer = Conversation(self.client, self.tools, RAW, None, 8, instance_type="score")
         list(writer.send("three notes"))
         self.assertIn("write_score", self.tool_names(self.client.requests[1]))
 
