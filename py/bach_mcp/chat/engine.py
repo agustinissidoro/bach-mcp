@@ -180,8 +180,8 @@ class Conversation:
 
 def _repeat_text(name: str) -> str:
     """The answer to a call identical to one already made in this turn."""
-    if name in ("send_algorithm", "write_score"):
-        what = "code" if name == "send_algorithm" else "score"
+    if name in ("send_algorithm", "send_gen", "write_score"):
+        what = "score" if name == "write_score" else "code"
         return (f"NOT SENT: this {what} is identical, character for character, to the one you already sent "
                 f"in this turn, so nothing changed and nothing was sent again. The first send is the one in Max. "
                 f"If you wanted to correct something, you have not changed it yet: find the line that causes "
@@ -247,7 +247,7 @@ def _replace_argument(out: List[Dict[str, Any]], i: int, k: int, key: str, value
 
 
 def _old_code(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    calls = _calls(history, "send_algorithm")
+    calls = _calls(history, "send_algorithm", "send_gen")
     if len(calls) < 2:
         return history
     answers = _answers(history)

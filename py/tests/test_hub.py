@@ -22,7 +22,7 @@ from bach_mcp.chat.engine import Conversation  # noqa: E402
 from bach_mcp.chat.hub import Hub  # noqa: E402
 from bach_mcp.config import Config  # noqa: E402
 from bach_mcp.prompt.docs import DocLibrary  # noqa: E402
-from bach_mcp.prompt.skill import load_skill  # noqa: E402
+from bach_mcp.prompt.skill import SKILL_PATH, load_skill  # noqa: E402
 from bach_mcp.tools.instance_tools import register_instance_tools  # noqa: E402
 from bach_mcp.bridge.max import OfflineBridge  # noqa: E402
 from bach_mcp.tools.registry import create_tools, threaded  # noqa: E402
@@ -176,7 +176,7 @@ class MapTests(HubTest):
         self.bridge.from_max("set_active_instance nobody")
         self.bridge.from_max("add_instance_names_map lonely")
         self.assertEqual(self.bridge.sent, [
-            'server warning "odd: unknown type mixer (one of generator, transformer, selector, score)"',
+            'server warning "odd: unknown type mixer (one of generator, transformer, selector, score, synth, fx)"',
             'server warning "set_active_instance: no instance nobody in the map"',
             'server warning "add_instance_names_map needs a name and a type"'])
         self.assertNotIn("odd", self.hub.instances)
@@ -195,12 +195,193 @@ class MapTests(HubTest):
     def test_the_playground_is_made_and_echoed(self):
         self.bridge.from_max(f"set_playground {line('Macintosh HD:' + self.playground)}")
         self.assertEqual(self.hub.playground, self.playground)
-        self.assertEqual(sorted(os.listdir(self.playground)), ["algorithms", "prompts", "scores"])
+        self.assertEqual(sorted(os.listdir(self.playground)), ["algorithms", "gen", "prompts", "scores", "skills"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.playground, "skills"))), ["core-algorithmic.md", "core-electronic.md", "profiles"])
         self.assertEqual(self.heard(), [line("set_playground", self.playground)])
         with open(os.path.join(self.folder, "file"), "w") as f:
             f.write("")
         self.hub.handle(f"set_playground {line(os.path.join(self.folder, 'file'))}", "web")
         self.assertIn("is a file, not a folder", self.bridge.sent[-1])
+
+    def test_core_skill_and_profile_are_made_once_and_then_the_users(self):
+        self.bridge.from_max(f"set_playground {line(self.playground)}")
+        core = os.path.join(self.playground, "skills", "core-algorithmic.md")
+        profile = os.path.join(self.playground, "skills", "profiles", "minimal-algorithmic-composer.json")
+        with open(core, encoding="utf-8") as f, open(SKILL_PATH, encoding="utf-8") as shipped:
+            self.assertEqual(f.read(), shipped.read())
+        with open(profile, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"skills": ["core-algorithmic"]})
+        for path in (core, profile):
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("mine")
+        self.bridge.from_max(f"set_playground {line(self.playground)}")
+        for path in (core, profile):
+            with open(path, encoding="utf-8") as f:
+                self.assertEqual(f.read(), "mine")
+
+    def test_the_profile_made_with_the_playground_is_the_built_in_skill(self):
+        self.setup_patch()
+        self.bridge.from_max("set_profile minimal-algorithmic-composer")
+        self.assertEqual(self.bridge.sent[-2], "server skills core-algorithmic")
+        self.assertEqual(self.ask("scales1").system_prompt(), Conversation(
+            None, self.tools, load_skill(raw=True), None, 8, "generator").system_prompt())
+
+    def write_skill(self, name, text):
+        with open(os.path.join(self.playground, "skills", name + ".md"), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_set_profile_and_set_skills_build_the_skill(self):
+        self.setup_patch()
+        with open(os.path.join(self.playground, "skills", "profiles", "electro.json"), "w") as f:
+            json.dump({"skills": ["core-algorithmic"]}, f)
+        self.write_skill("analysis", "ANALYSE FIRST.")
+        self.bridge.from_max("set_profile electro")
+        self.bridge.from_max("set_skills analysis")
+        said = [words(t) for t in self.bridge.sent]
+        self.assertEqual(said[-2], ["server", "skills", "core-algorithmic", "analysis"])
+        self.assertEqual(said[-1][:3], ["server", "skills", "length"])
+        self.assertGreater(int(said[-1][3]), 1000)
+        self.bridge.sent.clear()
+        self.bridge.from_max("get_skills")
+        self.assertEqual([words(t)[:3] for t in self.bridge.sent],
+                         [["server", "skills", "core-algorithmic"], ["server", "skills", "length"]])
+        self.assertIn("set_profile electro", self.heard())
+        self.assertTrue(os.path.exists(os.path.join(self.playground, "skills", ".compiled.md")))
+        self.assertEqual(self.hub.snapshot()[2:4], ["set_profile electro", "set_skills analysis"])
+
+        self.replies = [text_reply("Done.")]
+        self.bridge.from_max("scales1 prompt hello")
+        self.answered("scales1")
+        conversation = self.hub._conversations["scales1"]
+        self.assertIn("ANALYSE FIRST.", conversation.system_prompt())
+
+        # an edited skill reaches the next conversation, not the one going on
+        self.write_skill("analysis", "LISTEN FIRST.")
+        self.assertIn("ANALYSE FIRST.", conversation.system_prompt())
+        self.bridge.from_max("scales1 new")
+        self.clients.clear()
+        self.replies = [text_reply("Done.")]
+        self.bridge.from_max("scales1 prompt hello")
+        self.answered("scales1")
+        self.assertIn("LISTEN FIRST.", self.hub._conversations["scales1"].system_prompt())
+
+    def test_skill_problems_are_warnings(self):
+        self.bridge.from_max("set_skills core-algorithmic")
+        self.assertIn("no playground yet", self.bridge.sent[-3])
+        self.assertEqual(self.bridge.sent[-2:], ["server skills", "server skills length 0"])
+        self.setup_patch()  # the playground comes: the skill is built
+        self.bridge.from_max("set_profile nope")
+        self.assertIn("no profile nope", self.bridge.sent[-3])
+        self.assertEqual(self.bridge.sent[-2], "server skills core-algorithmic")  # the last one built
+        self.bridge.from_max("set_skills core-algorithmic")  # the profile is still chosen, and still missing
+        self.assertIn("no profile nope", self.bridge.sent[-3])
+        self.bridge.from_max("set_profile")
+        self.assertEqual(self.bridge.sent[-2], "server skills core-algorithmic")
+        self.write_skill("gone", "GONE SKILL")
+        self.bridge.from_max("set_skills core-algorithmic gone")
+        os.remove(os.path.join(self.playground, "skills", "gone.md"))
+        self.replies = [text_reply("Done.")]
+        self.bridge.from_max("scales1 prompt hello")
+        self.answered("scales1")
+        self.assertTrue(any("keep the last skill built" in t for t in self.bridge.sent))
+        self.assertIn("GONE SKILL", self.hub._conversations["scales1"].skill)
+        self.bridge.from_max("set_skills")
+        self.assertIn("no profile and no skills", self.bridge.sent[-3])
+        self.assertEqual(self.bridge.sent[-2:], ["server skills", "server skills length 0"])
+
+    def ask(self, name):
+        self.clients.clear()
+        self.replies = [text_reply("Done.")]
+        if name in self.hub._conversations:  # a conversation going on: its own client answers
+            self.hub._conversations[name].client.replies.append(text_reply("Done."))
+        self.bridge.from_max(f"{name} prompt hello")
+        self.answered(name)
+        return self.hub._conversations[name]
+
+    def saved_rows(self, name):
+        with open(os.path.join(self.playground, "prompts", name + ".jsonl"), encoding="utf-8") as f:
+            return [json.loads(row) for row in f]
+
+    def test_an_instance_overrides_the_shared_skills(self):
+        self.setup_patch()
+        self.write_skill("analysis", "ANALYSE FIRST.")
+        self.bridge.from_max("set_skills core-algorithmic")
+        self.bridge.from_max("scales1 set_skills analysis")
+        self.assertEqual(self.bridge.sent[-2:][0], "scales1 skills analysis")
+        self.assertIn("scales1 set_skills analysis", self.heard())
+        self.assertIn("ANALYSE FIRST.", self.ask("scales1").system_prompt())
+        self.assertNotIn("## Method", self.hub._conversations["scales1"].system_prompt())  # no core: replaced
+        self.assertNotIn("ANALYSE FIRST.", self.ask("notes1").system_prompt())
+        compiled = os.path.join(self.playground, "skills", ".compiled", "scales1.md")
+        self.assertTrue(os.path.exists(compiled))
+        self.assertIn("scales1 set_skills analysis", self.hub.snapshot())
+
+        self.bridge.from_max("scales1 get_skills")
+        self.assertEqual(words(self.bridge.sent[-2]), ["scales1", "skills", "analysis"])
+        self.bridge.from_max("scales1 set_skills")  # nothing of its own: back to the shared skills
+        self.assertEqual(words(self.bridge.sent[-2]), ["scales1", "skills", "core-algorithmic"])
+        self.assertFalse(os.path.exists(os.path.dirname(compiled)))
+
+    def test_a_changed_skill_starts_a_clean_conversation(self):
+        self.setup_patch()
+        self.write_skill("analysis", "ANALYSE FIRST.")
+        self.write_skill("listen", "LISTEN FIRST.")
+        self.bridge.from_max("set_skills core-algorithmic")
+        self.ask("scales1")
+        self.ask("notes1")
+        self.bridge.from_max("scales1 set_skills core-algorithmic")  # the same as it reads: nothing changes
+        self.ask("scales1")
+        self.assertEqual(len(self.saved_rows("scales1")), 4)
+        self.assertNotIn("scales1 new", self.bridge.sent)
+
+        self.bridge.from_max("scales1 set_skills core-algorithmic analysis")
+        conversation = self.ask("scales1")
+        self.assertIn("scales1 new", self.bridge.sent)
+        self.assertEqual(len(conversation.history), 2)
+        self.assertEqual(len(self.saved_rows("scales1")), 2)
+        self.assertIn("ANALYSE FIRST.", conversation.system_prompt())
+        self.assertEqual(sorted(os.listdir(os.path.join(self.playground, "prompts"))), ["notes1.jsonl", "scales1.jsonl"])
+
+        # the shared skills change: only who reads them starts again
+        self.bridge.sent.clear()
+        self.bridge.from_max("set_skills core-algorithmic listen")
+        self.assertIn("LISTEN FIRST.", self.ask("notes1").system_prompt())
+        self.assertIn("notes1 new", self.bridge.sent)
+        self.assertEqual(len(self.ask("scales1").history), 4)
+        self.assertNotIn("scales1 new", self.bridge.sent)
+
+    def test_remove_forgets_the_instance_but_keeps_its_files(self):
+        self.setup_patch()
+        self.write_skill("analysis", "ANALYSE FIRST.")
+        self.bridge.from_max("set_skills core-algorithmic")
+        self.bridge.from_max("scales1 set_skills analysis")
+        self.ask("scales1")
+        self.bridge.from_max("scales1 remove")
+        self.assertNotIn("scales1", self.hub._conversations)
+        self.assertNotIn("scales1", self.hub.own)
+        self.assertNotIn("scales1 remove", self.bridge.sent)  # Max sent it: only the pages hear it
+        self.assertIn("scales1 remove", self.heard())
+        self.assertIn("scales1 history []", self.heard())
+        self.assertNotIn("scales1 set_skills analysis", self.hub.snapshot())
+        self.assertTrue(os.path.exists(os.path.join(self.playground, "prompts", "scales1.jsonl")))
+        self.assertTrue(os.path.exists(os.path.join(self.playground, "skills", ".compiled", "scales1.md")))
+        self.bridge.from_max("scales1 get_skills")
+        self.assertEqual(words(self.bridge.sent[-2]), ["scales1", "skills", "core-algorithmic"])  # the shared ones
+        conversation = self.ask("scales1")  # prompted again: its saved conversation is read again
+        self.assertEqual(len(conversation.history), 4)
+        self.assertNotIn("ANALYSE FIRST.", conversation.system_prompt())
+
+    def test_remove_stops_what_is_waiting(self):
+        self.setup_patch()
+        self.go.clear()  # the model holds its answer
+        self.replies = [text_reply("One."), text_reply("Two.")]
+        self.bridge.from_max("notes1 prompt first")
+        self.bridge.from_max("scales1 prompt second")
+        self.bridge.from_max("scales1 remove")
+        self.assertIn("scales1 stopped", self.heard())
+        self.go.set()
+        self.answered("notes1")
+        self.assertNotIn("scales1", self.hub._conversations)
 
     def test_lines_that_are_not_the_hubs_stay_with_the_bridge(self):
         self.setup_patch()

@@ -172,7 +172,7 @@ def run(config: Config) -> None:
             make = lambda instance_type: build_conversation(config, client, mcp, instance_type)  # noqa: E731
         print(f"  docs      {'added to messages that name an instrument' if config.chat.docs else 'off'}")
         print(f"  max       answers bach status|settings|models|catalog|download_model|quit|help on UDP {config.max.receive_port}")
-        hub = Hub(bridge, status, make)
+        hub = Hub(bridge, status, make, verbose=config.algo.verbose)
         status.on_quit(hub.close)
 
         def when_ready() -> None:

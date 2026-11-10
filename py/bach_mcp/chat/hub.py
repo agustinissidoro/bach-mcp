@@ -20,14 +20,28 @@ be read as that command.
 Into the hub:
 
     set_playground <path>                     the folder for everything the model makes
+    set_profile [<name>]                      the skill's profile: skills/profiles/<name>.json
+                                              (no name: none)
+    set_skills [<name> ...]                   skills added after the profile's: skills/<name>.md
+                                              (none: none). Each builds skills/.compiled.md
+                                              (prompt/skills.py) and answers `server skills ...`
+    get_skills                                build it again from the files and answer the same
+    <name> set_profile [<name>]               the same for one instance: it reads only what it
+    <name> set_skills [<name> ...]            chose (its own profile and skills), not the shared
+    <name> get_skills                         ones; none of either: back to the shared ones.
+                                              Answers `<name> skills ...`
     clear_instance_names_map                  empty the map
-    add_instance_names_map <name> <type>      generator | transformer | selector | score; an instance
+    add_instance_names_map <name> <type>      generator | transformer | selector | score | synth | fx; an instance
                                               that changes type starts a new conversation, as with `new`
     set_active_instance <name> [<type>]       with the type, the instance joins the map if new
     instances <name> <type> ...               Max's answer to `server get_instances`: the whole map
     <name> prompt <text>                      to that instance's conversation
     <name> stop                               stop its answer (or its turn in the queue)
     <name> new                                a new conversation (the old one stays in prompts/)
+    <name> remove                             forget everything the hub holds for it: its answer
+                                              (stopped) and prompts waiting, its conversation, its
+                                              own profile and skills. Files stay: its prompts/<name>.jsonl
+                                              is read again if it is prompted later
 
 Out of the hub, to Max and to the page:
 
@@ -40,6 +54,12 @@ Out of the hub, to Max and to the page:
     <name> stopped
     <name> error <message>
     server warning <text>                   something to fix (a bad path, an unknown type)
+    server skills <skill> ...               after set_profile, set_skills, get_skills: the files of the
+    server skills length <tokens>           skill new conversations read, and its estimated tokens
+                                            (no files and 0: the built-in skill, nothing chosen; after a
+                                            warning, the last skill that was built)
+    <name> skills <skill> ...               the same for one instance, after its own set_profile,
+    <name> skills length <tokens>           set_skills, get_skills: what it reads, its own or shared
 
 Only to Max, when a tool asks (get_instances, set_active_instance):
 
@@ -83,6 +103,15 @@ An echo never goes back to Max when Max sent it. Lines the hub does not know
 (an instance's answers to the tools, such as `<name> algo_loaded`) are left to
 the bridge, where the tools wait for them.
 
+The skill: an instance reads its own choice (<name> set_profile / set_skills) if it
+has one, else the shared one (set_profile / set_skills), else the skill bachmcp.toml
+names (make builds it so). Each new conversation builds its skill again from the
+files (so an edited skill file counts from the next one); if that fails, it keeps
+the last one built. Before each prompt the hub checks what the instance reads: if
+its profile or skills changed since its conversation began (its own or the shared
+ones), the conversation is dropped, its file deleted, and a new one begins
+(`<name> new` is said).
+
 Prompts are answered one at a time, in the order they came: there is one model.
 Each conversation is saved in the playground as prompts/<name>.jsonl, one
 message per line, and read again when the instance is next prompted.
@@ -99,14 +128,16 @@ from dataclasses import dataclass
 from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 from ..bridge.protocol import Word, line, words
+from ..prompt.skill import with_gen, with_verbosity
+from ..prompt.skills import SkillError, build, remove_compiled
 from ..tools.playground import prepare
 from ..tools.session import TYPES, NoTarget, Target, direct, serve_instances, serve_targets
 from .engine import Conversation
 
-INSTANCE_COMMANDS = ("prompt", "stop", "new")
+INSTANCE_COMMANDS = ("prompt", "stop", "new", "remove", "set_profile", "set_skills", "get_skills")
 # First words that are not an instance: the hub's own commands, Max's requests (bridge/max.py),
 # the lines for the server object and the page's state line.
-RESERVED = ("set_playground", "clear_instance_names_map", "add_instance_names_map", "set_active_instance",
+RESERVED = ("set_playground", "set_profile", "set_skills", "get_skills", "clear_instance_names_map", "add_instance_names_map", "set_active_instance",
             "instances", "server", "bach", "state")
 HISTORY_SHOWN = 400  # messages of a saved conversation sent to a page that connects
 INSTANCES_WAIT = 1.5  # seconds a tool waits for Max to answer server get_instances
@@ -122,6 +153,7 @@ class Message:
 
 Client = Callable[[Message], None]
 MakeConversation = Callable[[str], Conversation]  # a conversation for an instance of this type
+Selection = Tuple[str, str, Tuple[str, ...]]  # whose choice ("" shared, or the instance), profile, skills
 
 
 class Hub:
@@ -133,11 +165,19 @@ class Hub:
     Creating the hub connects it: the bridge offers it every line from Max, and the tools
     ask it which instance they serve."""
 
-    def __init__(self, bridge: Any, status: Any, make: Optional[MakeConversation] = None) -> None:
+    def __init__(self, bridge: Any, status: Any, make: Optional[MakeConversation] = None,
+                 verbose: bool = True) -> None:
         self.bridge = bridge
         self.status = status
         self.make = make
+        self.verbose = verbose  # [algo] verbose: the wording of the skill the playground's files build
         self.playground = ""
+        self.profile = ""  # the shared choice of skills
+        self.skills: List[str] = []
+        self.own: Dict[str, Tuple[str, List[str]]] = {}  # an instance's own choice: (profile, skills)
+        self._built: Dict[str, Tuple[str, List[str], int]] = {}  # "" (shared) or an instance -> the last
+                                                                 # skill built: (text, files, tokens)
+        self._began_with: Dict[str, Selection] = {}  # what each conversation in memory began with
         self.instances: Dict[str, str] = {}
         self.active = ""
         self._conversations: Dict[str, Conversation] = {}
@@ -197,6 +237,15 @@ class Hub:
             out = [line(*self._state())]
             if self.playground:
                 out.append(line("set_playground", self.playground))
+            if self.profile:
+                out.append(line("set_profile", self.profile))
+            if self.skills:
+                out.append(line("set_skills", *self.skills))
+            for name, (profile, skills) in self.own.items():
+                if profile:
+                    out.append(line(name, "set_profile", profile))
+                if skills:
+                    out.append(line(name, "set_skills", *skills))
             out.append(line("clear_instance_names_map"))
             out += [line("add_instance_names_map", name, instance_type) for name, instance_type in self.instances.items()]
             if self.active:
@@ -222,6 +271,13 @@ class Hub:
         head = said[0]
         if head == "set_playground":
             self._set_playground(" ".join(said[1:]), echo)
+        elif head == "set_profile":
+            self._choose_skills("", " ".join(said[1:]).strip(), None, echo)
+        elif head == "set_skills":
+            self._choose_skills("", None, said[1:], echo)
+        elif head == "get_skills":
+            self._build_skill("")
+            self._report_skills("")
         elif head == "clear_instance_names_map":
             with self._lock:
                 self.instances.clear()
@@ -236,8 +292,17 @@ class Hub:
             name, command = said[0], said[1]
             if command == "prompt":
                 self._prompt(name, " ".join(said[2:]).strip(), echo)
+            elif command == "set_profile":
+                self._choose_skills(name, " ".join(said[2:]).strip(), None, echo)
+            elif command == "set_skills":
+                self._choose_skills(name, None, said[2:], echo)
+            elif command == "get_skills":
+                self._build_skill(name)
+                self._report_skills(name)
             elif command == "stop":
                 self._stop(name)
+            elif command == "remove":
+                self._remove(name, echo)
             else:
                 self._new(name, echo)
         else:
@@ -254,11 +319,111 @@ class Hub:
             moved = root != self.playground
             if moved:
                 self._conversations.clear()  # theirs are saved in the other playground
+                self._began_with.clear()
             self.playground = root
             names = list(self.instances)
         self._send("set_playground", root, to_max=echo)
         if moved:
             self._histories(names)
+            if self.profile or self.skills:
+                self._build_skill("")
+                self._report_skills("")
+            for name in list(self.own):
+                self._build_skill(name)
+                self._report_skills(name)
+
+    # ── The skill (prompt/skills.py) ───────────────────────────────────── #
+
+    def _selection(self, name: str) -> Selection:
+        """What an instance reads ("": the shared choice): (whose, profile, skills). whose is the
+        instance itself when it has its own choice, else "" (the shared one, maybe nothing)."""
+        if name and name in self.own:
+            profile, skills = self.own[name]
+            return name, profile, tuple(skills)
+        return "", self.profile, tuple(self.skills)
+
+    def _choose_skills(self, name: str, profile: Optional[str], skills: Optional[List[str]], echo: bool) -> None:
+        """set_profile (skills None) or set_skills (profile None), shared (name "") or for one
+        instance; then the skill is built and what it reads is said."""
+        with self._lock:
+            if name:
+                old_profile, old_skills = self.own.get(name, ("", []))
+                chosen = (old_profile if profile is None else profile, old_skills if skills is None else list(skills))
+                if chosen[0] or chosen[1]:
+                    self.own[name] = chosen
+                else:
+                    self.own.pop(name, None)
+                    self._built.pop(name, None)
+            else:
+                if profile is not None:
+                    self.profile = profile
+                if skills is not None:
+                    self.skills = list(skills)
+                chosen = self.profile, list(self.skills)
+            playground = self.playground
+        head = [name] if name else []
+        if profile is not None:
+            self._send(*head, "set_profile", *([profile] if profile else []), to_max=echo)
+        else:
+            self._send(*head, "set_skills", *chosen[1], to_max=echo)
+        if name and not (chosen[0] or chosen[1]) and playground:
+            remove_compiled(playground, name)
+        if not playground:
+            self._warn("skills: no playground yet; the skill is built when set_playground comes")
+        elif not chosen[0] and not chosen[1] and not name:
+            with self._lock:
+                self._built.pop("", None)
+            self._warn("skills: no profile and no skills chosen; new conversations read the built-in skill")
+        else:
+            self._build_skill(name)
+        self._report_skills(name)
+
+    def _report_skills(self, name: str) -> None:
+        """<server|name> skills <files> / ... skills length <tokens>: what new conversations read."""
+        with self._lock:
+            whose = self._selection(name)[0]
+            _, files, tokens = self._built.get(whose, ("", [], 0))
+        head = name or "server"
+        self._send(head, "skills", *files)
+        self._send(head, "skills", "length", tokens)
+
+    def _build_skill(self, name: str, warn: bool = True) -> str:
+        """Build what the instance (or, with "", every instance without its own choice) reads,
+        write its compiled file and keep it; "" if nothing is chosen. On failure, a warning
+        and the last one built. warn: also the warnings of a build that worked (a skill chosen
+        twice, no core)."""
+        with self._lock:
+            playground = self.playground
+            whose, profile, skills = self._selection(name)
+            last = self._built.get(whose, ("", [], 0))[0]
+        if not playground or not (profile or skills):
+            return ""
+        try:
+            compiled = build(playground, profile, list(skills), whose)
+        except (SkillError, OSError) as exc:
+            self._warn(f"skills{' of ' + whose if whose else ''}: {exc}"
+                       + ("; new conversations keep the last skill built" if last else ""))
+            return last
+        if warn:
+            for warning in compiled.warnings:
+                self._warn(f"skills{' of ' + whose if whose else ''}: {warning}")
+        text = with_gen(with_verbosity(compiled.text, self.verbose), self.verbose)
+        with self._lock:
+            self._built[whose] = (text, [file for file, _ in compiled.used], compiled.tokens)
+        return text
+
+    def _skill_changed(self, name: str) -> bool:
+        """Before a prompt: if what the instance reads changed since its conversation began, the
+        conversation goes, its file is deleted and the next one begins clean. Call with the lock held."""
+        began = self._began_with.get(name)
+        if began is None or began[1:] == self._selection(name)[1:]:  # the same profile and skills, whoever chose them
+            return False
+        self._conversations.pop(name, None)
+        self._began_with.pop(name, None)
+        path = self._history_file(name)
+        if path and os.path.exists(path):
+            os.remove(path)
+        return True
 
     def _add_instance(self, args: List[str], echo: bool) -> None:
         if len(args) < 2:
@@ -433,6 +598,17 @@ class Hub:
             return
         self._send(name, "new", to_max=echo)
 
+    def _remove(self, name: str, echo: bool) -> None:
+        """Forget the instance's conversation and its own choice of skills, in memory only."""
+        self._stop(name)  # its answer, or its prompts waiting
+        with self._lock:
+            self._conversations.pop(name, None)
+            self._began_with.pop(name, None)
+            self.own.pop(name, None)
+            self._built.pop(name, None)
+        self._send(name, "remove", to_max=echo)
+        self._send(name, "history", "[]", web_only=True)
+
     def _busy(self, name: str) -> bool:
         """Being answered, or waiting for its turn. Call with the lock held."""
         return self._answering == name or any(item[0] == name for item in self._queue)
@@ -445,6 +621,7 @@ class Hub:
         or waiting, only the conversation in memory goes: the answer still saves into its file.
         Call with the lock held."""
         self._conversations.pop(name, None)
+        self._began_with.pop(name, None)
         path = self._history_file(name)
         if path and os.path.exists(path) and not self._busy(name):
             os.replace(path, path[:-len(".jsonl")] + time.strftime("-%Y%m%d-%H%M%S.jsonl"))
@@ -504,9 +681,13 @@ class Hub:
         with self._lock:
             refusal = self._refusal(name)  # the map or the model may have changed while it waited
             if not refusal:
+                fresh = self._skill_changed(name)
                 target = Target(name, self.instances[name], self.playground)
                 conversation = self._conversation(target)
                 self._turn = target
+        if not refusal and fresh:
+            self._send(name, "new")
+            self._send(name, "history", "[]", web_only=True)
         if refusal:
             self._send(name, "error", refusal)
             self._report(name, "error", refusal)
@@ -607,6 +788,10 @@ class Hub:
         if conversation is None:
             assert self.make is not None
             conversation = self.make(target.type)
+            skill = self._build_skill(target.name, warn=False)
+            if skill:
+                conversation.skill = skill  # read by instance_skill at each request (engine, headless)
+            self._began_with[target.name] = self._selection(target.name)
             saved = self._saved(target.name)
             conversation.history = [{k: v for k, v in m.items() if k not in ("prompt", "session")} for m in saved]
             conversation.session = next((m["session"] for m in reversed(saved) if m.get("session")), "")  # Claude Code's
