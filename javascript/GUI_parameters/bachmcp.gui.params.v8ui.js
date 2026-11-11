@@ -6,7 +6,8 @@ Create it as [v8ui bachmcp.gui.params.v8ui.js] (its box must not ignore clicks),
 name (as set_name), e.g. [bachmcp.gui.params t1]. Then:
   a runner's middle outlet  ->  this inlet           (spec, set, status, source, source_mode)
   this outlet               ->  the runner's inlet   (param <name> <value...>, ...; after a spec,
-                                                     sync <message...>: the values it holds, which run nothing)
+                                                     sync <message...>: the values it holds, which run nothing;
+                                                     for a synth or an fx plain param messages: gen~ has no sync)
 
 The panel builds itself from the spec the runner sends when it loads a file
 (bachmcp.gui.params.panel.js, with the elements of bachmcp.gui.params.elements.js),
@@ -41,10 +42,12 @@ Stages: received, queued, starting, sent (grey), thinking (a swelling dot), writ
 calling / running <tool> (spinners), done (a check), stopped (a square): both fade
 after 4 s; error (a cross) stays. prompt idle removes the icon.
 
-set_type generator|transformer|selector: the base panel of that type before any
+set_type generator|transformer|selector|synth|fx: the base panel of that type before any
 algorithm is loaded (title row, output and, for a transformer or a selector, the
 source row); kept by clear and saved with the patch. The runner's type echo does
-the same.
+the same. A synth or an fx (a spec_file's "type") looks its own way: knobs instead
+of sliders, mute in the title row (sends "mute 0|1"; bypass for an fx only), no
+output or source rows. mute 0|1 sets it from outside, as bypass 0|1 does.
 
 Other messages: reset (all parameters to their declared values), bang (send
 every value), clear, autosize 0/1, set_name [name] (drawn while no algorithm is
@@ -74,7 +77,7 @@ if (!panel) post("bachmcp.gui.params: cannot load bachmcp.gui.params.panel.js; t
 let autosizing = true;
 
 setinletassist(0, "from a runner's middle outlet: spec, set, status, source, source_mode; one_line_description <text>; prompt <stage> [detail]");
-setoutletassist(0, "to the runner: param <name> <value...>; capture, write_to_playground, source_mode, set_as_active_instance");
+setoutletassist(0, "to the runner: param <name> <value...>; capture, write_to_playground, source_mode, set_as_active_instance; bypass, mute");
 
 function emit(messages) {
   for (const m of messages) outlet(0, m);
@@ -100,8 +103,10 @@ refresh.local = 1;
 function build(data) {
   const kept = panel.setSpec(data);
   refresh();
-  // the values this panel holds, back to the runner: sync, so that they run nothing (a load is not a run)
-  emit(kept.map((m) => ["sync", ...m]));
+  // the values this panel holds, back to the runner: sync, so that they run nothing (a load is not a run).
+  // gen~ (synth, fx) has no runner and knows no "sync": it gets them plain, so the user's values
+  // survive a new version of the code
+  emit(panel.audio() ? kept : kept.map((m) => ["sync", ...m]));
 }
 build.local = 1;
 
@@ -195,6 +200,10 @@ function bypass(flag) {
   if (panel && panel.setBypass(flag)) mgraphics.redraw();
 }
 
+function mute(flag) {
+  if (panel && panel.setMute(flag)) mgraphics.redraw();
+}
+
 function snap(n) {
   if (panel && panel.setPitchSnap(n)) mgraphics.redraw();
 }
@@ -206,11 +215,11 @@ function dump_selection_only(flag) {
 // a transformer's input_mode echo: nothing to show
 function input_mode() {}
 
-/** set_type generator|transformer|selector: the base panel of that type, before any algorithm is loaded. */
+/** set_type generator|transformer|selector|synth|fx: the base panel of that type, before any algorithm is loaded. */
 function set_type(t) {
   if (!panel) return;
   const changed = panel.setType(t);
-  if (changed === null) return post(`bachmcp.gui.params: set_type is generator, transformer or selector, got ${t}\n`);
+  if (changed === null) return post(`bachmcp.gui.params: set_type is generator, transformer, selector, synth or fx, got ${t}\n`);
   if (changed) refresh();
 }
 

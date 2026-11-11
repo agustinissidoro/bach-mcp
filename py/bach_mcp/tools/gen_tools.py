@@ -13,7 +13,9 @@ of another type, send_gen refuses, as send_algorithm and write_score refuse a sy
 There is no gen~ compiler outside Max, so the code is not run here: gen_check.js
 (Node) parses it and checks it against what gen~ accepts (syntax, operators and their
 arguments, names set before they are read, inlets and outlets described, Params
-against the panel's declarations). Only a file that passes replaces the previous
+against the panel's declarations). Then a last check on the gendsp itself, before it is
+written (panel_mismatch): every parameter of the panel is a Param of its codebox and
+sends a number, since gen~ takes no symbols. Only a file that passes replaces the previous
 version (kept in gen/.history) and is loaded, without waiting for an answer:
 
     <name> load_gen <name>.gendsp                    to Max
@@ -102,6 +104,25 @@ def gendsp(code: str, inlets: int, outlets: int) -> Dict[str, Any]:
     }}
 
 
+_PARAM = re.compile(r"\bParam\s+([A-Za-z_]\w*)")
+
+
+def panel_mismatch(patch: Dict[str, Any], params: List[Dict[str, Any]]) -> List[str]:
+    """The last check, on what Max will load: every parameter of the panel must be a Param in
+    the gendsp's codebox and send a number (gen~ takes no symbols). Returns the problems."""
+    code = "".join(box["box"].get("code", "") for box in patch["patcher"]["boxes"]
+                   if box["box"].get("maxclass") == "codebox")
+    declared = set(_PARAM.findall(_COMMENT.sub("", code)))
+    problems = []
+    for spec in params:
+        name, send = spec.get("name"), spec.get("send")
+        if name not in declared:
+            problems.append(f"the panel's parameter {name} is not a Param in the gendsp")
+        if isinstance(send, bool) or not isinstance(send, (int, float)):
+            problems.append(f"the panel's parameter {name} sends {send!r}, not a number")
+    return problems
+
+
 def _bare(code: str) -> str:
     """The code without comments and whitespace: two files with the same bare text sound the same."""
     return re.sub(r"\s+", "", _COMMENT.sub("", code or ""))
@@ -179,6 +200,14 @@ def register_gen_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> N
             return (f"ERROR in {where}: {result['error']}. Nothing was loaded. "
                     "Fix this and call send_gen again with the whole file and its params.")
 
+        patch = gendsp(text, len(result["inlets"]), len(result["outlets"]))
+        problems = panel_mismatch(patch, result["params"])
+        if problems:
+            os.remove(draft)
+            return (f"ERROR in {name}.genexpr: {'; '.join(problems)}. Nothing was loaded. "
+                    "Every entry of params is a Param of the code, with the same name, and its value is a number "
+                    "(a menu sends the index of its option). Fix this and call send_gen again with the whole file and its params.")
+
         same = ""
         if os.path.exists(final):
             with open(final, encoding="utf-8") as f:
@@ -193,7 +222,7 @@ def register_gen_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> N
         os.replace(draft, final)
         stem = os.path.splitext(final)[0]
         with open(stem + ".gendsp", "w", encoding="utf-8") as f:
-            json.dump(gendsp(text, len(result["inlets"]), len(result["outlets"])), f, indent=1)
+            json.dump(patch, f, indent=1)
         about = {key: result[key] for key in ("description", "type", "inlets", "outlets", "params", "buffers", "data")}
         with open(stem + ".json", "w", encoding="utf-8") as f:
             json.dump(about, f, indent=1)
@@ -221,7 +250,8 @@ def register_gen_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> N
             f"Inlets:\n{ports(result['inlets'], 'in')}\n"
             f"Outlets:\n{ports(result['outlets'], 'out')}\n"
             f"Parameters (now a panel in Max):\n{described}\n{buffers}{notes}"
-            "Checked: the syntax, every operator and its arguments, every name, the parameters. "
+            "Checked: the syntax, every operator and its arguments, every name, the parameters, and that every "
+            "parameter of the panel is a Param of the gendsp and sends a number. "
             f"gen~ compiles it in Max; it has not been listened to.{same}"
         )
 
@@ -229,4 +259,4 @@ def register_gen_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> N
     mcp.tool()(send_gen)
 
 
-__all__ = ["register_gen_tools", "check_gen", "gendsp", "GEN_TOOLS", "GEN_TYPES"]
+__all__ = ["register_gen_tools", "check_gen", "gendsp", "panel_mismatch", "GEN_TOOLS", "GEN_TYPES"]

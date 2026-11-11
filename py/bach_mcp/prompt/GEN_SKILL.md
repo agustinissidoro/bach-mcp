@@ -46,16 +46,80 @@ them from the request; most sounds use more than one.
 
 If the request does not say how the synth is played, give it notes (pitch and
 gate inlets) and parameters for the rest. A drone or a texture that plays by
-itself needs no inlet at all.
+itself needs no inlet at all. Its outputs follow the standard format below.
 <!-- /synth -->
 <!-- fx -->
 
-If the request does not say, the fx takes the sound on `in1` and `in2`
-(stereo) and everything else is a parameter.
+If the request does not say, the fx follows the standard format below: the
+sound comes in mono on `in1`, and everything else is a parameter.
 <!-- /fx -->
 
 **3. The code.** A signal path that applies the principle. Every line must
 follow from it.
+
+## The standard format
+
+Every code follows this format, **unless the user asks for something else**
+(another number of channels, no dry/wet, no gains): then do what they ask.
+The format is not an addition to the sound: it is always there, even for a
+plain request.
+<!-- synth -->
+
+- **Stereo output**: `out1` left, `out2` right.
+- **An output gain**: `Param out_gain`, in dB, the last thing before the
+  outputs. It is the synth's level.
+
+Nothing comes into a synth, so it has no input gain and no dry/wet. Copy
+these as they are, with the starting value the sound needs:
+
+```
+Param out_gain(-12);
+...
+g = slide(dbtoa(out_gain), 500, 500);
+out1 = left * g;
+out2 = right * g;
+```
+
+```json
+"out_gain": {"type": "slider", "range": [-60, 0], "value": -12, "unit": "dB"}
+```
+<!-- /synth -->
+<!-- fx -->
+
+- **Mono input**: the sound comes in on `in1` alone. Control signals, if
+  any, take the next inlets (`in2`, `in3` ...).
+- **Stereo output**: `out1` left, `out2` right. The dry sound goes to both.
+- **An input gain**: `Param in_gain`, in dB, applied to `in1` before
+  anything else. The dry sound is taken after it.
+- **A dry/wet control**: `Param wet`, 0..1: 0 is the dry sound alone, 1 the
+  effect alone.
+- **An output gain**: `Param out_gain`, in dB, the last thing before the
+  outputs, on dry and wet together.
+
+Copy these as they are. Your own Params come first, these three last; your
+effect works on `dry` and gives `wet_l` and `wet_r`:
+
+```
+Param wet(0.5);
+Param in_gain(0);
+Param out_gain(0);
+...
+dry = in1 * slide(dbtoa(in_gain), 500, 500);
+// ... the effect, from dry, gives wet_l and wet_r
+w = slide(wet, 500, 500);
+g = slide(dbtoa(out_gain), 500, 500);
+out1 = mix(dry, wet_l, w) * g;
+out2 = mix(dry, wet_r, w) * g;
+```
+
+```json
+"wet":      {"type": "slider", "range": [0, 1], "value": 0.5, "step": 0.01},
+"in_gain":  {"type": "slider", "range": [-24, 12], "value": 0, "unit": "dB"},
+"out_gain": {"type": "slider", "range": [-60, 0], "value": 0, "unit": "dB"}
+```
+
+Change only the starting value of `wet` when the sound needs another one.
+<!-- /fx -->
 
 ## One pass, no back and forth
 
@@ -101,32 +165,33 @@ Param index(3);
 Param attack(10);
 Param release(400);
 Param detune(6);
-Param level(-12);
+Param out_gain(-12);
 
 freq = mtof(in1);
 env = slide(in2, mstosamps(attack), mstosamps(release));
 mod = cycle(freq * ratio) * index * env * freq;
-amp = dbtoa(level) * env;
-out1 = cycle(freq + mod) * amp;
-out2 = cycle(freq * pow(2, detune / 1200) + mod) * amp;
+left = cycle(freq + mod) * env;
+right = cycle(freq * pow(2, detune / 1200) + mod) * env;
+g = slide(dbtoa(out_gain), 500, 500);
+out1 = left * g;
+out2 = right * g;
 ```
 
 ```json
-{"ratio":   {"type": "slider", "range": [0.5, 8], "value": 2, "step": 0.01},
- "index":   {"type": "slider", "range": [0, 12], "value": 3, "step": 0.01},
- "attack":  {"type": "slider", "range": [1, 2000], "value": 10, "unit": "ms"},
- "release": {"type": "slider", "range": [5, 8000], "value": 400, "unit": "ms"},
- "detune":  {"type": "slider", "range": [0, 50], "value": 6, "unit": "cents"},
- "level":   {"type": "slider", "range": [-60, 0], "value": -12, "unit": "dB"}}
+{"ratio":    {"type": "slider", "range": [0.5, 8], "value": 2, "step": 0.01},
+ "index":    {"type": "slider", "range": [0, 12], "value": 3, "step": 0.01},
+ "attack":   {"type": "slider", "range": [1, 2000], "value": 10, "unit": "ms"},
+ "release":  {"type": "slider", "range": [5, 8000], "value": 400, "unit": "ms"},
+ "detune":   {"type": "slider", "range": [0, 50], "value": 6, "unit": "cents"},
+ "out_gain": {"type": "slider", "range": [-60, 0], "value": -12, "unit": "dB"}}
 ```
 <!-- /synth -->
 <!-- fx -->
 
 ```
 // Feedback delay whose echoes cross from side to side and get darker each time round.
-// in1: sound in, left
-// in2: sound in, right
-// in3: control signal, -1..1: bends the delay time
+// in1: sound in, mono
+// in2: control signal, -1..1: bends the delay time
 // out1: left
 // out2: right
 Param time(350);
@@ -134,18 +199,23 @@ Param feedback(0.5);
 Param damping(0.4);
 Param bend(5);
 Param wet(0.35);
+Param in_gain(0);
+Param out_gain(0);
 Delay left(samplerate * 2);
 Delay right(samplerate * 2);
 History dark_l(0), dark_r(0);
 
-samples = mstosamps(slide(time, 2000, 2000)) * (1 + in3 * bend * 0.01);
+dry = in1 * slide(dbtoa(in_gain), 500, 500);
+samples = mstosamps(slide(time, 2000, 2000)) * (1 + in2 * bend * 0.01);
 samples = clamp(samples, 1, samplerate * 2 - 1);
 dark_l = mix(left.read(samples), dark_l, damping);
 dark_r = mix(right.read(samples), dark_r, damping);
-left.write(in1 + dark_r * feedback);
-right.write(in2 + dark_l * feedback);
-out1 = mix(in1, dark_l, wet);
-out2 = mix(in2, dark_r, wet);
+left.write(dry + dark_r * feedback);
+right.write(dark_l * feedback);
+w = slide(wet, 500, 500);
+g = slide(dbtoa(out_gain), 500, 500);
+out1 = mix(dry, dark_l, w) * g;
+out2 = mix(dry, dark_r, w) * g;
 ```
 
 ```json
@@ -153,7 +223,9 @@ out2 = mix(in2, dark_r, wet);
  "feedback": {"type": "slider", "range": [0, 0.95], "value": 0.5, "step": 0.01},
  "damping":  {"type": "slider", "range": [0, 0.95], "value": 0.4, "step": 0.01},
  "bend":     {"type": "slider", "range": [0, 50], "value": 5, "unit": "%"},
- "wet":      {"type": "slider", "range": [0, 1], "value": 0.35, "step": 0.01}}
+ "wet":      {"type": "slider", "range": [0, 1], "value": 0.35, "step": 0.01},
+ "in_gain":  {"type": "slider", "range": [-24, 12], "value": 0, "unit": "dB"},
+ "out_gain": {"type": "slider", "range": [-60, 0], "value": 0, "unit": "dB"}}
 ```
 <!-- /fx -->
 
@@ -355,6 +427,14 @@ Each parameter is a `Param` in the code and an entry in `params`, with the
 | toggle | `{"type": "toggle", "value": true}` | 1 or 0: `Param on(1);` |
 | menu | `{"type": "menu", "options": ["sine", "saw", "square"], "value": "saw"}` | the option's index, from 0: `Param shape(1);` |
 
+**A Param is always a number**, a float or an integer, never a word: gen~
+has no symbols. `Param shape("saw");` does not exist. When a choice has
+names, make it a **menu**: the panel shows the words and sends their
+numbers. With `"options": ["red", "green", "blue"]`, choosing "red" sends 0,
+"green" 1, "blue" 2, and the code compares numbers (`if (color == 0)`). Use
+a menu whenever the user would choose by name: a waveform, a filter type, a
+mode.
+
 - Write only the starting value in the code; the range lives in `params`.
   A Param is read, never assigned.
 - A range of whole numbers gives whole values only: for anything finer, add
@@ -379,7 +459,7 @@ Nobody hears the code before it plays: it goes straight to the speakers.
 
 - **Level.** The outputs stay within -1..1 at every setting. Several
   sources summed are scaled down (divide by their number, or by its square
-  root). A synth's level is a parameter in dB that starts around -12.
+  root). A synth's level is its `out_gain`, which starts around -12 dB.
 - **Feedback** stays below 1 around any loop (a delay, a filter, a
   resonator): limit the parameter's range (`[0, 0.95]`) or the signal
   (`tanh(x)` inside the loop keeps a rising one bounded).
@@ -399,6 +479,7 @@ Nobody hears the code before it plays: it goes straight to the speakers.
 <!-- /synth -->
 <!-- fx -->
 - **Silence when it should be silent.** An fx falls silent some time after
-  its input stops, and passes the dry sound unchanged when `wet` is 0.
+  its input stops, and passes the dry sound unchanged (only through the two
+  gains) when `wet` is 0.
 <!-- /fx -->
 <!-- /gen -->

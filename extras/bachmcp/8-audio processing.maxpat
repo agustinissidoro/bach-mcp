@@ -9,8 +9,17 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
+        "rect": [ 34.0, 92.0, 1451.0, 954.0 ],
         "boxes": [
+            {
+                "box": {
+                    "id": "obj-5",
+                    "maxclass": "comment",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 1955.0, 704.0, 150.0, 20.0 ]
+                }
+            },
             {
                 "box": {
                     "id": "obj-9",
@@ -115,7 +124,7 @@
                 "box": {
                     "embed": 0,
                     "embedstate": [
-                        [ "restore", "{\"title\":\"spectral-delay\",\"description\":\"FFT spectral delay: six bands set echo time and feedback across the spectrum.\",\"path\":\"Macintosh HD:/Users/agustin/Documents/GitHub/bach-mcp/playground/gen/spectral-delay.json\",\"type\":\"\",\"params\":[{\"name\":\"time1\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":93,\"default\":600,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"time2\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":101,\"default\":450,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"time3\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":300,\"default\":300,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"time4\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":200,\"default\":200,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"time5\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":350,\"default\":350,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"time6\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":800,\"default\":800,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"feedback1\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.4,\"default\":0.4,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"feedback2\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.5,\"default\":0.5,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"feedback3\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.8,\"default\":0.45,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"feedback4\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.75,\"default\":0.55,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"feedback5\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.6,\"default\":0.6,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"feedback6\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.61,\"default\":0.7,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"wet\",\"type\":\"slider\",\"range\":[0,1],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.55,\"default\":0.5,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"}],\"snap\":true,\"sourceMode\":\"nondestructive\",\"involutive\":false,\"selectionOnly\":true,\"bypass\":false,\"withinSelection\":false,\"pitchSnap\":3,\"timeSnap\":0}" ]
+                        [ "restore", "{\"title\":\"spectral-delay\",\"description\":\"FFT spectral delay: six bands set echo time and feedback across the spectrum.\",\"path\":\"Macintosh HD:/Users/agustin/Documents/GitHub/bach-mcp/playground//gen/spectral-delay.json\",\"type\":\"fx\",\"params\":[{\"name\":\"time1\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":600,\"default\":600,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"time2\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":450,\"default\":450,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"time3\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":300,\"default\":300,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"time4\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":200,\"default\":200,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"time5\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":350,\"default\":350,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"time6\",\"type\":\"slider\",\"range\":[10,1300],\"step\":1,\"unit\":\"ms\",\"options\":null,\"value\":800,\"default\":800,\"kind\":\"time\",\"grid\":10,\"display\":\"\"},{\"name\":\"feedback1\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.4,\"default\":0.4,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"feedback2\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.5,\"default\":0.5,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"feedback3\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.45,\"default\":0.45,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"feedback4\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.55,\"default\":0.55,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"feedback5\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.6,\"default\":0.6,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"feedback6\",\"type\":\"slider\",\"range\":[0,0.95],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.7,\"default\":0.7,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"},{\"name\":\"wet\",\"type\":\"slider\",\"range\":[0,1],\"step\":0.01,\"unit\":\"\",\"options\":null,\"value\":0.5,\"default\":0.5,\"kind\":\"\",\"grid\":0.01,\"display\":\"\"}],\"snap\":true,\"sourceMode\":\"nondestructive\",\"involutive\":false,\"selectionOnly\":true,\"bypass\":false,\"mute\":false,\"withinSelection\":false,\"pitchSnap\":3,\"timeSnap\":0}" ]
                     ],
                     "filename": "bachmcp.gui.params.v8ui.js",
                     "id": "obj-13",
@@ -124,7 +133,7 @@
                     "numoutlets": 1,
                     "outlettype": [ "" ],
                     "parameter_enable": 0,
-                    "patching_rect": [ 1258.0, 428.0, 329.0, 818.0 ],
+                    "patching_rect": [ 1281.0, 414.0, 308.0, 548.0 ],
                     "presentation": 1,
                     "presentation_rect": [ 0.0, 0.0, 64.0, 64.0 ],
                     "textfile": {
@@ -140,8 +149,8 @@
                     "id": "obj-8",
                     "maxclass": "newobj",
                     "numinlets": 2,
-                    "numoutlets": 3,
-                    "outlettype": [ "signal", "", "" ],
+                    "numoutlets": 4,
+                    "outlettype": [ "signal", "signal", "", "" ],
                     "patching_rect": [ 1155.0, 357.0, 208.0, 22.0 ],
                     "text": "bachmcp.algorithm~ spectral-delay fx"
                 }
@@ -234,20 +243,18 @@
             {
                 "patchline": {
                     "destination": [ "obj-13", 0 ],
-                    "source": [ "obj-8", 1 ]
+                    "source": [ "obj-8", 2 ]
                 }
             },
             {
                 "patchline": {
                     "destination": [ "obj-15", 1 ],
-                    "order": 0,
-                    "source": [ "obj-8", 0 ]
+                    "source": [ "obj-8", 1 ]
                 }
             },
             {
                 "patchline": {
                     "destination": [ "obj-15", 0 ],
-                    "order": 1,
                     "source": [ "obj-8", 0 ]
                 }
             },
