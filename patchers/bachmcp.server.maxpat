@@ -3,14 +3,37 @@
         "fileversion": 1,
         "appversion": {
             "major": 9,
-            "minor": 2,
-            "revision": 0,
+            "minor": 1,
+            "revision": 1,
             "architecture": "x64",
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
+        "rect": [ 134.0, 170.0, 1444.0, 853.0 ],
         "boxes": [
+            {
+                "box": {
+                    "id": "obj-80",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 815.0, 66.0, 54.0, 22.0 ],
+                    "text": "deferlow"
+                }
+            },
+            {
+                "box": {
+                    "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
+                    "id": "obj-79",
+                    "maxclass": "newobj",
+                    "numinlets": 0,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 815.0, 37.0, 74.0, 22.0 ],
+                    "text": "r #0active"
+                }
+            },
             {
                 "box": {
                     "color": [ 0.925490196078431, 0.03921568627451, 0.890196078431372, 1.0 ],
@@ -23,8 +46,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -68,6 +91,7 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-4",
+                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
@@ -79,6 +103,7 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-1",
+                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
@@ -323,6 +348,7 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-30",
+                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 0,
                                     "numoutlets": 1,
@@ -335,6 +361,7 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-29",
+                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 0,
                                     "numoutlets": 1,
@@ -609,8 +636,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -643,6 +670,7 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-18",
+                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 0,
                                     "numoutlets": 1,
@@ -655,6 +683,7 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-19",
+                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 0,
                                     "numoutlets": 1,
@@ -940,8 +969,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -1208,8 +1237,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -1231,6 +1260,7 @@
                                 "box": {
                                     "color": [ 1.0, 0.0, 0.0, 1.0 ],
                                     "id": "obj-3",
+                                    "linecount": 2,
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 1,
@@ -1336,8 +1366,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -1869,8 +1899,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -1997,8 +2027,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -2306,7 +2336,7 @@
                 "box": {
                     "comment": "connect to bach.roll",
                     "id": "obj-8",
-                    "index": 0,
+                    "index": 1,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -2324,8 +2354,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -2450,8 +2480,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -2462,6 +2492,7 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-1",
+                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
@@ -2480,8 +2511,8 @@
                                         "fileversion": 1,
                                         "appversion": {
                                             "major": 9,
-                                            "minor": 2,
-                                            "revision": 0,
+                                            "minor": 1,
+                                            "revision": 1,
                                             "architecture": "x64",
                                             "modernui": 1
                                         },
@@ -2606,8 +2637,8 @@
                                         "fileversion": 1,
                                         "appversion": {
                                             "major": 9,
-                                            "minor": 2,
-                                            "revision": 0,
+                                            "minor": 1,
+                                            "revision": 1,
                                             "architecture": "x64",
                                             "modernui": 1
                                         },
@@ -2815,8 +2846,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -2906,8 +2937,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -2996,8 +3027,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -3091,6 +3122,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.playground.js",
@@ -3191,8 +3224,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -3428,8 +3461,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -3616,8 +3649,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -3723,6 +3756,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.download.js",
@@ -3842,8 +3877,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -3874,12 +3909,13 @@
                             {
                                 "box": {
                                     "id": "obj-16",
+                                    "linecount": 2,
                                     "maxclass": "message",
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
                                     "patching_rect": [ 602.0, 145.0, 381.0, 22.0 ],
-                                    "text": "\"Macintosh HD:/Users/agustin/Documents/GitHub/bach-mcp/models\""
+                                    "text": "\"Macintosh HD:/Users/danieleghisi/Documents/Max 9/Packages/bach-mcp/models\""
                                 }
                             },
                             {
@@ -3991,6 +4027,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.modelcheck.js",
@@ -4215,8 +4253,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -4544,9 +4582,6 @@
                     "numoutlets": 1,
                     "outlettype": [ "" ],
                     "patching_rect": [ 76.0, 119.0, 97.0, 22.0 ],
-                    "saved_object_attributes": {
-                        "port": 3000
-                    },
                     "text": "udpreceive 3000"
                 }
             },
@@ -4561,8 +4596,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -4725,7 +4760,7 @@
                 "box": {
                     "comment": "dumpout",
                     "id": "obj-21",
-                    "index": 0,
+                    "index": 3,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -4743,15 +4778,25 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
-                        "visible": 1,
+                        "rect": [ 134.0, 170.0, 1444.0, 853.0 ],
                         "boxes": [
+                            {
+                                "box": {
+                                    "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
+                                    "id": "obj-20",
+                                    "maxclass": "newobj",
+                                    "numinlets": 1,
+                                    "numoutlets": 0,
+                                    "patching_rect": [ 992.0, 244.0, 76.0, 22.0 ],
+                                    "text": "s #0active"
+                                }
+                            },
                             {
                                 "box": {
                                     "color": [ 0.925490196078431, 0.03921568627451, 0.890196078431372, 1.0 ],
@@ -4764,8 +4809,8 @@
                                         "fileversion": 1,
                                         "appversion": {
                                             "major": 9,
-                                            "minor": 2,
-                                            "revision": 0,
+                                            "minor": 1,
+                                            "revision": 1,
                                             "architecture": "x64",
                                             "modernui": 1
                                         },
@@ -4906,6 +4951,8 @@
                                                     "saved_object_attributes": {
                                                         "autostart": 0,
                                                         "defer": 0,
+                                                        "node_bin_path": "",
+                                                        "npm_bin_path": "",
                                                         "watch": 0
                                                     },
                                                     "text": "node.script bachmcp.filechecker.js",
@@ -5046,8 +5093,8 @@
                                         "fileversion": 1,
                                         "appversion": {
                                             "major": 9,
-                                            "minor": 2,
-                                            "revision": 0,
+                                            "minor": 1,
+                                            "revision": 1,
                                             "architecture": "x64",
                                             "modernui": 1
                                         },
@@ -5188,6 +5235,8 @@
                                                     "saved_object_attributes": {
                                                         "autostart": 0,
                                                         "defer": 0,
+                                                        "node_bin_path": "",
+                                                        "npm_bin_path": "",
                                                         "watch": 0
                                                     },
                                                     "text": "node.script bachmcp.filechecker.js",
@@ -5360,8 +5409,8 @@
                                         "fileversion": 1,
                                         "appversion": {
                                             "major": 9,
-                                            "minor": 2,
-                                            "revision": 0,
+                                            "minor": 1,
+                                            "revision": 1,
                                             "architecture": "x64",
                                             "modernui": 1
                                         },
@@ -5372,6 +5421,7 @@
                                                 "box": {
                                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                                     "id": "obj-4",
+                                                    "linecount": 3,
                                                     "maxclass": "newobj",
                                                     "numinlets": 0,
                                                     "numoutlets": 1,
@@ -5613,7 +5663,7 @@
                                             }
                                         ]
                                     },
-                                    "patching_rect": [ 988.0, 599.0, 161.0, 22.0 ],
+                                    "patching_rect": [ 1094.0, 588.2142857142857, 161.0, 22.0 ],
                                     "text": "p print_claude_init_message"
                                 }
                             },
@@ -5738,8 +5788,8 @@
                                         "fileversion": 1,
                                         "appversion": {
                                             "major": 9,
-                                            "minor": 2,
-                                            "revision": 0,
+                                            "minor": 1,
+                                            "revision": 1,
                                             "architecture": "x64",
                                             "modernui": 1
                                         },
@@ -5924,7 +5974,7 @@
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 902.0, 368.0, 77.0, 22.0 ],
+                                    "patching_rect": [ 1008.0, 357.21428571428567, 77.0, 22.0 ],
                                     "text": "s #0model"
                                 }
                             },
@@ -5940,8 +5990,8 @@
                                         "fileversion": 1,
                                         "appversion": {
                                             "major": 9,
-                                            "minor": 2,
-                                            "revision": 0,
+                                            "minor": 1,
+                                            "revision": 1,
                                             "architecture": "x64",
                                             "modernui": 1
                                         },
@@ -6383,7 +6433,7 @@
                                             }
                                         ]
                                     },
-                                    "patching_rect": [ 988.0, 368.0, 89.0, 22.0 ],
+                                    "patching_rect": [ 1094.0, 357.21428571428567, 89.0, 22.0 ],
                                     "text": "p check_model"
                                 }
                             },
@@ -6421,8 +6471,8 @@
                                         "fileversion": 1,
                                         "appversion": {
                                             "major": 9,
-                                            "minor": 2,
-                                            "revision": 0,
+                                            "minor": 1,
+                                            "revision": 1,
                                             "architecture": "x64",
                                             "modernui": 1
                                         },
@@ -6586,8 +6636,8 @@
                                         "fileversion": 1,
                                         "appversion": {
                                             "major": 9,
-                                            "minor": 2,
-                                            "revision": 0,
+                                            "minor": 1,
+                                            "revision": 1,
                                             "architecture": "x64",
                                             "modernui": 1
                                         },
@@ -6701,7 +6751,7 @@
                                             }
                                         ]
                                     },
-                                    "patching_rect": [ 988.0, 255.0, 81.0, 22.0 ],
+                                    "patching_rect": [ 1094.0, 244.21428571428567, 81.0, 22.0 ],
                                     "text": "p filter_empty"
                                 }
                             },
@@ -6766,7 +6816,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 988.0, 490.0, 72.0, 22.0 ],
+                                    "patching_rect": [ 1094.0, 479.21428571428567, 72.0, 22.0 ],
                                     "text": "prepend set"
                                 }
                             },
@@ -6776,7 +6826,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 1076.0, 491.0, 150.0, 20.0 ]
+                                    "patching_rect": [ 1182.0, 480.21428571428567, 150.0, 20.0 ]
                                 }
                             },
                             {
@@ -6786,7 +6836,7 @@
                                     "numinlets": 19,
                                     "numoutlets": 19,
                                     "outlettype": [ "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "" ],
-                                    "patching_rect": [ 988.0, 298.0, 1116.0, 22.0 ],
+                                    "patching_rect": [ 1094.0, 287.21428571428567, 1116.0, 22.0 ],
                                     "text": "routepass model context_size extra_args max_tokens temperature top_p top_k presence_penalty reasoning skill_file max_tool_rounds docs open_browser tool_log dir buffer effort claude_code_prompt"
                                 }
                             },
@@ -6830,7 +6880,7 @@
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 988.0, 551.0, 99.0, 22.0 ],
+                                    "patching_rect": [ 1094.0, 540.2142857142857, 99.0, 22.0 ],
                                     "text": "s #0config_file"
                                 }
                             },
@@ -6838,11 +6888,11 @@
                                 "box": {
                                     "id": "obj-39",
                                     "maxclass": "newobj",
-                                    "numinlets": 10,
-                                    "numoutlets": 10,
-                                    "outlettype": [ "", "", "", "", "", "", "", "", "", "" ],
-                                    "patching_rect": [ 50.0, 187.07142857142858, 956.9999999999999, 22.0 ],
-                                    "text": "route host listen_port prompt_port playground url url_port verbose skills profile"
+                                    "numinlets": 11,
+                                    "numoutlets": 11,
+                                    "outlettype": [ "", "", "", "", "", "", "", "", "", "", "" ],
+                                    "patching_rect": [ 50.0, 187.07142857142858, 1061.2222222222222, 22.0 ],
+                                    "text": "route host listen_port prompt_port playground url url_port verbose skills profile active"
                                 }
                             },
                             {
@@ -6869,7 +6919,7 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 476.38888888888897, 465.0, 997.5, 465.0 ],
+                                    "midpoints": [ 476.38888888888897, 465.0, 1103.5, 465.0 ],
                                     "order": 0,
                                     "source": [ "obj-11", 0 ]
                                 }
@@ -6884,7 +6934,7 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 580.6111111111112, 465.0, 997.5, 465.0 ],
+                                    "midpoints": [ 580.6111111111112, 465.0, 1103.5, 465.0 ],
                                     "order": 0,
                                     "source": [ "obj-12", 0 ]
                                 }
@@ -6943,7 +6993,7 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1972.611111111111, 404.15625, 997.5, 404.15625 ],
+                                    "midpoints": [ 1972.611111111111, 404.15625, 1103.5, 404.15625 ],
                                     "order": 1,
                                     "source": [ "obj-25", 0 ]
                                 }
@@ -7023,8 +7073,14 @@
                             },
                             {
                                 "patchline": {
-                                    "destination": [ "obj-21", 0 ],
+                                    "destination": [ "obj-20", 0 ],
                                     "source": [ "obj-39", 9 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-21", 0 ],
+                                    "source": [ "obj-39", 10 ]
                                 }
                             },
                             {
@@ -7081,7 +7137,7 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-17", 0 ],
-                                    "midpoints": [ 997.5, 346.8571428571429, 997.5, 346.8571428571429 ],
+                                    "midpoints": [ 1103.5, 336.07142857142856, 1103.5, 336.07142857142856 ],
                                     "source": [ "obj-54", 0 ]
                                 }
                             },
@@ -7094,105 +7150,105 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 2033.5555555555557, 404.0546875, 997.5, 404.0546875 ],
+                                    "midpoints": [ 2139.5555555555557, 393.26897321428567, 1103.5, 393.26897321428567 ],
                                     "source": [ "obj-54", 17 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1911.6666666666665, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 2017.6666666666665, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 15 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1850.7222222222222, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1956.7222222222222, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 14 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1789.7777777777778, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1895.7777777777778, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 13 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1667.888888888889, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1773.888888888889, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 11 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1606.9444444444443, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1712.9444444444443, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 10 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1546.0, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1652.0, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 9 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1485.0555555555557, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1591.0555555555557, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 8 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1424.111111111111, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1530.111111111111, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 7 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1363.1666666666667, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1469.1666666666667, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 6 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1302.2222222222222, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1408.2222222222222, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 5 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1241.2777777777778, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1347.2777777777778, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 4 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1180.3333333333333, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1286.3333333333333, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 3 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1119.388888888889, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1225.388888888889, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 2 ]
                                 }
                             },
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1058.4444444444443, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1164.4444444444443, 393.07142857142856, 1103.5, 393.07142857142856 ],
                                     "source": [ "obj-54", 1 ]
                                 }
                             },
@@ -7260,7 +7316,7 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-57", 0 ],
-                                    "midpoints": [ 1728.8333333333335, 403.8571428571429, 997.5, 403.8571428571429 ],
+                                    "midpoints": [ 1728.8333333333335, 403.8571428571429, 1103.5, 403.8571428571429 ],
                                     "source": [ "obj-8", 0 ]
                                 }
                             }
@@ -7328,8 +7384,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -7489,6 +7545,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.config.js",
@@ -7588,7 +7646,7 @@
                     "numoutlets": 2,
                     "outlettype": [ "", "" ],
                     "patching_rect": [ 1840.0, 71.0, 731.0, 62.0 ],
-                    "text": "patcherargs host @host local @listen_port 3000 @prompt_port 3001 @model dumb @context_size 65536 @extra_args @max_tokens 16384 @temperature 0.7 @top_p 0.8 @top_k 20 @presence_penalty 1.5 @reasoning off @skill_file @max_tool_rounds 8 @docs true @open_browser true @tool_log true @dir @buffer @playground @url 127.0.0.1 @url_port 8090 @verbose 0 @effort medium @skills none @profile minimal-algorithmic-composer"
+                    "text": "patcherargs host @host local @listen_port 3000 @prompt_port 3001 @model dumb @context_size 65536 @extra_args @max_tokens 16384 @temperature 0.7 @top_p 0.8 @top_k 20 @presence_penalty 1.5 @reasoning off @skill_file @max_tool_rounds 8 @docs true @open_browser true @tool_log true @dir @buffer @playground @url 127.0.0.1 @url_port 8090 @verbose 0 @effort medium @skills none @profile minimal-algorithmic-composer @active 0"
                 }
             },
             {
@@ -7648,8 +7706,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -7757,8 +7815,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -7777,8 +7835,8 @@
                                         "fileversion": 1,
                                         "appversion": {
                                             "major": 9,
-                                            "minor": 2,
-                                            "revision": 0,
+                                            "minor": 1,
+                                            "revision": 1,
                                             "architecture": "x64",
                                             "modernui": 1
                                         },
@@ -8214,8 +8272,8 @@
                         "fileversion": 1,
                         "appversion": {
                             "major": 9,
-                            "minor": 2,
-                            "revision": 0,
+                            "minor": 1,
+                            "revision": 1,
                             "architecture": "x64",
                             "modernui": 1
                         },
@@ -8330,7 +8388,7 @@
                 "box": {
                     "comment": "answers from MCP (dict)",
                     "id": "obj-11",
-                    "index": 0,
+                    "index": 2,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -8444,11 +8502,11 @@
                 "box": {
                     "comment": "",
                     "id": "obj-1",
-                    "index": 0,
+                    "index": 1,
                     "maxclass": "inlet",
                     "numinlets": 0,
                     "numoutlets": 1,
-                    "outlettype": [ "" ],
+                    "outlettype": [ "int" ],
                     "patching_rect": [ 740.0, 48.0, 30.0, 30.0 ]
                 }
             }
@@ -8860,6 +8918,18 @@
             },
             {
                 "patchline": {
+                    "destination": [ "obj-80", 0 ],
+                    "source": [ "obj-79", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-41", 0 ],
+                    "source": [ "obj-80", 0 ]
+                }
+            },
+            {
+                "patchline": {
                     "destination": [ "obj-81", 0 ],
                     "source": [ "obj-83", 0 ]
                 }
@@ -8870,7 +8940,6 @@
                     "source": [ "obj-9", 0 ]
                 }
             }
-        ],
-        "autosave": 0
+        ]
     }
 }
