@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 92.0, 1852.0, 954.0 ],
+        "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
         "boxes": [
             {
                 "box": {
@@ -176,8 +176,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.filechecker.js",
@@ -302,7 +300,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 2206.0, 470.0, 72.0, 22.0 ],
+                    "patching_rect": [ 2226.0, 470.0, 72.0, 22.0 ],
                     "text": "p check_file"
                 }
             },
@@ -471,8 +469,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.filechecker.js",
@@ -597,7 +593,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 2142.0, 310.0, 72.0, 22.0 ],
+                    "patching_rect": [ 2164.0, 310.0, 72.0, 22.0 ],
                     "text": "p check_file"
                 }
             },
@@ -4366,12 +4362,6 @@
             },
             {
                 "patchline": {
-                    "destination": [ "obj-9", 0 ],
-                    "source": [ "obj-52", 0 ]
-                }
-            },
-            {
-                "patchline": {
                     "destination": [ "obj-18", 0 ],
                     "source": [ "obj-53", 5 ]
                 }
@@ -4426,7 +4416,7 @@
             },
             {
                 "patchline": {
-                    "destination": [ "obj-52", 0 ],
+                    "destination": [ "obj-9", 0 ],
                     "source": [ "obj-58", 1 ]
                 }
             },
@@ -4439,19 +4429,13 @@
             {
                 "patchline": {
                     "destination": [ "obj-32", 0 ],
-                    "source": [ "obj-59", 0 ]
-                }
-            },
-            {
-                "patchline": {
-                    "destination": [ "obj-61", 0 ],
                     "source": [ "obj-59", 1 ]
                 }
             },
             {
                 "patchline": {
                     "destination": [ "obj-32", 0 ],
-                    "source": [ "obj-61", 0 ]
+                    "source": [ "obj-59", 0 ]
                 }
             },
             {

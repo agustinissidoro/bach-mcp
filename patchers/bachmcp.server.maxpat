@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 92.0, 1451.0, 954.0 ],
+        "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
         "boxes": [
             {
                 "box": {
@@ -68,7 +68,6 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-4",
-                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
@@ -80,7 +79,6 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-1",
-                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
@@ -325,7 +323,6 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-30",
-                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 0,
                                     "numoutlets": 1,
@@ -338,7 +335,6 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-29",
-                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 0,
                                     "numoutlets": 1,
@@ -647,7 +643,6 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-18",
-                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 0,
                                     "numoutlets": 1,
@@ -660,7 +655,6 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-19",
-                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 0,
                                     "numoutlets": 1,
@@ -1237,7 +1231,6 @@
                                 "box": {
                                     "color": [ 1.0, 0.0, 0.0, 1.0 ],
                                     "id": "obj-3",
-                                    "linecount": 2,
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 1,
@@ -2313,7 +2306,7 @@
                 "box": {
                     "comment": "connect to bach.roll",
                     "id": "obj-8",
-                    "index": 1,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -2469,7 +2462,6 @@
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                     "id": "obj-1",
-                                    "linecount": 3,
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
@@ -3099,8 +3091,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.playground.js",
@@ -3733,8 +3723,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.download.js",
@@ -4003,8 +3991,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.modelcheck.js",
@@ -4739,7 +4725,7 @@
                 "box": {
                     "comment": "dumpout",
                     "id": "obj-21",
-                    "index": 3,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -4764,6 +4750,7 @@
                         },
                         "classnamespace": "box",
                         "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
+                        "visible": 1,
                         "boxes": [
                             {
                                 "box": {
@@ -4919,8 +4906,6 @@
                                                     "saved_object_attributes": {
                                                         "autostart": 0,
                                                         "defer": 0,
-                                                        "node_bin_path": "",
-                                                        "npm_bin_path": "",
                                                         "watch": 0
                                                     },
                                                     "text": "node.script bachmcp.filechecker.js",
@@ -5045,7 +5030,7 @@
                                             }
                                         ]
                                     },
-                                    "patching_rect": [ 883.7777777777777, 238.0, 72.0, 22.0 ],
+                                    "patching_rect": [ 908.0, 238.0, 72.0, 22.0 ],
                                     "text": "p check_file"
                                 }
                             },
@@ -5203,8 +5188,6 @@
                                                     "saved_object_attributes": {
                                                         "autostart": 0,
                                                         "defer": 0,
-                                                        "node_bin_path": "",
-                                                        "npm_bin_path": "",
                                                         "watch": 0
                                                     },
                                                     "text": "node.script bachmcp.filechecker.js",
@@ -5329,7 +5312,7 @@
                                             }
                                         ]
                                     },
-                                    "patching_rect": [ 779.5555555555554, 238.0, 72.0, 22.0 ],
+                                    "patching_rect": [ 792.0, 238.0, 72.0, 22.0 ],
                                     "text": "p check_file"
                                 }
                             },
@@ -5389,7 +5372,6 @@
                                                 "box": {
                                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
                                                     "id": "obj-4",
-                                                    "linecount": 3,
                                                     "maxclass": "newobj",
                                                     "numinlets": 0,
                                                     "numoutlets": 1,
@@ -6987,18 +6969,6 @@
                             },
                             {
                                 "patchline": {
-                                    "destination": [ "obj-30", 0 ],
-                                    "source": [ "obj-31", 0 ]
-                                }
-                            },
-                            {
-                                "patchline": {
-                                    "destination": [ "obj-29", 0 ],
-                                    "source": [ "obj-32", 0 ]
-                                }
-                            },
-                            {
-                                "patchline": {
                                     "destination": [ "obj-39", 0 ],
                                     "source": [ "obj-37", 0 ]
                                 }
@@ -7065,14 +7035,14 @@
                             },
                             {
                                 "patchline": {
-                                    "destination": [ "obj-31", 0 ],
-                                    "source": [ "obj-39", 7 ]
+                                    "destination": [ "obj-29", 0 ],
+                                    "source": [ "obj-39", 8 ]
                                 }
                             },
                             {
                                 "patchline": {
-                                    "destination": [ "obj-32", 0 ],
-                                    "source": [ "obj-39", 8 ]
+                                    "destination": [ "obj-30", 0 ],
+                                    "source": [ "obj-39", 7 ]
                                 }
                             },
                             {
@@ -7519,8 +7489,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.server.config.js",
@@ -8362,7 +8330,7 @@
                 "box": {
                     "comment": "answers from MCP (dict)",
                     "id": "obj-11",
-                    "index": 2,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -8476,11 +8444,11 @@
                 "box": {
                     "comment": "",
                     "id": "obj-1",
-                    "index": 1,
+                    "index": 0,
                     "maxclass": "inlet",
                     "numinlets": 0,
                     "numoutlets": 1,
-                    "outlettype": [ "int" ],
+                    "outlettype": [ "" ],
                     "patching_rect": [ 740.0, 48.0, 30.0, 30.0 ]
                 }
             }
@@ -8902,6 +8870,7 @@
                     "source": [ "obj-9", 0 ]
                 }
             }
-        ]
+        ],
+        "autosave": 0
     }
 }
