@@ -13,6 +13,17 @@
         "boxes": [
             {
                 "box": {
+                    "id": "obj-12",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 55.0, 100.0, 54.0, 22.0 ],
+                    "text": "deferlow"
+                }
+            },
+            {
+                "box": {
                     "id": "obj-59",
                     "maxclass": "newobj",
                     "numinlets": 2,
@@ -176,8 +187,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.filechecker.js",
@@ -471,8 +480,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.filechecker.js",
@@ -1295,7 +1302,7 @@
                                     "maxclass": "inlet",
                                     "numinlets": 0,
                                     "numoutlets": 1,
-                                    "outlettype": [ "bang" ],
+                                    "outlettype": [ "" ],
                                     "patching_rect": [ 214.0, 40.0, 30.0, 30.0 ]
                                 }
                             }
@@ -1411,7 +1418,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 139.0, 113.0, 116.0, 22.0 ],
+                    "patching_rect": [ 55.0, 133.0, 116.0, 22.0 ],
                     "text": "p check_playground"
                 }
             },
@@ -2417,7 +2424,7 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 55.0, 146.0, 85.0, 49.0 ],
+                    "patching_rect": [ 139.0, 178.5, 85.0, 49.0 ],
                     "text": "set_active_instance #1 score"
                 }
             },
@@ -2437,7 +2444,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 55.0, 222.0, 112.0, 22.0 ],
+                    "patching_rect": [ 139.0, 254.5, 112.0, 22.0 ],
                     "text": "s bachmcp.server.s"
                 }
             },
@@ -3011,14 +3018,20 @@
             },
             {
                 "patchline": {
-                    "destination": [ "obj-21", 0 ],
+                    "destination": [ "obj-12", 0 ],
                     "source": [ "obj-11", 0 ]
                 }
             },
             {
                 "patchline": {
-                    "destination": [ "obj-30", 0 ],
+                    "destination": [ "obj-21", 0 ],
                     "source": [ "obj-11", 1 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-30", 0 ],
+                    "source": [ "obj-12", 0 ]
                 }
             },
             {
