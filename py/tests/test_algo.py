@@ -23,6 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 UNITS_JS = os.path.join(REPO, "javascript", "algorithmic_core_library", "bachmcp.lib.units.js")
 SKILL = os.path.join(REPO, "py", "bach_mcp", "prompt", "BACH_SKILL.md")
+QUANTIZER = os.path.join(REPO, "py", "bach_mcp", "prompt", "QUANTIZER_SKILL.md")
 NODE = shutil.which(os.getenv("BACH_NODE") or "node")
 
 needs_node = unittest.skipUnless(NODE, "Node.js is not installed")
@@ -304,8 +305,10 @@ class LibraryTests(unittest.TestCase):
         program = "process.stdout.write(JSON.stringify(require(process.argv[1]).LIBRARY))"
         index = os.path.join(REPO, "javascript", "algorithmic_core_library", "bachmcp.lib.index.js")
         names = json.loads(subprocess.run([NODE, "-e", program, index], capture_output=True, text=True, check=True).stdout)
-        with open(SKILL, encoding="utf-8") as f:
-            prose = re.sub(r"```.*?```", "", f.read(), flags=re.S)
+        prose = ""
+        for skill in (SKILL, QUANTIZER):  # the markers are described in the quantizer skill
+            with open(skill, encoding="utf-8") as f:
+                prose += re.sub(r"```.*?```", "", f.read(), flags=re.S)
         spans = " ".join(re.findall(r"`([^`\n]+)`", prose))
         for name in names:
             if name != "Math":

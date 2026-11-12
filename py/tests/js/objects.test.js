@@ -808,3 +808,90 @@ test("load and type in either order: the file waits for the type, no error; a wr
   after.send("load", tempFile(ALGO));
   assert.equal(last(after.out, 4)[2], "algo_loaded", "the other order, as before");
 });
+
+// ── A selector that writes markers ──────────────────────────────────────── //
+
+const MARKING = `const params = { bar: { type: "slider", range: [0, 2000], value: 500 } };
+function select(source, p) {
+  if (p.bar > 0) grid(source, { timesig: [2, 4], bar: p.bar, count: 2 });
+  return [];
+}
+`;
+
+test("a selector's markers replace the roll's, and each run starts again from the roll's own", () => {
+  const m = runner("selector");
+  m.send("load", tempFile(MARKING));
+  m.send("source_mode", 0);
+  const roll = JSON.parse(JSON.stringify(THREE));
+  roll.header = { markers: [{ onset: 250, name: ["A"], role: "none" }] };
+  const bach = () => m.out.filter((o) => o[0] === 1).map((o) => o.slice(1).join(" "));
+  m.send("dump");
+  inputScore(m, roll);
+  m.flush();
+  assert.deepEqual(bach().slice(1), ["clearmarkers", "addmarker 0 [ ] timesig [ 2 4 ]", "addmarker 250 [ A ] none",
+    "addmarker 500 [ ] barline", "addmarker 1000 [ ] barline", "clearselection"]);
+  m.send("dump_selection_only", 0);
+  // the roll now holds those markers: with another bar length the old grid is gone, the label stays
+  roll.header.markers = [{ onset: 0, name: [], role: "timesig", content: [2, 4] }, { onset: 250, name: ["A"], role: "none" },
+    { onset: 500, name: [], role: "barline" }, { onset: 1000, name: [], role: "barline" }];
+  m.out.length = 0;
+  m.send("param", "bar", 800);
+  m.flush();
+  inputScore(m, roll);
+  m.flush();
+  assert.deepEqual(bach().slice(1), ["clearmarkers", "addmarker 0 [ ] timesig [ 2 4 ]", "addmarker 250 [ A ] none",
+    "addmarker 800 [ ] barline", "addmarker 1600 [ ] barline", "clearselection"]);
+  assert.deepEqual(scoreOut(m).header.markers.map((x) => x.onset), [0, 250, 800, 1600]);
+  // a run that writes none takes away what the run before added
+  roll.header.markers = scoreOut(m).header.markers;
+  m.out.length = 0;
+  m.send("param", "bar", 0);
+  m.flush();
+  inputScore(m, roll);
+  m.flush();
+  assert.deepEqual(bach().slice(1), ["clearmarkers", "addmarker 250 [ A ] none", "clearselection"]);
+});
+
+test("a selector that writes no markers sends none to bach", () => {
+  const m = runner("selector");
+  m.send("load", tempFile(SELECTOR));
+  m.send("dump");
+  const roll = JSON.parse(JSON.stringify(THREE));
+  roll.header = { markers: [{ onset: 250, name: ["A"], role: "none" }] };
+  inputScore(m, roll);
+  m.flush();
+  assert.ok(!m.out.some((o) => o[0] === 1 && (o[1] === "clearmarkers" || o[1] === "addmarker")));
+});
+
+// ── Markers reach the roll only when the algorithm writes some ──────────── //
+
+const MEASURED = `const params = { bars: { type: "slider", range: [0, 4], value: 2 }, pitch: { type: "slider", range: [6000, 7200], value: 6000 } };
+function produce(p) {
+  const s = score();
+  s.voice("Flute").note(0, p.pitch, 500);
+  if (p.bars > 0) grid(s, { timesig: [3, 4], bar: 1500, count: p.bars });
+  return s;
+}
+`;
+
+test("a generator sends markers when it writes some, an empty list once when it stops, then none", () => {
+  const m = runner("generator");
+  m.send("load", tempFile(MEASURED));
+  m.send("bang");
+  m.flush();
+  assert.deepEqual(scoreOut(m).header.markers.map((x) => [x.onset, x.role]), [[0, "timesig"], [1500, "barline"], [3000, "barline"]]);
+  m.send("param", "bars", 0);
+  m.flush();
+  assert.deepEqual(scoreOut(m).header.markers, [], "what it put in the roll is cleared");
+  m.send("param", "pitch", 6100);
+  m.flush();
+  assert.equal("markers" in scoreOut(m).header, false, "then the roll's markers are left alone");
+});
+
+test("an algorithm that never writes markers never sends any", () => {
+  const m = runner("generator");
+  m.send("load", tempFile(ALGO));
+  m.send("bang");
+  m.flush();
+  assert.equal("markers" in scoreOut(m).header, false);
+});

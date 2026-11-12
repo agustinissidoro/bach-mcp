@@ -13,18 +13,21 @@ from bach_mcp.music.pitch import name_to_cents
 
 def score(*voices):
     """Hand-written chords ([onset, {"art": ...}?, [pitch or name, dur], ...]) as the model would
-    write them in the compressed form, then read the way the evaluation reads the model's scores."""
+    write them, then read the way the evaluation reads the model's scores."""
     def note(n, art):
         pitch = name_to_cents(n[0]) if isinstance(n[0], str) else n[0]
-        out = [pitch, n[1], n[2] if len(n) > 2 else 80]
-        return out + ([{"articulations": art}] if art else [])
+        out = {"pitch": pitch, "dur": n[1], "vel": n[2] if len(n) > 2 else 80}
+        if art:
+            out["slots"] = {"22": art if isinstance(art, list) else [art]}
+        return out
 
     def chord(c):
         art = next((x.get("art") for x in c[1:] if isinstance(x, dict)), None)
         notes = [x for x in c[1:] if isinstance(x, list)]
-        return [c[0]] + [note(n, art if i == 0 else None) for i, n in enumerate(notes)]
+        return {"onset": c[0], "notes": [note(n, art if i == 0 else None) for i, n in enumerate(notes)]}
 
-    return checked_view({"voices": [{"name": name, "chords": [chord(c) for c in chords]} for name, chords in voices]})
+    return checked_view({"header": {"voicenames": [[name] for name, _ in voices]},
+                         "voices": [{"chords": [chord(c) for c in chords]} for _, chords in voices]})
 
 
 def passed(checks):

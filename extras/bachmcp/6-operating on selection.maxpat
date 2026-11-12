@@ -78,6 +78,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
+                    "parameter_enable": 0,
                     "patching_rect": [ 578.0, 183.0, 420.0, 140.0 ],
                     "prompt_sent": 1,
                     "prompt_text": "an algorithm that takes a score and transforms notes to chords. chords are constructed using mirroring intervals. provide control of the intervals and of the amount of notes."
@@ -185,7 +186,7 @@
                     "numoutlets": 4,
                     "offset": [ 0.0, 0.0 ],
                     "outlettype": [ "", "", "", "" ],
-                    "patching_rect": [ 578.0, 406.0, 288.0, 365.0 ],
+                    "patching_rect": [ 578.0, 404.0, 288.0, 365.0 ],
                     "viewvisibility": 1
                 }
             }
@@ -243,6 +244,12 @@
                 "patchline": {
                     "destination": [ "obj-4", 0 ],
                     "source": [ "obj-7", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-14", 0 ],
+                    "source": [ "obj-8", 1 ]
                 }
             },
             {

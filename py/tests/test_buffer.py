@@ -1,5 +1,5 @@
 """The roll files between the MCP server and Max (bachjson-complete), and the score tools that use
-them, which speak the compressed form to the model. Run: python -m unittest discover -s py/tests"""
+them, which speak the same syntax to the model. Run: python -m unittest discover -s py/tests"""
 
 import json
 import os
@@ -31,6 +31,8 @@ ROLL = {
         {"chords": [], "flag": 0},
     ],
 }
+
+NOTE_AT_0 = {"onset": 0, "notes": [{"pitch": 6000, "dur": 500, "vel": 80}]}
 
 
 class FakeMax:
@@ -95,56 +97,98 @@ class ScoreToolTests(unittest.TestCase):
         register_score_tools(mcp, self.max)
         self.tools = mcp.tools
 
-    def test_read_answers_compressed(self):
+    def test_read_answers_the_score_itself_without_what_says_nothing(self):
         reply = self.tools["read_score"]()
         self.assertEqual(self.max.sent[-1], "server write_buffer")
         lines = reply.splitlines()
         self.assertEqual(lines[:4], ["voice 1 (Flute): 2 notes in 2 chords, 0-1500 ms, pitch 7200-7400, clef G",
                                      "voice 2: empty, clef F", "2 voice(s), 2 notes, 1500 ms long.", "markers: A@0"])
-        self.assertEqual(json.loads(lines[4]), {"slots": {"7": "sample"}, "markers": [[0, "A"]], "voices": [
-            {"voice": 1, "name": "Flute", "chords": [[0, [7200, 500, 100, {"sample": "Fl-ord-C6-ff.wav"}]], [1000, [7400, 500, 100]]]}]})
+        self.assertEqual(json.loads(lines[4]), {
+            "header": {"clefs": ["G", "F"], "keys": ["CM", "CM"], "voicenames": [["Flute"], []],
+                       "markers": [{"onset": 0, "name": ["A"], "role": "none"}],
+                       "slotinfo": {"7": {"name": ["sample"], "type": ["text"]}}},
+            "voices": [{"chords": [{"onset": 0, "notes": [{"pitch": 7200, "dur": 500, "vel": 100,
+                                                            "slots": {"7": ["Fl-ord-C6-ff.wav"]}}]},
+                                   {"onset": 1000, "notes": [{"pitch": 7400, "dur": 500, "vel": 100}]}]},
+                       {"chords": []}]})
+
+    def test_what_is_read_can_be_written_back(self):
+        shown = json.loads(self.tools["read_score"]().splitlines()[4])
+        self.assertTrue(self.tools["write_score"](score=shown).startswith("OK. Score written."))
+        self.assertEqual(self.max.score["voices"], ROLL["voices"])
+        self.assertEqual(self.max.score["header"], ROLL["header"], "a slot shown by name and type keeps its definition")
 
     def test_a_long_read_is_cut_at_one_time_for_all_voices(self):
         from bach_mcp.music.reader import read_view
         chord = lambda t, p: {"onset": t, "notes": [{"pitch": p, "dur": 100, "vel": 90}]}
         score = {"voices": [{"chords": [chord(t * 100, 6000) for t in range(400)]},
                             {"chords": [chord(t * 100, 4800) for t in range(400)]}]}
-        reply = read_view(score, budget=2000)
-        shown = json.loads(reply.splitlines()[3])
-        last = [v["chords"][-1][0] for v in shown["voices"]]
+        reply = read_view(score, budget=2000).splitlines()
+        shown = json.loads(reply[4])
+        last = [v["chords"][-1]["onset"] for v in shown["voices"]]
         self.assertEqual(last[0], last[1], "both voices stop at the same time")
-        self.assertLessEqual(len(reply.splitlines()[3]), 2000)
-        self.assertIn(f"from_ms={last[0] + 100}", reply)
-        later = json.loads(read_view(score, voice=2, from_ms=last[0] + 100, budget=2000).splitlines()[3])
-        self.assertEqual([v["voice"] for v in later["voices"]], [2])
-        self.assertEqual(later["voices"][0]["chords"][0][0], last[0] + 100)
+        self.assertLessEqual(len(reply[4]), 2000)
+        self.assertEqual(reply[3], f"Shown: all voices, 0 ms to {last[0] + 100}. A voice with no chords here is only not shown.")
+        self.assertIn(f"from_ms={last[0] + 100}", reply[5])
+        later = read_view(score, voice=2, from_ms=last[0] + 100, budget=2000).splitlines()
+        self.assertTrue(later[3].startswith(f"Shown: only voice 2, {last[0] + 100} ms to "), later[3])
+        voices = json.loads(later[4])["voices"]
+        self.assertEqual(voices[0], {"chords": []}, "every voice keeps its place")
+        self.assertEqual(voices[1]["chords"][0]["onset"], last[0] + 100)
 
-    def test_write_expands_onto_the_roll_and_keeps_its_header(self):
-        written = {"voices": [{"name": "Oboe", "chords": [[0, [6950, 500, 80, {"dynamics": "p<"}]], [500, [7000, 500, 80]]]}]}
+    def test_write_goes_onto_the_roll_and_keeps_its_header(self):
+        written = {"header": {"voicenames": [["Oboe"]]}, "voices": [{"chords": [
+            {"onset": 0, "notes": [{"pitch": 6950, "dur": 500, "vel": 80, "slots": {"20": ["p<"]}}]},
+            {"onset": 500, "notes": [{"pitch": 7000, "dur": 500, "vel": 80}]}]}]}
         reply = self.tools["write_score"](score=written)
         self.assertTrue(reply.startswith("OK. Score written."), reply)
         self.assertIn("voice 1 (Oboe): 2 notes in 2 chords, 0-1000 ms, pitch 6950-7000", reply)
         self.assertEqual(self.max.sent[-2:], ["notes1 tonedivision 4", "notes1 score_done"])
         roll = self.max.score
-        self.assertEqual(roll["header"]["slotinfo"], ROLL["header"]["slotinfo"], "what the model never saw is kept")
+        self.assertEqual(roll["header"]["slotinfo"], ROLL["header"]["slotinfo"], "what the model did not give is kept")
         self.assertEqual(roll["header"]["clefs"], ["G", "F"])
+        self.assertEqual(roll["header"]["markers"], ROLL["header"]["markers"])
         self.assertEqual(roll["header"]["voicenames"], [["Oboe"]])
-        self.assertEqual(roll["voices"][0]["chords"][0]["notes"][0]["slots"], {"20": ["p<"]})
+        note = roll["voices"][0]["chords"][0]["notes"][0]
+        self.assertEqual((note["slots"], note["flag"], roll["voices"][0]["flag"]), ({"20": ["p<"]}, 0, 0), "stored whole")
         self.assertTrue(all(len(m) < 200 for m in self.max.sent), "no score travels as a message")
 
-    def test_add_puts_chords_in_time(self):
-        reply = self.tools["write_score"](score={"voices": [{"chords": [[500, [7300, 250, 90]]]}]}, add=True)
+    def test_voices_without_names_keep_one_entry_each(self):
+        self.tools["write_score"](score={"voices": [{"chords": [NOTE_AT_0]}]})
+        self.assertEqual(self.max.score["header"]["voicenames"], [["Flute"]], "one voice written, one name kept")
+
+    def test_markers_are_written_in_the_header(self):
+        markers = [{"onset": 0, "name": "A", "role": "timesig", "content": [3, 4]}, {"onset": 1500, "role": "barline", "content": []}]
+        reply = self.tools["write_score"](score={"header": {"markers": markers}, "voices": [{"chords": [NOTE_AT_0]}]})
+        self.assertIn("markers: A@0 barline@1500", reply)
+        self.assertEqual(self.max.score["header"]["markers"],
+                         [{"onset": 0, "name": ["A"], "role": "timesig", "content": [3, 4]},
+                          {"onset": 1500, "name": [], "role": "barline"}])
+
+    def test_add_puts_chords_and_markers_in_time(self):
+        added = {"header": {"markers": [{"onset": 500, "name": ["B"]}]},
+                 "voices": [{"chords": [{"onset": 500, "notes": [{"pitch": 7300, "dur": 250, "vel": 90}]}]}]}
+        reply = self.tools["write_score"](score=added, add=True)
         self.assertTrue(reply.startswith("OK. Added to the score."), reply)
         onsets = [c["onset"] for c in self.max.score["voices"][0]["chords"]]
         self.assertEqual(onsets, [0.0, 500, 1000.0])
         self.assertEqual(self.max.score["voices"][0]["chords"][0]["notes"][0]["slots"], {"7": ["Fl-ord-C6-ff.wav"]})
+        self.assertEqual([m["name"] for m in self.max.score["header"]["markers"]], [["A"], ["B"]])
+        self.assertEqual(self.max.score["header"]["voicenames"], ROLL["header"]["voicenames"])
 
     def test_mistakes_are_named_and_nothing_is_written(self):
+        one = lambda note: {"voices": [{"chords": [{"onset": 0, "notes": [note]}]}]}
         cases = [({"voices": []}, 'the score needs "voices"'),
-                 ({"voices": [{"chords": [[0]]}]}, "voice 1, chord 1: a chord needs at least one note"),
-                 ({"voices": [{"chords": [[0, [6000, 500]]]}]}, "voice 1, chord 1, note 1: a note is [pitch, dur, vel]"),
-                 ({"voices": [{"chords": [[0, [60, 500, 80]]]}]}, "looks like a MIDI note number"),
-                 ('{"voices": [{"chords": [[0, [6000, 500, 80]] [500, [6100, 500, 80]]]}]}', "a comma is missing")]
+                 ({"voices": [{"chords": [{"onset": 0, "notes": []}]}]}, "voice 1, chord 1: a chord needs at least one note"),
+                 ({"voices": [{"chords": [[0, [6000, 500, 80]]]}]}, 'voice 1, chord 1: a chord is an object with its "onset"'),
+                 (one({"pitch": 6000, "dur": 500}), 'voice 1, chord 1, note 1: a note is an object with "pitch", "dur" and "vel"'),
+                 (one({"pitch": 60, "dur": 500, "vel": 80}), "looks like a MIDI note number"),
+                 (one({"pitch": 6000, "dur": 500, "vel": 80, "dynamics": "p"}), '"dynamics" is not a note field: marks go in "slots"'),
+                 (one({"pitch": 6000, "dur": 500, "vel": 80, "slots": {"20": "p"}}), '"slots" is an object by slot number, each slot a list'),
+                 ({"voices": [{"name": "Flute", "chords": []}]}, 'a voice\'s name goes in the header'),
+                 ({"header": {"markers": [{"onset": 0, "role": "bar"}]}, "voices": [{"chords": []}]}, 'marker 1: role "bar" does not exist'),
+                 ('{"voices": [{"chords": [{"onset": 0, "notes": [{"pitch": 6000, "dur": 500, "vel": 80}]} {"onset": 500}]}]}',
+                  "a comma is missing")]
         for score, expected in cases:
             reply = self.tools["write_score"](score=score)
             self.assertTrue(reply.startswith("ERROR"), reply)
@@ -152,12 +196,12 @@ class ScoreToolTests(unittest.TestCase):
         self.assertEqual(self.max.sent, [])
 
     def test_a_wrong_closing_sequence_is_repaired(self):
-        reply = self.tools["write_score"](score='{"voices": [{"chords": [[0, [6000, 500, 80]] }]}]')
+        reply = self.tools["write_score"](score='{"voices": [{"chords": [{"onset": 0, "notes": [{"pitch": 6000, "dur": 500, "vel": 80}}] }]}]')
         self.assertTrue(reply.startswith("OK. Score written."), reply)
 
     def test_only_a_score_instance_writes_notes(self):
         self.target = Target("scales1", "generator", self.folder)
-        reply = self.tools["write_score"](score={"voices": [{"chords": [[0, [6000, 500, 80]]]}]})
+        reply = self.tools["write_score"](score={"voices": [{"chords": [NOTE_AT_0]}]})
         self.assertIn("scales1 is a generator: it takes an algorithm (send_algorithm), not notes", reply)
         self.assertIn("Nothing was cleared", self.tools["clear_score"]())
         self.assertTrue(self.tools["read_score"]().startswith("voice 1 (Flute)"), "any instance's roll can be read")
@@ -166,7 +210,7 @@ class ScoreToolTests(unittest.TestCase):
         def none():
             raise NoTarget("no instance is active: select one (set_active_instance <name>)")
         serve_targets(none)
-        self.assertIn("no instance is active", self.tools["write_score"](score={"voices": [{"chords": [[0, [6000, 500, 80]]]}]}))
+        self.assertIn("no instance is active", self.tools["write_score"](score={"voices": [{"chords": [NOTE_AT_0]}]}))
         self.assertIn("no instance is active", self.tools["read_score"]())
         self.assertEqual(self.max.sent, [])
 
@@ -188,7 +232,7 @@ class ScoreToolTests(unittest.TestCase):
         mcp = FakeMCP()
         register_score_tools(mcp, Silent(self.target.scores))
         self.assertIn("Max did not answer", mcp.tools["read_score"]())
-        self.assertIn("Nothing was added", mcp.tools["write_score"](score={"voices": [{"chords": [[0, [6000, 500, 80]]]}]}, add=True))
+        self.assertIn("Nothing was added", mcp.tools["write_score"](score={"voices": [{"chords": [NOTE_AT_0]}]}, add=True))
 
     def test_only_the_instance_answer_counts(self):
         class Other(FakeMax):

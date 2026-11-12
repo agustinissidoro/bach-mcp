@@ -6,6 +6,7 @@ imports. This file is the one list of it. Each topic is a file of its own:
 
     bachmcp.lib.units.js       SEMITONE ... SECOND, pitch(), name() (and the pitch range, the note limit)
     bachmcp.lib.build.js       score(), voices, notes and chords; copy, eachNote
+    bachmcp.lib.markers.js     timesig, barline, division, subdivision, tempo, grid, markersOf, clearGrid
     bachmcp.lib.random.js      rng(name), seeded Math.random
     bachmcp.lib.numbers.js     lerp, clamp, rescale, wrap, fold, snap, seq, linspace, sum, accumulate, env, warp
     bachmcp.lib.procedures.js  iterate, walk, markov, rewrite, automaton, euclid
@@ -18,8 +19,8 @@ imports. This file is the one list of it. Each topic is a file of its own:
     (bachmcp.lib.base.js       AlgoError and two checks, for the files here: not in scope)
 
 To add to the library: a file here, its names in TOPICS below, and their
-description in the skill (py/bach_mcp/prompt/BACH_SKILL.md; a test checks that
-every name in scope is described there), and a test in py/tests/js.
+description in the skill (py/bach_mcp/prompt/BACH_SKILL.md, or QUANTIZER_SKILL.md
+for the markers; a test checks that every name in scope is described in one of them), and a test in py/tests/js.
 
 The same files run in Max (v8, through the search path) and in Node (the check
 that runs before a file reaches Max), so an algorithm behaves the same in both.
@@ -42,12 +43,12 @@ const { seeded } = need("bachmcp.lib.random.js");
 
 // Every topic whose names are all in scope.
 const TOPICS = [
-  "units", "build", "numbers", "procedures",
+  "units", "build", "markers", "numbers", "procedures",
   "gather", "segments", "lines", "texture", "harmony", "likeness",
 ].map((topic) => need(`bachmcp.lib.${topic}.js`));
 
 const NOT_IN_SCOPE = [
-  "Score", "Voice", "MEASURES",
+  "Score", "Voice", "MEASURES", "ROLES",
   "MIN_CENTS", "MAX_CENTS", "MAX_NOTES", "fmt", "nameToCents", "centsToName",  // for the loader and the parameters
 ];
 

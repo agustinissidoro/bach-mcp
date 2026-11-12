@@ -35,11 +35,10 @@ from ..config import REPO_ROOT, Config
 from ..model.backends import running_model
 from ..model.client import ModelClient
 from ..music.pitch import name_to_cents
-from ..music.compress import expand
 from ..tools.algo_tools import check_algorithm
 from ..tools.pitch_tools import FUNCTIONS as PITCH_FUNCTIONS
 from ..tools.registry import create_tools
-from ..tools.score_tools import check_short, close_brackets
+from ..tools.score_tools import check_score, close_brackets, complete
 from .engine import Conversation, build_conversation
 
 Check = Tuple[str, Optional[bool], str]  # label, passed (None = not applicable), detail
@@ -48,15 +47,15 @@ Check = Tuple[str, Optional[bool], str]  # label, passed (None = not applicable)
 # ── Reading a score ─────────────────────────────────────────────────────── #
 
 def checked_view(raw: Any) -> Dict[str, Any]:
-    """A score the model wrote (the compressed form), as the checks read it: voices with their name,
-    chords with onset, notes and articulations. Raises ValueError with what is wrong."""
-    problem = check_short(raw)
+    """A score the model wrote, as the checks read it: voices with their name, chords with onset,
+    notes and articulations. Raises ValueError with what is wrong."""
+    problem = check_score(raw)
     if problem:
         raise ValueError(problem)
-    complete = expand(raw)
-    names = complete["header"].get("voicenames") or []
+    whole = complete(raw)
+    names = whole["header"].get("voicenames") or []
     voices = []
-    for i, v in enumerate(complete["voices"]):
+    for i, v in enumerate(whole["voices"]):
         chords = []
         for c in sorted(v["chords"], key=lambda c: c["onset"]):
             art: List[str] = []

@@ -6,7 +6,7 @@ door serves it over MCP, the local chat calls its tools in-process. A tool is
 defined once, here and in the modules it registers:
 
     pitch_tools.py  exact pitch arithmetic in midicents (p2mc, get_chord, ...)
-    score_tools.py  write_score, read_score, clear_score: the JSON score
+    score_tools.py  write_score, write_markers, read_score, clear_score: the JSON score
     algo_tools.py   send_algorithm: a JavaScript algorithm run in Max
     gen_tools.py    send_gen: GenExpr code for the gen~ of a synth or an fx (sound, not score)
     instance_tools.py  get_instances, set_active_instance: which instance the others serve

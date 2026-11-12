@@ -106,10 +106,11 @@ class DocsTests(unittest.TestCase):
     def test_the_skill_names_only_marks_bach_knows(self):
         from bach_mcp.prompt.skill import read_skill
         skill = read_skill()
-        listed = re.search(r'`"articulations"`: (.*?)one, or a list', skill, re.S).group(1)
-        self.assertEqual(set(re.findall(r'"(\w+)"', listed)) - ARTICULATIONS, set())
-        listed = re.search(r'`"notehead"`: (.*?)\.\n', skill, re.S).group(1)
-        self.assertEqual(set(re.findall(r'"(\w+)"', listed)) - NOTEHEADS, set())
+        # the score part lists the marks by slot number: "22" articulations, "23" notehead
+        listed = re.search(r'`"22"` articulations: (.*?)or several', skill, re.S).group(1)
+        self.assertTrue(set(re.findall(r'"([a-z]\w+)"', listed)) <= ARTICULATIONS and "staccato" in listed, listed)
+        listed = re.search(r'`"23"` notehead: (.*?)\.\n', skill, re.S).group(1)
+        self.assertTrue(set(re.findall(r'"([a-z]\w+)"', listed)) <= NOTEHEADS and "diamond" in listed, listed)
 
 
 class LibraryTests(unittest.TestCase):

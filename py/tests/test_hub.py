@@ -196,7 +196,7 @@ class MapTests(HubTest):
         self.bridge.from_max(f"set_playground {line('Macintosh HD:' + self.playground)}")
         self.assertEqual(self.hub.playground, self.playground)
         self.assertEqual(sorted(os.listdir(self.playground)), ["algorithms", "gen", "prompts", "scores", "skills"])
-        self.assertEqual(sorted(os.listdir(os.path.join(self.playground, "skills"))), ["core-algorithmic.md", "core-electronic.md", "profiles"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.playground, "skills"))), ["core-algorithmic.md", "core-electronic.md", "profiles", "quantizer.md"])
         self.assertEqual(self.heard(), [line("set_playground", self.playground)])
         with open(os.path.join(self.folder, "file"), "w") as f:
             f.write("")
@@ -830,7 +830,7 @@ class WebTests(HubTest):
             full = client.post("/mcp", json=hello, headers=accept)
             self.assertEqual(full.status_code, 200)
             self.assertIn('"instructions"', full.text)
-            self.assertEqual(len(tools("/mcp", full.headers["mcp-session-id"])), 15)
+            self.assertEqual(len(tools("/mcp", full.headers["mcp-session-id"])), 16)
             for mode in ("score", "algo"):
                 path = f"/mcp/headless/{mode}"
                 self.assertEqual(config.headless_mcp_url(mode), "http://127.0.0.1:8090" + path)

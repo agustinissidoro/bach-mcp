@@ -13,7 +13,8 @@ file), or on a small built-in score without one.
 Prints one JSON line:
     {"ok": true, "type": "generator" | "transformer" | "selector", "source": {"notes": n, "given": true} | null,
      "params": [...], "describe": [...], "score": {...}, "notes": n, "ms": t, "runs": k}
-    (a selector: "selection": [[voice, chord, note], ...] in place of "score", "notes" the notes picked)
+    (a selector: "selection": [[voice, chord, note], ...] in place of "score", "notes" the notes picked,
+     "markers" its source's markers when it changed them)
     {"ok": false, "error": "...", "line": n, "context": "with times = 111 (its maximum)"}
 Before each run it writes the setting to stderr, so a caller that has to stop an
 endless loop can tell which setting caused it.
@@ -158,6 +159,7 @@ function main() {
     describe: paramspec.describe(compiled.specs),
     score: first.score,
     selection: first.selection,
+    markers: first.markers || undefined,
     notes: first.notes,
     ms: first.ms,
     runs,

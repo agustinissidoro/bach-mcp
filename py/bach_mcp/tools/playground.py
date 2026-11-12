@@ -16,6 +16,9 @@ and these files, made only when missing (once there, they are the user's to edit
     <path>/skills/core-algorithmic.md                       a copy of the package's skill (prompt/BACH_SKILL.md)
     <path>/skills/core-electronic.md                        a copy of the sound skill (prompt/GEN_SKILL.md): gen~,
                                                             for synth and fx instances
+    <path>/skills/quantizer.md                              a copy of the quantizer skill (prompt/QUANTIZER_SKILL.md):
+                                                            markers with a role, the measures bach.quantize reads.
+                                                            An extra skill: in no profile until the user adds it
     <path>/skills/profiles/minimal-algorithmic-composer.json  {"skills": ["core-algorithmic"]}
     <path>/skills/profiles/minimal-electronic-composer.json   {"skills": ["core-electronic"]}
 
@@ -31,7 +34,7 @@ import os
 import re
 import shutil
 
-from ..prompt.skill import GEN_SKILL_PATH, SKILL_PATH
+from ..prompt.skill import GEN_SKILL_PATH, QUANTIZER_SKILL_PATH, SKILL_PATH
 
 FOLDERS = ("algorithms", "scores", "prompts", "gen", "skills", os.path.join("skills", "profiles"))
 CORE = os.path.join("skills", "core-algorithmic.md")
@@ -39,6 +42,7 @@ PROFILE = os.path.join("skills", "profiles", "minimal-algorithmic-composer.json"
 PROFILE_SKILLS = {"skills": ["core-algorithmic"]}
 GEN_CORE = os.path.join("skills", "core-electronic.md")
 GEN_PROFILE = os.path.join("skills", "profiles", "minimal-electronic-composer.json")
+QUANTIZER = os.path.join("skills", "quantizer.md")
 GEN_PROFILE_SKILLS = {"skills": ["core-electronic"]}
 
 _MAX_VOLUME = re.compile(r"^[^/:]+:(/.*)$")
@@ -63,7 +67,7 @@ def prepare(path: str) -> str:
             os.makedirs(folder, exist_ok=True)
         except OSError as exc:
             raise ValueError(f"cannot make {folder}: {exc.strerror}") from None
-    for source, copy in ((SKILL_PATH, CORE), (GEN_SKILL_PATH, GEN_CORE)):
+    for source, copy in ((SKILL_PATH, CORE), (GEN_SKILL_PATH, GEN_CORE), (QUANTIZER_SKILL_PATH, QUANTIZER)):
         core = os.path.join(root, copy)
         if not os.path.exists(core):
             try:
@@ -81,4 +85,4 @@ def prepare(path: str) -> str:
     return root
 
 
-__all__ = ["FOLDERS", "CORE", "PROFILE", "GEN_CORE", "GEN_PROFILE", "local_path", "prepare"]
+__all__ = ["FOLDERS", "CORE", "PROFILE", "GEN_CORE", "GEN_PROFILE", "QUANTIZER", "local_path", "prepare"]

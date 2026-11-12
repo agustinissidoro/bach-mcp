@@ -79,11 +79,12 @@ purpose.
   strictly necessary**: the request refers to the score ("the melody that is
   there", "what I wrote") and you cannot answer without seeing it. Never read
   it as a first step by default: a request that does not mention the score
-  needs no reading. It answers chords as lists,
-  `[onset, [pitch, dur, vel], ...]`.
+  needs no reading. It answers the score as it is,
+  `{header, voices: [{chords: [{onset, notes: [{pitch, dur, vel, ...}]}]}]}`,
+  without what says nothing (`flag: 0`, empty keys, most of the header).
 <!-- transformer selector -->
-  In your code the same music is `source`, as objects: read the score to
-  decide what to write, never copy its notes into the code.
+  In your code the same music is `source`, in the same form: read the score
+  to decide what to write, never copy its notes into the code.
 <!-- /transformer selector -->
 <!-- verbose -->
 - After the call, explain the algorithm in a few lines: what it does, then each
@@ -413,18 +414,19 @@ exact midicents: `p2mc` (names), `get_chord`, `get_scale`, `transpose`,
 ## JSON format
 
 The score has the same levels as bach.roll: a **score** holds voices, a
-**voice** holds chords, a **chord** holds notes. Chords and notes are plain
-lists in bach's own order.
+**voice** holds chords, a **chord** holds notes. Each is an object.
 
-- A **voice** is one instrument on its own staff, `{"name": "Flute", "chords": [...]}`.
-  All voices share the same clock.
-- A **chord** is `[onset, note, note, ...]`: when it starts (ms), then the notes
-  that start there. A single note is a chord with one note.
-- A **note** is `[pitch, dur, vel]`: midicents from a pitch tool, milliseconds,
-  loudness 1-127. A note has no onset of its own; it starts with its chord.
+- A **voice** is one instrument on its own staff, `{"chords": [...]}`. All
+  voices share the same clock. Its name is in the header, at the same place:
+  `"header": {"voicenames": [["Flute"], ["Cello"]]}`.
+- A **chord** is `{"onset": ..., "notes": [...]}`: when it starts (ms), and the
+  notes that start there. A single note is a chord with one note.
+- A **note** is `{"pitch": ..., "dur": ..., "vel": ...}`: midicents from a pitch
+  tool, milliseconds, loudness 1-127. A note has no onset of its own; it starts
+  with its chord.
 
 ```json
-[0, [6000, 500, 80]]
+{"onset": 0, "notes": [{"pitch": 6000, "dur": 500, "vel": 80}]}
 ```
 
 The onset alone places a chord in time. Silence is a gap between onsets: there
@@ -434,52 +436,60 @@ different durations.
 A single line:
 
 ```json
-{"voices": [
-    {"name": "Flute", "chords": [
-      [0, [7400, 1000, 80]],
-      [1000, [7700, 500, 80]],
-      [1500, [8100, 500, 80]],
-      [2000, [7900, 2000, 80]]
+{"header": {"voicenames": [["Flute"]]},
+ "voices": [
+    {"chords": [
+      {"onset": 0, "notes": [{"pitch": 7400, "dur": 1000, "vel": 80}]},
+      {"onset": 1000, "notes": [{"pitch": 7700, "dur": 500, "vel": 80}]},
+      {"onset": 1500, "notes": [{"pitch": 8100, "dur": 500, "vel": 80}]},
+      {"onset": 2000, "notes": [{"pitch": 7900, "dur": 2000, "vel": 80}]}
     ]}
 ]}
 ```
 
-**Extras** go in an object after `vel`, only on the notes that have them:
+**Marks** go in the note's `"slots"`, only on the notes that have them. A slot
+is named by its number and is always a list:
 
-- `"dynamics"`: `"pp" "p" "mp" "mf" "f" "ff" "sfz"`, with `<` (crescendo) or
-  `>` (diminuendo) towards the next dynamic: `"p<"`. A long note can carry a
-  whole shape: `"p<f>p"`. Only if the request asks for dynamics, and then only
-  where it changes, on the first note of the chord.
-- `"articulations"`: `"staccato" "staccatissimo" "accent" "portato" (tenuto)
+- `"20"` dynamics: `["pp"] ["p"] ["mp"] ["mf"] ["f"] ["ff"] ["sfz"]`, with `<`
+  (crescendo) or `>` (diminuendo) towards the next dynamic: `["p<"]`. A long
+  note can carry a whole shape: `["p<f>p"]`. Only if the request asks for
+  dynamics, and then only where it changes, on the first note of the chord.
+- `"22"` articulations: `"staccato" "staccatissimo" "accent" "portato" (tenuto)
   "martellato" (marcato) "fermata" "trill" "tremolo3" "harmonic" "upbowing"
-  "downbowing"`: one, or a list `["accent", "staccato"]`.
-- `"annotation"`: an instruction above the note, `"pizz."`, `"sul pont."`.
-  `"lyrics"`: a syllable sung on it.
-- `"notehead"`: `"diamond" "cross" "white" "black" "square" "triangle"
+  "downbowing"`: `["staccato"]`, or several, `["accent", "staccato"]`.
+- `"24"` annotation: an instruction above the note, `["pizz."]`,
+  `["sul pont."]`. `"21"` lyrics: a syllable sung on it.
+- `"23"` notehead: `["diamond"]`, `"cross" "white" "black" "square" "triangle"
   "rhombus" "none"`.
-- `"gliss"`: the note slides while it sounds. A number is where it ends, in
-  midicents from its pitch: `700` up a fifth, `-1200` down an octave. A bent
-  path is points `[position, midicents]`, position 0 to 1, the last at 1:
-  `[[0.5, 300], [1, -200]]`.
+
+A glissando is the note's `"breakpoints"`: points `[position, midicents,
+slope]`, position 0 to 1, midicents counted from the note's pitch, slope 0 for
+a straight line. The first point is always `[0, 0, 0]`, the last is at
+position 1. Up a fifth: `[[0, 0, 0], [1, 700, 0]]`. A bent path:
+`[[0, 0, 0], [0.5, 300, 0], [1, -200, 0]]`.
 
 Instrument references name these marks in words: articulation `harmonic` is
-`"articulations": "harmonic"`, annotation `"pizz."` is `"annotation": "pizz."`,
-notehead `cross` is `"notehead": "cross"`, dynamics `p` is `"dynamics": "p"`, a
-glissando of 700 is `"gliss": 700`.
+`"22": ["harmonic"]`, annotation `"pizz."` is `"24": ["pizz."]`, notehead
+`cross` is `"23": ["cross"]`, dynamics `p` is `"20": ["p"]`, a glissando of 700
+is `"breakpoints": [[0, 0, 0], [1, 700, 0]]`.
 
 Two instruments, with a three-note chord, a silence (2000 to 3000 in the
 piano), dynamics and articulations:
 
 ```json
-{"voices": [
-    {"name": "Piano", "chords": [
-      [0, [6000, 2000, 55, {"dynamics": "p"}], [6400, 2000, 55], [6700, 2000, 55]],
-      [3000, [7200, 500, 55, {"articulations": "staccato"}]],
-      [3500, [7400, 500, 55, {"articulations": "staccato"}]]
+{"header": {"voicenames": [["Piano"], ["Cello"]]},
+ "voices": [
+    {"chords": [
+      {"onset": 0, "notes": [
+        {"pitch": 6000, "dur": 2000, "vel": 55, "slots": {"20": ["p"]}},
+        {"pitch": 6400, "dur": 2000, "vel": 55},
+        {"pitch": 6700, "dur": 2000, "vel": 55}]},
+      {"onset": 3000, "notes": [{"pitch": 7200, "dur": 500, "vel": 55, "slots": {"22": ["staccato"]}}]},
+      {"onset": 3500, "notes": [{"pitch": 7400, "dur": 500, "vel": 55, "slots": {"22": ["staccato"]}}]}
     ]},
-    {"name": "Cello", "chords": [
-      [0, [3600, 3000, 55, {"dynamics": "p<"}]],
-      [3000, [4300, 1000, 100, {"dynamics": "f"}]]
+    {"chords": [
+      {"onset": 0, "notes": [{"pitch": 3600, "dur": 3000, "vel": 55, "slots": {"20": ["p<"]}}]},
+      {"onset": 3000, "notes": [{"pitch": 4300, "dur": 1000, "vel": 100, "slots": {"20": ["f"]}}]}
     ]}
 ]}
 ```
@@ -487,27 +497,35 @@ piano), dynamics and articulations:
 Velocity, quarter-tones, glissando, noteheads and text:
 
 ```json
-{"voices": [
-    {"name": "Violin", "chords": [
-      [0, [6900, 1000, 30]],
-      [1000, [6950, 1000, 60]],
-      [2000, [7050, 1000, 90]],
-      [3000, [7600, 3000, 100, {"dynamics": "f>", "annotation": "sul pont.", "gliss": -700}]],
-      [6000, [8100, 2000, 40, {"dynamics": "pp", "notehead": "diamond"}]],
-      [8000, [6200, 2000, 40, {"gliss": [[0.5, 300], [1, -200]], "notehead": "cross"}]]
+{"header": {"voicenames": [["Violin"]]},
+ "voices": [
+    {"chords": [
+      {"onset": 0, "notes": [{"pitch": 6900, "dur": 1000, "vel": 30}]},
+      {"onset": 1000, "notes": [{"pitch": 6950, "dur": 1000, "vel": 60}]},
+      {"onset": 2000, "notes": [{"pitch": 7050, "dur": 1000, "vel": 90}]},
+      {"onset": 3000, "notes": [{"pitch": 7600, "dur": 3000, "vel": 100,
+        "slots": {"20": ["f>"], "24": ["sul pont."]}, "breakpoints": [[0, 0, 0], [1, -700, 0]]}]},
+      {"onset": 6000, "notes": [{"pitch": 8100, "dur": 2000, "vel": 40, "slots": {"20": ["pp"], "23": ["diamond"]}}]},
+      {"onset": 8000, "notes": [{"pitch": 6200, "dur": 2000, "vel": 40,
+        "slots": {"23": ["cross"]}, "breakpoints": [[0, 0, 0], [0.5, 300, 0], [1, -200, 0]]}]}
     ]}
 ]}
 ```
 
 Score:
 
-- `"voices"`: one object per instrument, top staff first, each with a `"name"`
-  and its `"chords"`. Clefs and everything else about the staff stay as they
-  are in the roll.
-- Optional `"markers"`: section labels on the timeline, `[onset, name]`:
-  `[[0, "A"], [8000, "B"]]`.
-- `read_score` may also show `"slots"`: the names of the score's other slots,
-  `{"7": "sample"}`. A note's extras use those names; keep them as they are.
+- `"voices"`: one object per instrument, top staff first, each with its
+  `"chords"`.
+- `"header"`: what belongs to the whole score. Write only what you set; every
+  element you leave out stays as it is in the roll (clefs, keys, the slots'
+  definitions ...).
+  - `"voicenames"`: one entry per voice, in the same order, each a list:
+    `[["Piano"], ["Cello"]]`.
+  - `"markers"`, optional: section labels on the timeline,
+    `[{"onset": 0, "name": ["A"], "role": "none"}, {"onset": 8000, "name": ["B"], "role": "none"}]`.
+- `read_score` may also show `"slotinfo"` in the header: the name and type of
+  the score's other slots, `{"7": {"name": ["sample"], "type": ["text"]}}`.
+  Keep such slots on their notes as they are; do not write `"slotinfo"` back.
 
 `vel` is loudness, 1 to 127. Without a dynamic idea, the same value on every
 note (80); with dynamics, the vel that matches each marking: pp 40, p 55,
@@ -516,7 +534,8 @@ mp 70, mf 85, f 100, ff 112.
 Double quotes on names and keys, no quotes on numbers, no comments, no trailing
 commas.
 
-`read_score` answers in this same format.
+`read_score` answers in this same format. It leaves out what says nothing
+(`"flag": 0`, empty keys, most of the header), and so can you.
 
 ## Example: from principle to notation
 
@@ -538,17 +557,18 @@ transpose(["A4", "D4", "F4"], 400)  → [7300, 6600, 6900]   pass 3, rotate 2, a
 Onsets: pass 1 at 0 250 500, pass 2 at 750 1000 1250, pass 3 at 1500 1750 2000.
 
 ```json
-{"voices": [
-    {"name": "Clarinet", "chords": [
-      [0, [6200, 250, 80]],
-      [250, [6500, 250, 80]],
-      [500, [6900, 250, 80]],
-      [750, [6700, 250, 80]],
-      [1000, [7100, 250, 80]],
-      [1250, [6400, 250, 80]],
-      [1500, [7300, 250, 80]],
-      [1750, [6600, 250, 80]],
-      [2000, [6900, 1000, 80]]
+{"header": {"voicenames": [["Clarinet"]]},
+ "voices": [
+    {"chords": [
+      {"onset": 0, "notes": [{"pitch": 6200, "dur": 250, "vel": 80}]},
+      {"onset": 250, "notes": [{"pitch": 6500, "dur": 250, "vel": 80}]},
+      {"onset": 500, "notes": [{"pitch": 6900, "dur": 250, "vel": 80}]},
+      {"onset": 750, "notes": [{"pitch": 6700, "dur": 250, "vel": 80}]},
+      {"onset": 1000, "notes": [{"pitch": 7100, "dur": 250, "vel": 80}]},
+      {"onset": 1250, "notes": [{"pitch": 6400, "dur": 250, "vel": 80}]},
+      {"onset": 1500, "notes": [{"pitch": 7300, "dur": 250, "vel": 80}]},
+      {"onset": 1750, "notes": [{"pitch": 6600, "dur": 250, "vel": 80}]},
+      {"onset": 2000, "notes": [{"pitch": 6900, "dur": 1000, "vel": 80}]}
     ]}
 ]}
 ```

@@ -9,8 +9,30 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 92.0, 1852.0, 954.0 ],
+        "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
         "boxes": [
+            {
+                "box": {
+                    "id": "obj-59",
+                    "linecount": 2,
+                    "maxclass": "comment",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 1656.0, 254.0, 150.0, 33.0 ],
+                    "text": "dead end for 2nd outlet message when chaining"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-52",
+                    "maxclass": "newobj",
+                    "numinlets": 6,
+                    "numoutlets": 6,
+                    "outlettype": [ "", "", "", "", "", "" ],
+                    "patching_rect": [ 1386.85, 260.0, 261.0, 22.0 ],
+                    "text": "route dump clearselection add sel clearmarkers"
+                }
+            },
             {
                 "box": {
                     "id": "obj-57",
@@ -522,7 +544,7 @@
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 1484.85, 286.0, 150.0, 20.0 ],
+                    "patching_rect": [ 1726.85, 322.0, 150.0, 20.0 ],
                     "text": "all messages to runner"
                 }
             },
@@ -533,7 +555,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 1386.85, 285.0, 96.0, 22.0 ],
+                    "patching_rect": [ 1628.85, 321.0, 96.0, 22.0 ],
                     "text": "s #0to_runner"
                 }
             },
@@ -1480,7 +1502,7 @@
                 "box": {
                     "comment": "bang on processed",
                     "id": "obj-55",
-                    "index": 4,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -2563,7 +2585,7 @@
                 "box": {
                     "comment": "to bach.roll",
                     "id": "obj-46",
-                    "index": 2,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -2583,7 +2605,7 @@
                 "box": {
                     "comment": "dumpout",
                     "id": "obj-43",
-                    "index": 5,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -2617,7 +2639,7 @@
                 "box": {
                     "comment": "bachmcp.gui.params",
                     "id": "obj-37",
-                    "index": 3,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -2628,7 +2650,7 @@
                 "box": {
                     "comment": "score (dict)",
                     "id": "obj-35",
-                    "index": 1,
+                    "index": 0,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -3473,7 +3495,7 @@
                 "box": {
                     "comment": "",
                     "id": "obj-15",
-                    "index": 1,
+                    "index": 0,
                     "maxclass": "inlet",
                     "numinlets": 0,
                     "numoutlets": 1,
@@ -3776,8 +3798,20 @@
             },
             {
                 "patchline": {
+                    "destination": [ "obj-82", 0 ],
+                    "source": [ "obj-52", 5 ]
+                }
+            },
+            {
+                "patchline": {
                     "destination": [ "obj-18", 0 ],
                     "source": [ "obj-53", 5 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-52", 0 ],
+                    "source": [ "obj-53", 7 ]
                 }
             },
             {
@@ -3814,12 +3848,6 @@
                 "patchline": {
                     "destination": [ "obj-78", 0 ],
                     "source": [ "obj-53", 2 ]
-                }
-            },
-            {
-                "patchline": {
-                    "destination": [ "obj-82", 0 ],
-                    "source": [ "obj-53", 7 ]
                 }
             },
             {
@@ -3897,6 +3925,7 @@
                     "source": [ "obj-78", 0 ]
                 }
             }
-        ]
+        ],
+        "autosave": 0
     }
 }

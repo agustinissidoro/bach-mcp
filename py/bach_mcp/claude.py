@@ -4,7 +4,7 @@ claude.py
 The door for Claude (Claude Desktop, Claude Code) and any other MCP host.
 Claude brings its own model; Bach gives it the tools, what to read, and Max.
 
-    mcp_app(config, bridge)   the 15 tools (tools/registry.py), for the active instance, plus what Claude reads:
+    mcp_app(config, bridge)   the 16 tools (tools/registry.py), for the active instance, plus what Claude reads:
                               the skill as the server's instructions, /score and /algo
                               as two prompts, the instrument docs as resources ([chat] docs)
     headless_apps(config, bridge)  one per mode at /mcp/headless/<mode>: only that mode's tools

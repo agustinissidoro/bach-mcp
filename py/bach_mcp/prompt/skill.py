@@ -43,6 +43,8 @@ from typing import List, Optional, Set
 
 SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "BACH_SKILL.md")
 GEN_SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "GEN_SKILL.md")
+# An extra skill, chosen from the playground (skills.py): markers with a role, for bach.quantize.
+QUANTIZER_SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "QUANTIZER_SKILL.md")
 
 # The types of instance (tools/session.py TYPES) that work in each mode.
 MODE_TYPES = {"algo": ("generator", "transformer", "selector"), "score": ("score",), "gen": ("synth", "fx")}
@@ -144,5 +146,5 @@ def load_skill(mode: Optional[str] = None, raw: bool = False, path: str = SKILL_
     return text if raw else skill_for(text, mode, verbose)
 
 
-__all__ = ["SKILL_PATH", "GEN_SKILL_PATH", "MODE_TYPES", "read_skill", "with_verbosity", "skill_for", "closed",
+__all__ = ["SKILL_PATH", "GEN_SKILL_PATH", "QUANTIZER_SKILL_PATH", "MODE_TYPES", "read_skill", "with_verbosity", "skill_for", "closed",
            "with_gen", "load_skill"]

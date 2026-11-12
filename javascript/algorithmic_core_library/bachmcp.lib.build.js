@@ -9,7 +9,7 @@ score every object passes on, with nothing translated afterwards.
     const v = s.voice("Flute");             a voice, made on first use; its name in header.voicenames
     v.note(onset, pitch, dur, fields)       a chord of one note
     v.chord(onset, [pitch, ...], dur, fields)
-    s.marker(onset, "A")                    a marker in header.markers
+    s.marker(onset, "A")                    a marker in header.markers (with a role: bachmcp.lib.markers.js)
 
 `fields` are the note's own bachjson-complete fields, given to every note of
 the chord: vel (default 80), slots (by number: {20: ["p"], 22: ["staccato"]}),
@@ -89,10 +89,12 @@ class Score {
     return v;
   }
 
-  /** A marker at onset ms. */
-  marker(onset, name, role = "none") {
+  /** A marker at onset ms. One with a role (a barline, a time signature ...) is better written with bachmcp.lib.markers.js. */
+  marker(onset, name, role = "none", content) {
     if (!this.header.markers) this.header.markers = [];
-    this.header.markers.push({ onset, name: [name], role });
+    const marker = { onset, name: name === undefined || name === "" ? [] : [name], role };
+    if (content !== undefined) marker.content = content;
+    this.header.markers.push(marker);
     return this;
   }
 

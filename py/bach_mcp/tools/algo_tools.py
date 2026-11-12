@@ -43,7 +43,8 @@ from mcp.server.fastmcp import FastMCP
 from ..bridge.buffer import ServerBuffer
 from ..bridge.max import MaxBridge
 from ..bridge.protocol import line
-from ..music.compress import count_notes, describe
+from ..music import markers as grid
+from ..music.reader import count_notes, describe
 from .session import NoTarget, Target, target
 
 ALGO_TOOLS = ("send_algorithm",)
@@ -112,6 +113,17 @@ def _kind_error(t: Target, code: str) -> Optional[str]:
 
 
 _COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+
+
+def _markers_note(markers: Any) -> str:
+    """What the markers an algorithm wrote mean to bach.quantize, and what bach would misread in them."""
+    if not isinstance(markers, list) or not all(isinstance(m, dict) and isinstance(m.get("onset"), (int, float)) for m in markers):
+        return ""
+    errors, warnings = grid.check(markers)
+    lines = [grid.report(markers)]
+    lines += [f"MARKER ERROR (bach would drop or misread it; correct the code and send again): {e}" for e in errors]
+    lines += [f"WARNING: {w}" for w in warnings]
+    return "".join(f"\n{line}" for line in lines if line)
 
 
 def _bare(code: str) -> str:
@@ -211,7 +223,8 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
                 f"asks the roll for its score and selects in it.\n"
                 f"Parameters (now a panel in Max):\n{params}\n"
                 f"Checked in {result['runs']} runs (every slider at its minimum and maximum, every option).\n"
-                f"At the declared values it picks {result['notes']} notes ([voice chord note]): {picked or 'none'}{more}{same}"
+                f"At the declared values it picks {result['notes']} notes ([voice chord note]): {picked or 'none'}{more}"
+                f"{_markers_note(result.get('markers'))}{same}"
             )
         if result.get("type") == "transformer":
             about = (f"Transformer, checked on {origin} ({result['source']['notes']} notes). In Max its source "
@@ -220,7 +233,8 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
             f"OK. Algorithm saved as algorithms/{file} {status}.\n{shown}{about}"
             f"Parameters (now a panel in Max):\n{params}\n"
             f"Checked in {result['runs']} runs (every slider at its minimum and maximum, every option).\n"
-            f"Score at the declared values ({result['notes']} notes, {result['ms']} ms):\n{describe(result['score'])}{same}"
+            f"Score at the declared values ({result['notes']} notes, {result['ms']} ms):\n{describe(result['score'])}"
+            f"{_markers_note((result['score'].get('header') or {}).get('markers'))}{same}"
         )
 
 

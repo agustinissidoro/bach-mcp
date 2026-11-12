@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 1954.0, 92.0, 1012.0, 1794.0 ],
+        "rect": [ 134.0, 95.0, 1012.0, 853.0 ],
         "openinpresentation": 1,
         "boxes": [
             {
@@ -74,17 +74,6 @@
                     "numinlets": 1,
                     "numoutlets": 0,
                     "patching_rect": [ 450.25, 480.0, 30.0, 30.0 ]
-                }
-            },
-            {
-                "box": {
-                    "comment": "bach.roll control",
-                    "id": "obj-4",
-                    "index": 0,
-                    "maxclass": "outlet",
-                    "numinlets": 1,
-                    "numoutlets": 0,
-                    "patching_rect": [ 332.75, 480.0, 30.0, 30.0 ]
                 }
             },
             {
@@ -349,7 +338,7 @@
             },
             {
                 "patchline": {
-                    "destination": [ "obj-4", 0 ],
+                    "destination": [ "obj-2", 0 ],
                     "source": [ "obj-8", 1 ]
                 }
             },

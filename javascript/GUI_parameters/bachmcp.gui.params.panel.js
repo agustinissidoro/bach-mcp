@@ -623,7 +623,10 @@ Panel.prototype.paint = function (g, width, height) {
   if (p.repeat) button(g, p.repeat, "repeat", false, this.hot(p.repeat), C);
   if (p.write) button(g, p.write, "write", false, this.hot(p.write), C);
   if (p.capture) button(g, p.capture, "capture", false, this.hot(p.capture), C);
-  if (p.mode) button(g, p.mode, "destructive", this.sourceMode === "destructive", this.hot(p.mode), C);
+  if (p.mode) {
+    var destructive = this.sourceMode === "destructive";
+    button(g, p.mode, destructive ? "destructive" : "non-destructive", destructive, this.hot(p.mode), C);
+  }
   if (p.within) button(g, p.within, "process sel.", this.withinSelection, this.hot(p.within), C);
   if (p.only) button(g, p.only, "dump sel.", this.selectionOnly, this.hot(p.only), C);
   if (p.reset) button(g, p.reset, "reset", false, this.hot(p.reset), C);

@@ -24,7 +24,7 @@ class AppTests(unittest.TestCase):
 
     def test_the_tools_and_the_skill(self):
         names = [t.name for t in asyncio.run(self.app.list_tools())]
-        self.assertEqual(len(names), 16)
+        self.assertEqual(len(names), 17)
         self.assertEqual(set(names), set(MODE_TOOLS["score"]) | set(MODE_TOOLS["algo"]) | set(MODE_TOOLS["gen"]) | set(INSTANCE_TOOLS))
         self.assertTrue(self.app.instructions.startswith("# Bach"))
 

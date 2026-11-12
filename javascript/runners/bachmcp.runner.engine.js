@@ -535,6 +535,7 @@ function createEngine(max) {
     try {
       result = loader.run(state.compiled, state.values, hook("source") || null);
       if (result.score && type.output) result.score = type.output(result.score);
+      if (result.score) ownMarkers(result.score);
     } catch (e) {
       return fail(e);
     }
@@ -545,6 +546,24 @@ function createEngine(max) {
     hook("ran", result);  // a selector sends its score and commands
     if (result.score) sendScore(result.score);
     done();
+  }
+
+  /**
+   * Markers reach the roll only when the algorithm writes some: a score without any has no
+   * "markers" in its header, and the roll keeps its own. The one exception is the run after
+   * one that wrote markers: it sends an empty list once, so that what the algorithm put in
+   * the roll does not stay there when it stops writing it.
+   */
+  function ownMarkers(score) {
+    const markers = score.header && score.header.markers;
+    if (Array.isArray(markers) && markers.length) {
+      state.wroteMarkers = true;
+    } else if (state.wroteMarkers) {
+      score.header = Object.assign({}, score.header, { markers: [] });
+      state.wroteMarkers = false;
+    } else if (score.header && Array.isArray(markers)) {
+      delete score.header.markers;  // an empty list it never filled: nothing to say to the roll
+    }
   }
 
   /** A score out of outlet 0, as dictionary <name>. */

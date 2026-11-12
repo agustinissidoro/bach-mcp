@@ -427,10 +427,11 @@ test("a transformer's source mode: click to switch, sent to the runner, kept wit
   const spec = Object.assign({}, SPEC, { type: "transformer" });
   const m = panelWith(spec);
   const r = m.ctx.panel.modeRect(m.ctx.panel.width);
-  assert.ok(texts(m).includes("destructive"), "a toggle, off: non-destructive");
+  assert.ok(texts(m).includes("non-destructive"), "the label says the mode: non-destructive by default");
   m.ctx.onclick(r.x + 2, r.y + 2, 1, 0, 0, 0, 0, 0);
   release(m);
   assert.deepEqual(sent(m), [["source_mode", 0]]);
+  assert.ok(texts(m).includes("destructive") && !texts(m).includes("non-destructive"), "then destructive");
   m.send("spec", JSON.stringify(spec));
   assert.deepEqual(sent(m).filter((x) => x[1] === "source_mode"), [["sync", "source_mode", 0]], "a reload tells the runner");
   m.send("source_mode", 1);

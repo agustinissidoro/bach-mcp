@@ -142,6 +142,8 @@ function compile(code) {
  * Run a compiled algorithm. A transformer works on `source` (a JSON score), which
  * stays untouched. Returns {score, notes, ms}: the score as the algorithm returned
  * it (pitches folded into C0..G9), its number of notes, and the time it took.
+ * A selector returns {selection, markers, notes, ms}: the addresses of the notes it
+ * picked, and the markers of its source if it changed them (else null).
  */
 function run(compiled, values, source) {
   const start = Date.now();
@@ -169,7 +171,9 @@ function run(compiled, values, source) {
   }
   if (compiled.type === "selector") {
     const selection = addresses(input, result, name);
-    return { selection, notes: selection.length, ms: Date.now() - start };
+    // markers it wrote into its source (timesig, barline ...): the whole list, or null when it left them alone
+    const markers = JSON.stringify(markersOf(input)) === JSON.stringify(markersOf(source)) ? null : copy(markersOf(input));
+    return { selection, markers, notes: selection.length, ms: Date.now() - start };
   }
   if (!isObject(result) || !Array.isArray(result.voices)) {
     throw new AlgoError(`${name}() must return a score: an object with "voices"`);
@@ -216,6 +220,10 @@ function addresses(score, result, name) {
     }
   }
   return out.sort((x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2]);
+}
+
+function markersOf(score) {
+  return score && isObject(score.header) && Array.isArray(score.header.markers) ? score.header.markers : [];
 }
 
 function countNotes(score) {

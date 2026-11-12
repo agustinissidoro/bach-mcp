@@ -12,7 +12,7 @@ test("the index puts every topic in scope, and nothing else", () => {
     .map((f) => f.split(".")[2]).filter((t) => !["index", "base", "random"].includes(t));
   for (const topic of topics) {
     for (const name of Object.keys(require(path.join(LIB_DIR, `bachmcp.lib.${topic}.js`)))) {
-      if (!["Score", "Voice", "MEASURES", "MIN_CENTS", "MAX_CENTS", "MAX_NOTES", "fmt", "nameToCents", "centsToName"].includes(name)) assert.ok(lib.LIBRARY.includes(name), `${topic}: ${name} is not in scope`);
+      if (!["Score", "Voice", "MEASURES", "ROLES", "MIN_CENTS", "MAX_CENTS", "MAX_NOTES", "fmt", "nameToCents", "centsToName"].includes(name)) assert.ok(lib.LIBRARY.includes(name), `${topic}: ${name} is not in scope`);
     }
   }
   assert.ok(lib.LIBRARY.includes("rng") && lib.LIBRARY.includes("Math"));
