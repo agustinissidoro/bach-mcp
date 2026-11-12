@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from bach_mcp.bridge.protocol import words as split  # noqa: E402
 from bach_mcp.prompt.modes import MODE_TOOLS, TYPE_MODE, instance_skill  # noqa: E402
 from bach_mcp.prompt.skill import GEN_SKILL_PATH, load_skill, read_skill, skill_for, with_gen  # noqa: E402
-from bach_mcp.tools.gen_tools import check_gen, gendsp, register_gen_tools  # noqa: E402
+from bach_mcp.tools.gen_tools import check_gen, gendsp, panel_mismatch, register_gen_tools  # noqa: E402
 from bach_mcp.tools.playground import prepare  # noqa: E402
 from bach_mcp.tools.session import Target, serve_targets  # noqa: E402
 
@@ -169,6 +169,23 @@ class CheckTests(unittest.TestCase):
         self.assertTrue(result["ok"], result.get("error"))
         self.assertEqual(result["buffers"], [{"name": "source", "buffer": "my_sound"}])
         self.assertEqual(result["data"], ["window"])
+
+
+class PanelMismatchTests(unittest.TestCase):
+    """The last check on the gendsp: every panel parameter is a Param there and sends a number."""
+
+    def test_match(self):
+        patch = gendsp("// x\nParam shape(1);\nParam wet(0.5);\nout1 = in1;\n", 1, 1)
+        params = [{"name": "shape", "type": "menu", "send": 1}, {"name": "wet", "type": "slider", "send": 0.5}]
+        self.assertEqual(panel_mismatch(patch, params), [])
+
+    def test_missing_param_and_symbol(self):
+        patch = gendsp("// x\n// Param gone(1);\nParam shape(1);\nout1 = in1;\n", 1, 1)
+        params = [{"name": "gone", "send": 1}, {"name": "shape", "send": "saw"}, {"name": "on", "send": True}]
+        problems = panel_mismatch(patch, params)
+        self.assertEqual(len(problems), 4)
+        self.assertIn("gone is not a Param", problems[0])
+        self.assertIn("'saw', not a number", problems[1])
 
 
 @needs_node

@@ -145,6 +145,26 @@ test("range: each end, and the middle moves both", () => {
   assert.ok(lo > 6000);
 });
 
+test("a synth or an fx menu sends the index of its option: gen~ takes numbers only", () => {
+  const m = panelWith(GEN_SPEC);
+  click(m, "shape", 0.9);
+  assert.deepEqual(sent(m), [["shape", 1]]);
+  assert.equal(m.ctx.panel.find("shape").value, "saw", "it still shows the word");
+  click(m, "drive", 0.05);
+  assert.deepEqual(sent(m), [["drive", 1]]);
+});
+
+test("a new version of a synth or an fx sends the kept values plain, not sync: gen~ has no sync", () => {
+  const m = panelWith(GEN_SPEC);
+  m.send("set", "wet", 0.8);
+  m.send("set", "shape", "saw");
+  m.send("spec", JSON.stringify(GEN_SPEC));
+  const out = sent(m);
+  assert.ok(out.every((msg) => msg[0] !== "sync"), JSON.stringify(out));
+  assert.deepEqual(out.find((msg) => msg[0] === "wet"), ["wet", 0.8]);
+  assert.deepEqual(out.find((msg) => msg[0] === "shape"), ["shape", 1], "a menu as its index");
+});
+
 test("toggle, menu segments and menu stepper", () => {
   const m = panelWith();
   click(m, "legato", 0.05);
@@ -677,7 +697,7 @@ test("set_type: a base panel's controls work before a load; a bad type is said o
   release(m);
   assert.deepEqual(sent(m), [["capture"]]);
   m.send("set_type", "sorter");
-  assert.match(m.posts.join(""), /set_type is generator, transformer or selector, got sorter/);
+  assert.match(m.posts.join(""), /set_type is generator, transformer, selector, synth or fx, got sorter/);
   assert.equal(m.ctx.panel.type, "transformer");
   m.send("spec", JSON.stringify(Object.assign({}, SPEC, { type: "transformer" })));
   assert.ok(texts(m).includes("transformer"));
@@ -720,4 +740,83 @@ test("spec_file builds the panel from a .json file (as send_gen writes for a syn
   assert.match(m.posts.pop(), /is not JSON/);
   assert.equal(m.ctx.panel.items.length, 3, "a file that cannot be read leaves the panel as it was");
   fs.rmSync(folder, { recursive: true });
+});
+
+// ── synth and fx: knobs, mute ──────────────────────────────────────────── //
+
+const GEN_SPEC = {
+  title: "voice", type: "fx",
+  params: [
+    { name: "cutoff", type: "slider", range: [20, 20000], step: 0, value: 1000, default: 1000, unit: "Hz" },
+    { name: "wet", type: "slider", range: [0, 1], step: 0.01, value: 0.5, default: 0.5 },
+    { name: "pan", type: "slider", range: [-1, 1], step: 0.01, value: 0, default: 0 },
+    { name: "shape", type: "menu", options: ["sine", "saw"], value: "sine", default: "sine" },
+    { name: "drive", type: "toggle", value: false, default: false },
+  ],
+};
+
+function knobDrag(m, name, dy, mods = {}) {
+  const c = row(m, name).control;
+  const x = c.x + c.w / 2, y = c.y + c.h / 2;
+  m.ctx.onclick(x, y, 1, 0, 0, 0, 0, 0);
+  m.ctx.ondrag(x, y - dy, 1, 0, mods.shift ? 1 : 0, 0, 0, 0);
+  release(m);
+}
+
+test("an fx: sliders are knobs in a grid, no output or source rows, mute and bypass in the title row", () => {
+  const m = panelWith(GEN_SPEC);
+  const p = m.ctx.panel;
+  assert.ok(p.find("cutoff").knob && p.find("wet").knob && !p.find("shape").knob);
+  assert.equal(p.find("cutoff").type, "slider", "a knob is still a slider to the runner and to presets");
+  const shown = texts(m);
+  for (const t of ["mute", "bypass", "set active", "fx", "cutoff", "1000 Hz"]) assert.ok(shown.includes(t), t);
+  for (const t of ["repeat", "write", "capture", "OUTPUT"]) assert.ok(!shown.includes(t), t);
+  const knobs = p.rows.filter((r) => r.card);
+  assert.equal(knobs.length, 3);
+  assert.equal(knobs[0].y, knobs[1].y, "side by side");
+  const others = p.rows.filter((r) => !r.card);
+  assert.ok(others.every((r) => r.y >= knobs[0].y + knobs[0].h), "toggles and menus after the knobs");
+  for (const r of knobs) assert.ok(r.card.x >= 0 && r.card.x + r.card.w <= 320, r.item.name);
+  const mr = p.ui(p.width).mute;
+  m.ctx.onclick(mr.x + 2, mr.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  assert.deepEqual(sent(m), [["mute", 1]]);
+  assert.ok(texts(m).includes("muted"));
+  m.ctx.save();
+  const again = loadPanel({ width: 320, height: 100 });
+  again.send("restore", m.embedded.pop()[1]);
+  assert.equal(again.ctx.panel.mute, true, "mute is saved with the patch");
+  assert.ok(again.ctx.panel.find("wet").knob, "and the knobs come back as knobs");
+  again.send("mute", 0);
+  assert.equal(again.ctx.panel.mute, false, "mute 0|1 from outside");
+});
+
+test("a synth has mute but no bypass; a score type has bypass but no mute", () => {
+  const synth = panelWith(Object.assign({}, GEN_SPEC, { type: "synth" }));
+  assert.ok(texts(synth).includes("mute") && !texts(synth).includes("bypass"));
+  const gen = panelWith(Object.assign({}, SPEC, { type: "generator" }));
+  assert.ok(!texts(gen).includes("mute") && texts(gen).includes("bypass"));
+  assert.ok(!gen.ctx.panel.find("times").knob);
+  gen.send("set_type", "fx");
+  assert.ok(gen.ctx.panel.find("times").knob, "set_type to a sound type turns its sliders into knobs");
+});
+
+test("a knob turns by dragging up and down; shift is finer; a wide Hz range is logarithmic", () => {
+  const m = panelWith(GEN_SPEC);
+  const travel = 160 * m.ctx.panel.scale;
+  knobDrag(m, "wet", travel / 4);
+  assert.deepEqual(sent(m), [["wet", 0.75]], "a quarter of the travel up: a quarter of the range");
+  knobDrag(m, "wet", -travel / 5, { shift: true });
+  assert.deepEqual(sent(m), [["wet", 0.73]], "shift: a tenth as far");
+  const cutoff = m.ctx.panel.find("cutoff");
+  assert.ok(cutoff.log);
+  assert.ok(Math.abs(cutoff.fraction(632.5) - 0.5) < 0.01, "the middle of 20..20000 Hz is about 632 Hz");
+  knobDrag(m, "cutoff", travel / 4);
+  const [[name, v]] = sent(m);
+  assert.equal(name, "cutoff");
+  assert.ok(v > 1000 && v < 6000 && Number(v.toPrecision(2)) === v, `a round value up from 1000 Hz, got ${v}`);
+  assert.ok(!m.ctx.panel.find("wet").log && !m.ctx.panel.find("pan").log);
+  const c = row(m, "wet").control;
+  m.ctx.ondblclick(c.x + c.w / 2, c.y + c.h / 2);
+  assert.deepEqual(sent(m), [["wet", 0.5]], "double-click: back to the declared value");
 });

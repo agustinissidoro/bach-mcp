@@ -1,7 +1,8 @@
 /*
 bachmcp.gui.params.elements.js
 ------------------------------
-One element per parameter type: slider, range, toggle, menu, seed, curve, list.
+One element per parameter type: slider, range, toggle, menu, seed, curve, list
+(and knob: a slider drawn as a dial, for synth and fx panels).
 Each one holds its value, draws itself and turns mouse gestures into a new value;
 makeElement(spec) makes the right one for a parameter as the runner describes it:
   { name: "times", type: "slider", range: [1, 64], step: 1, unit: "", value: 16, default: 16 }
@@ -622,14 +623,109 @@ List.prototype.paint = function (g, r) {
   }
 };
 
+// knob: a slider drawn as a dial, for synth and fx panels (its type stays "slider":
+// the same messages, presets and saved values). Dragged up and down, not around:
+// KNOB_TRAVEL pixels (at scale 1) turn it all the way; shift is ten times finer and
+// can be pressed mid-drag without a jump. A frequency or a time whose range spans two
+// decades or more (Hz, kHz, ms, s; low end above 0) turns on a log scale.
+var KNOB_TRAVEL = 160;
+var KNOB_START = 0.75 * Math.PI, KNOB_SWEEP = 1.5 * Math.PI;  // from 7:30 to 4:30, clockwise
+
+function logScale(range, unit) {
+  return Boolean(range && range[0] > 0 && range[1] / range[0] >= 100 && /^(hz|khz|ms|s)$/i.test(String(unit || "")));
+}
+
+function Knob(spec) {
+  Element.call(this, spec);
+  this.knob = true;
+  this.log = logScale(this.range, this.unit);
+}
+Knob.prototype = Object.create(Element.prototype);
+
+Knob.prototype.fraction = function (v) {
+  if (!this.log) return Element.prototype.fraction.call(this, v);
+  return Math.log(Math.max(v, this.range[0]) / this.range[0]) / Math.log(this.range[1] / this.range[0]);
+};
+
+/** The value at a fraction of the knob's turn. */
+Knob.prototype.valueAt = function (f) {
+  var lo = this.range[0], hi = this.range[1];
+  f = clamp(f, 0, 1);
+  return this.log ? lo * Math.pow(hi / lo, f) : lo + f * (hi - lo);
+};
+
+// The step that keeps n significant digits of x (a log knob's precision).
+function significant(x, n) {
+  return Math.pow(10, Math.floor(Math.log(Math.max(Math.abs(x), 1e-9)) / Math.LN10) - (n - 1));
+}
+
+/** A log knob lands on round values while snapping (two digits: 20, 21 ... 1000, 1100), three with alt. */
+Knob.prototype.gesture = function (x) {
+  if (!this.log) return Element.prototype.gesture.call(this, x);
+  var lo = this.range[0], hi = this.range[1];
+  if (x <= lo || x >= hi) return snap(this, x);
+  var q = significant(x, this.snapping ? 2 : 3);
+  return snap(this, Math.round(x / q) * q);
+};
+
+Knob.prototype.fmt = function (x) {
+  if (this.log && !(this.step >= 1)) return formatNumber(x, Math.max(this.step, significant(x, 3)));
+  return Element.prototype.fmt.call(this, x);
+};
+
+Knob.prototype.down = function (r, x, y) {
+  this.grab = { y: y, f: clamp(this.fraction(this.value), 0, 1) };
+  return false;
+};
+
+Knob.prototype.drag = function (r, x, y, mods) {
+  if (!this.grab) return false;
+  // from the last point, so that shift can come and go mid-drag
+  this.grab.f = clamp(this.grab.f + (this.grab.y - y) / this.u(KNOB_TRAVEL) * (mods && mods.shift ? 0.1 : 1), 0, 1);
+  this.grab.y = y;
+  var old = this.value;
+  this.value = this.gesture(this.valueAt(this.grab.f));
+  return this.value !== old;
+};
+
+Knob.prototype.paint = function (g, r) {
+  var u = this.u.bind(this);
+  var cx = r.x + r.w / 2, cy = r.y + r.h / 2, rad = Math.max(u(4), Math.min(r.w, r.h) / 2 - u(2));
+  var f = clamp(this.fraction(this.value), 0, 1);
+  // a range across 0 fills from 0 (a pan, a detune), any other from its low end
+  var from = !this.log && this.range[0] < 0 && this.range[1] > 0 ? clamp(this.fraction(0), 0, 1) : 0;
+  var width = Math.max(2, rad * 0.16);
+  g.set_line_width(width);
+  color(g, THEME.track);
+  g.arc(cx, cy, rad, KNOB_START, KNOB_START + KNOB_SWEEP);
+  g.stroke();
+  if (f !== from) {
+    color(g, THEME.fill);
+    g.arc(cx, cy, rad, KNOB_START + Math.min(f, from) * KNOB_SWEEP, KNOB_START + Math.max(f, from) * KNOB_SWEEP);
+    g.stroke();
+  }
+  dot(g, cx, cy, rad - width * 1.6, THEME.button);
+  var a = KNOB_START + f * KNOB_SWEEP, inner = (rad - width * 1.6) * 0.85;
+  color(g, THEME.knob);
+  g.set_line_width(Math.max(1.5, width * 0.8));
+  g.move_to(cx + Math.cos(a) * inner * 0.3, cy + Math.sin(a) * inner * 0.3);
+  g.line_to(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+  g.stroke();
+  g.set_line_width(1);
+};
+
 var TYPES = { slider: Slider, range: Range, toggle: Toggle, menu: Menu, seed: Seed, curve: Curve, list: List };
 
-function makeElement(spec) {
+/** The element for a parameter; options.knobs: sliders as knobs (synth and fx panels). */
+function makeElement(spec, options) {
   var Kind = TYPES[spec.type];
   if (!Kind) throw new Error("unknown parameter type " + spec.type);
+  if (Kind === Slider && options && options.knobs) Kind = Knob;
   return new Kind(spec);
 }
 
 exports.Element = Element;
 exports.makeElement = makeElement;
 exports.TYPES = TYPES;
+exports.Knob = Knob;
+exports.KNOB_TRAVEL = KNOB_TRAVEL;

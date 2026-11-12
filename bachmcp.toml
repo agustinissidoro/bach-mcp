@@ -32,7 +32,7 @@ open_browser = false      # open the chat page when the model is ready
 # The Claude that answers prompts from Max and the chat page (bachmcp.server claude).
 claude_model = "opus"     # "" = your account's default; an alias ("opus", "sonnet", "haiku") or a full name ("claude-opus-5-5")
 claude_effort = "medium"  # "" = the model's default; "low", "medium", "high", "xhigh" or "max" (more thinking: slower, more tokens)
-claude_code_prompt = true # true: Claude Code's own system prompt, with the skill added to it.
+claude_code_prompt = false # true: Claude Code's own system prompt, with the skill added to it.
                           # false: the skill alone, as the local model reads it: about 2,300 fewer tokens per request
                           # (3,000 on Haiku). Measured 2026-11-08, generator: Opus 7,160 -> 4,870, Sonnet 7,090 -> 4,880,
                           # Haiku 7,920 -> 4,890; a writer about 300 less each. Quality not yet compared.

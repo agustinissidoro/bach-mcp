@@ -64,6 +64,7 @@ function localPath(file) {
 async function check(words) {
     for (const file of paths(words)) {
         await out(file, fs.existsSync(localPath(file)) ? 1 : 0);
+    out("done");
     }
 }
 

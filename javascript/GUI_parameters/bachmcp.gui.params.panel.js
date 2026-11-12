@@ -15,6 +15,12 @@ as "source_mode 1|0". A selector has the same card, and under the mode
 two more segments, whole score | selection only (sent as "dump_selection_only 0|1"). "Parameters": one card each, its name and value above its
 control. A status line closes the panel.
 
+A synth or an fx (gen~: it makes sound) has its own look: its sliders are knobs
+(elements' Knob: same messages), in a grid of cards before the toggles and menus;
+mute in the title row ("mute 0|1"), and bypass for an fx only; no output or
+source rows, no snap toggles. gen~ takes numbers only: a menu shows its words and
+sends the index of the chosen one, from 0 ("param shape 1").
+
 Size: a bigger panel draws its parameters bigger (layout: the scale grows with
 the width past M.baseWidth, up to M.maxScale, as long as the height still holds
 it), and height left over goes to lists and curves (up to M.tallGrow times taller).
@@ -60,7 +66,9 @@ var THEME = base.THEME,
 var makeElement = elements.makeElement;
 
 // The algorithm's type (the spec's type), as the runner says it.
-var TYPES = { generator: true, transformer: true, selector: true };
+var TYPES = { generator: true, transformer: true, selector: true, fx: true, synth: true };
+// The types that make sound (gen~): their own look (see place).
+var AUDIO = { fx: true, synth: true };
 // Panels saved before the spec said type: their kind.
 var TYPE_OF_KIND = { producer: "generator", transformer: "transformer", selector: "selector" };
 
@@ -96,6 +104,7 @@ Panel.prototype.clear = function () {
   this.involutive = false;  // selectors: sel (false) or select (true)
   this.selectionOnly = true;  // selectors: dump_selection_only
   this.bypass = false;
+  this.mute = false;  // synth and fx: "mute 0|1"
   this.withinSelection = false;  // process_only_selection
   this.pitchSnap = 3;  // the output's pitches: 0 semitones, 1 quarter tones, 3 free
   this.timeSnap = 0;   // time sliders: 0 their own grid, 1 100 ms, 2 10 ms
@@ -110,10 +119,23 @@ Panel.prototype.setType = function (type) {
   var t = String(type);
   if (!TYPES[t]) return null;
   if (t === this.type) return false;
+  var wasAudio = this.audio();
   this.type = t;
+  // sliders become knobs, or knobs sliders: the same parameters, drawn the other way
+  if (this.items.length && wasAudio !== this.audio()) this.setSpec(this.snapshot());
   this.places = null;
   this.width = 0;
   return true;
+};
+
+/** Synths and fx make sound: knobs, mute, no output or source rows. */
+Panel.prototype.audio = function () {
+  return AUDIO[this.type] === true;
+};
+
+/** Bypass: every type but a synth (it has no sound coming in to pass through). */
+Panel.prototype.hasBypass = function () {
+  return this.type !== "synth";
 };
 
 /** Transformers and selectors work on a source: they have the source card. */
@@ -142,7 +164,7 @@ Panel.prototype.setSpec = function (spec) {
   var messages = [];
   var params = spec.params || [];
   for (i = 0; i < params.length; i++) {
-    var item = makeElement(params[i]);
+    var item = makeElement(params[i], { knobs: this.audio() });
     var was = old[item.name];
     if (was && was.type === item.type && was.kind === item.kind && was.unit === item.unit) {
       if (params[i].display === undefined) item.display = was.display;
@@ -160,7 +182,8 @@ Panel.prototype.setSpec = function (spec) {
   // the runner starts nondestructive: tell it the mode this panel is in
   if (this.hasSource() && this.sourceMode !== "nondestructive") messages.push(["source_mode", 0]);
   if (this.type === "selector" && !this.selectionOnly) messages.push(["dump_selection_only", 0]);
-  if (this.bypass) messages.push(["bypass", 1]);
+  if (this.bypass && this.hasBypass()) messages.push(["bypass", 1]);
+  if (this.mute && this.audio()) messages.push(["mute", 1]);
   if (this.hasSource() && this.withinSelection) messages.push(["process_only_selection", 1]);
   if (this.pitchSnap !== 3) messages.push(["snap", this.pitchSnap]);
   return messages;
@@ -208,6 +231,12 @@ Panel.prototype.setBypass = function (flag) {
   return true;
 };
 
+Panel.prototype.setMute = function (flag) {
+  if (String(flag) !== "0" && String(flag) !== "1") return false;
+  this.mute = String(flag) === "1";
+  return true;
+};
+
 Panel.prototype.setPitchSnap = function (n) {
   if (["0", "1", "3"].indexOf(String(n)) < 0) return false;
   this.pitchSnap = Number(n);
@@ -245,7 +274,7 @@ function stateOf(states, value) {
 
 /** The toggle's state for this item: [value, text, step], or null if it has none. */
 Panel.prototype.snapState = function (item) {
-  var states = snapStates(item);
+  var states = this.audio() ? null : snapStates(item);
   if (!states) return null;
   return states[stateOf(states, pitchy(item) ? this.pitchSnap : this.timeSnap)];
 };
@@ -492,21 +521,29 @@ Panel.prototype.place = function (width, compact, s, extra) {
   this.k = k;
   this.width = width;
   this.rows = [];
-  var p = { setActive: null, within: null, bypass: null, repeat: null, write: null, capture: null, mode: null, only: null,
+  var p = { setActive: null, within: null, bypass: null, mute: null, repeat: null, write: null, capture: null, mode: null, only: null,
     snap: null, reset: null, sections: [] };
+  var audio = this.audio();
   this.places = p;
   var inner = width - 2 * m.pad;
   var section = compact ? v(14) : k.section;
   var y = k.title + this.descriptionHeight() + k.gap;
   p.setActive = { x: width - k.pad - v(62), y: (k.title - k.button) / 2, w: v(62), h: k.button };
   if (!this.items.length && !this.title && !this.type) return y + k.row + k.status;
-  p.bypass = { x: p.setActive.x - v(4) - v(56), y: (k.title - k.button) / 2, w: v(56), h: k.button };
-  // output
-  p.sections.push({ text: "output", y: y, h: section });
-  y += section;
-  p.repeat = { x: k.pad, y: y, w: v(50), h: k.button };
-  p.write = { x: k.pad + v(54), y: y, w: v(44), h: k.button };
-  y += k.button + k.gap;
+  var left = p.setActive.x;
+  if (this.hasBypass()) {
+    p.bypass = { x: left - v(4) - v(56), y: (k.title - k.button) / 2, w: v(56), h: k.button };
+    left = p.bypass.x;
+  }
+  if (audio) p.mute = { x: left - v(4) - v(46), y: (k.title - k.button) / 2, w: v(46), h: k.button };
+  // output (the score's: a synth or an fx sends sound)
+  if (!audio) {
+    p.sections.push({ text: "output", y: y, h: section });
+    y += section;
+    p.repeat = { x: k.pad, y: y, w: v(50), h: k.button };
+    p.write = { x: k.pad + v(54), y: y, w: v(44), h: k.button };
+    y += k.button + k.gap;
+  }
   // source
   if (this.hasSource()) {
     p.sections.push({ text: "source", y: y, h: section, source: true });
@@ -533,10 +570,12 @@ Panel.prototype.place = function (width, compact, s, extra) {
     if (item.tall) tall++;
   }
   var share = tall && extra > 0 ? extra / tall : 0;
+  y = this.placeKnobs(y, inner, compact, u, m);
   var vw = this.valueWidth();
   var lw = clamp(Math.round(inner * 0.28), m.labelMin, m.labelMax);
   for (i = 0; i < this.items.length; i++) {
     item = this.items[i];
+    if (item.knob) continue;
     var row = { item: item, y: y };
     var ch = item.tall ? u(item.tall) + Math.min(share, u(item.tall) * (M.tallGrow - 1)) : m.row;
     if (compact && !item.tall) {
@@ -550,7 +589,7 @@ Panel.prototype.place = function (width, compact, s, extra) {
       row.control = { x: m.pad + u(8), y: y + u(4) + m.head + u(2), w: inner - u(16), h: ch };
       row.h = u(4) + m.head + u(2) + ch + u(6);
     }
-    if (snapStates(item)) {
+    if (this.snapState(item)) {
       // the snap toggle, left of the value
       row.snapToggle = { x: row.value.x - u(42), y: row.value.y + (row.value.h - u(16)) / 2, w: u(38), h: u(16) };
       if (compact) row.control.w -= u(42);
@@ -560,6 +599,37 @@ Panel.prototype.place = function (width, compact, s, extra) {
     y += row.h + (compact ? u(2) : m.gap);
   }
   return y + k.status;
+};
+
+/**
+ * The knobs, first, in a grid of cards: the name above each knob, its value under
+ * it (click the value to show it another way). Returns where the next row goes.
+ */
+Panel.prototype.placeKnobs = function (y, inner, compact, u, m) {
+  var knobs = [], i;
+  for (i = 0; i < this.items.length; i++) {
+    var it = this.items[i];
+    if (!it.knob) continue;
+    knobs.push(it);
+    // a free knob: the value one pixel of its travel moves (a log knob formats by its own magnitude)
+    it.resolution = !(it.step > 0) && !it.log ? (it.range[1] - it.range[0]) / u(elements.KNOB_TRAVEL) : 0;
+  }
+  if (!knobs.length) return y;
+  var gap = m.gap, size = u(compact ? 30 : 44);
+  var cols = Math.max(1, Math.min(knobs.length, Math.floor((inner + gap) / (u(compact ? 64 : 76) + gap))));
+  var cw = (inner - (cols - 1) * gap) / cols;
+  var ch = u(4) + m.head + size + m.head + u(6);
+  for (i = 0; i < knobs.length; i++) {
+    var cx = m.pad + (i % cols) * (cw + gap), cy = y + Math.floor(i / cols) * (ch + gap);
+    var card = { x: cx, y: cy, w: cw, h: ch };
+    this.rows.push({
+      item: knobs[i], y: cy, h: ch, card: card,
+      label: { x: cx + u(4), y: cy + u(4), w: cw - u(8), h: m.head },
+      control: { x: cx + u(4), y: cy + u(4) + m.head, w: cw - u(8), h: size },
+      value: { x: cx + u(4), y: cy + u(4) + m.head + size, w: cw - u(8), h: m.head }
+    });
+  }
+  return y + Math.ceil(knobs.length / cols) * (ch + gap);
 };
 
 function button(g, r, text, on, hot, s) {
@@ -581,7 +651,8 @@ Panel.prototype.paint = function (g, width, height) {
   box(g, 0, 0, width, k.title, THEME.header);
   box(g, 0, k.title - 1, width, 1, THEME.line);
   var kindText = this.title || this.type ? this.type || "generator" : "";
-  var titleRight = p.bypass ? p.bypass.x - v(6) : p.setActive ? p.setActive.x - v(6) : width - k.pad;
+  var titleLeftmost = p.mute || p.bypass || p.setActive;
+  var titleRight = titleLeftmost ? titleLeftmost.x - v(6) : width - k.pad;
   if (kindText) {
     var kw = v(kindText.length * 6 + 14);
     var kr = { x: titleRight - kw, y: (k.title - v(16)) / 2, w: kw, h: v(16) };
@@ -606,6 +677,7 @@ Panel.prototype.paint = function (g, width, height) {
     label(g, "No algorithm loaded.", { x: k.pad + v(2), y: k.title + this.descriptionHeight() + k.gap, w: width - 2 * k.pad, h: k.row },
       "left", THEME.dim, v(THEME.fontSize));
   }
+  if (p.mute) button(g, p.mute, this.mute ? "muted" : "mute", this.mute, this.hot(p.mute), C);
   if (p.bypass) button(g, p.bypass, this.bypass ? "bypassed" : "bypass", this.bypass, this.hot(p.bypass), C);
   if (p.setActive) button(g, p.setActive, "set active", false, this.hot(p.setActive), C);
   for (var q = 0; q < p.sections.length; q++) {
@@ -638,10 +710,13 @@ Panel.prototype.paint = function (g, width, height) {
     var row = this.rows[i];
     if (row.y > height) break;
     var active = this.active === row;
-    var hovered = this.hover && this.hover[1] >= row.y && this.hover[1] <= row.y + row.h;
-    rounded(g, m.pad, row.y, width - 2 * m.pad, row.h, m.radius, active || hovered ? THEME.cardHover : THEME.card);
-    if (active) outline(g, m.pad, row.y, width - 2 * m.pad, row.h, m.radius, THEME.fillDim);
-    label(g, row.item.name, row.label, "left", THEME.text, u(THEME.fontSize), THEME.bold);
+    var card = row.card || { x: m.pad, y: row.y, w: width - 2 * m.pad, h: row.h };
+    var hovered = this.hover && this.hover[1] >= card.y && this.hover[1] <= card.y + card.h &&
+      this.hover[0] >= card.x && this.hover[0] <= card.x + card.w;
+    rounded(g, card.x, card.y, card.w, card.h, m.radius, active || hovered ? THEME.cardHover : THEME.card);
+    if (active) outline(g, card.x, card.y, card.w, card.h, m.radius, THEME.fillDim);
+    var centred = row.card ? "center" : "left";
+    label(g, row.item.name, row.label, centred, THEME.text, u(THEME.fontSize), THEME.bold);
     row.item.paint(g, row.control);
     var st = this.snapState(row.item);
     if (st && row.snapToggle) button(g, row.snapToggle, st[1], st[2] > 0, this.hot(row.snapToggle), S);
@@ -649,7 +724,7 @@ Panel.prototype.paint = function (g, width, height) {
     if (t) {
       var switchable = row.item.displays().length > 1;
       if (switchable && this.hot(row.value)) rounded(g, row.value.x - u(2), row.value.y, row.value.w + u(4), row.value.h, u(3), THEME.button);
-      label(g, t, row.value, "right", switchable ? THEME.knob : THEME.dim, u(THEME.fontSize));
+      label(g, t, row.value, row.card ? "center" : "right", switchable ? THEME.knob : THEME.dim, u(THEME.fontSize));
     }
   }
   var s = this.state;
@@ -676,7 +751,10 @@ Panel.prototype.rowAt = function (x, y) {
   return null;
 };
 
+/** "param <name> <value...>". gen~ (synth, fx) takes numbers only: there a menu sends the index
+ *  of its option, from 0, as the code's Param expects; it still shows its word. */
 Panel.prototype.message = function (item) {
+  if (item.type === "menu" && this.audio()) return ["param", item.name, item.index()];
   return ["param", item.name].concat(item.atoms());
 };
 
@@ -706,6 +784,10 @@ Panel.prototype.mouseDown = function (x, y, mods) {
   if (p.bypass && inside(p.bypass, x, y)) {
     this.bypass = !this.bypass;
     return [["bypass", this.bypass ? 1 : 0]];
+  }
+  if (p.mute && inside(p.mute, x, y)) {
+    this.mute = !this.mute;
+    return [["mute", this.mute ? 1 : 0]];
   }
   if (p.repeat && inside(p.repeat, x, y)) return [["repeat"]];
   for (var k = 0; k < this.rows.length; k++) {
@@ -776,7 +858,7 @@ Panel.prototype.snapshot = function () {
   }
   return { title: this.title, description: this.description, path: this.path, type: this.type, params: params, snap: this.snap,
     sourceMode: this.sourceMode, involutive: this.involutive, selectionOnly: this.selectionOnly,
-    bypass: this.bypass, withinSelection: this.withinSelection, pitchSnap: this.pitchSnap, timeSnap: this.timeSnap };
+    bypass: this.bypass, mute: this.mute, withinSelection: this.withinSelection, pitchSnap: this.pitchSnap, timeSnap: this.timeSnap };
 };
 
 Panel.prototype.restore = function (snapshot) {
@@ -785,6 +867,7 @@ Panel.prototype.restore = function (snapshot) {
   this.involutive = snapshot.involutive === true;
   this.selectionOnly = snapshot.selectionOnly !== false;
   this.bypass = snapshot.bypass === true;
+  this.mute = snapshot.mute === true;
   this.withinSelection = snapshot.withinSelection === true;
   this.pitchSnap = [0, 1, 3].indexOf(snapshot.pitchSnap) < 0 ? 3 : snapshot.pitchSnap;
   this.timeSnap = [0, 1, 2].indexOf(snapshot.timeSnap) < 0 ? 0 : snapshot.timeSnap;
