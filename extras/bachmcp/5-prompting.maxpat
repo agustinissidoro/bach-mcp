@@ -9,9 +9,29 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 92.0, 1852.0, 954.0 ],
+        "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
         "bglocked": 1,
         "boxes": [
+            {
+                "box": {
+                    "id": "obj-5",
+                    "maxclass": "preset",
+                    "numinlets": 1,
+                    "numoutlets": 5,
+                    "outlettype": [ "preset", "int", "preset", "int", "" ],
+                    "patching_rect": [ 255.0, 732.0, 100.0, 40.0 ],
+                    "preset_data": [
+                        {
+                            "number": 1,
+                            "data": [ 5, "obj-1", "bachmcp.prompt", "set", "don't forget about me" ]
+                        },
+                        {
+                            "number": 2,
+                            "data": [ 5, "obj-1", "bachmcp.prompt", "set", "remember me too!" ]
+                        }
+                    ]
+                }
+            },
             {
                 "box": {
                     "fontface": 1,
@@ -21,7 +41,6 @@
                     "numinlets": 1,
                     "numoutlets": 0,
                     "patching_rect": [ 1190.0, 168.0, 229.0, 33.0 ],
-                    "presentation_linecount": 2,
                     "text": "I WANT TO TALK TO THE MANAGER:\nLLM CHAT STYLE"
                 }
             },
@@ -32,7 +51,7 @@
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 686.0, 733.0, 188.0, 60.0 ],
+                    "patching_rect": [ 682.0, 740.0, 188.0, 60.0 ],
                     "text": "The bachmcp.prompt object is just a utility to type easier. It already prepends the prompt message."
                 }
             },
@@ -43,7 +62,7 @@
                     "numinlets": 1,
                     "numoutlets": 5,
                     "outlettype": [ "", "", "", "", "" ],
-                    "patching_rect": [ 257.0, 908.0, 247.0, 22.0 ],
+                    "patching_rect": [ 255.0, 970.0, 247.0, 22.0 ],
                     "text": "bachmcp.algorithm dont-prompt-him selector"
                 }
             },
@@ -54,8 +73,7 @@
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 257.0, 703.0, 457.0, 20.0 ],
-                    "presentation_linecount": 3,
+                    "patching_rect": [ 255.0, 699.0, 457.0, 20.0 ],
                     "text": "COMFORTABLE STYLE: I LIKE MAX, BUT LET ME SCROLL AND TYPE EASIER"
                 }
             },
@@ -66,7 +84,6 @@
                     "numinlets": 1,
                     "numoutlets": 0,
                     "patching_rect": [ 702.0, 305.0, 245.0, 20.0 ],
-                    "presentation_linecount": 2,
                     "text": "This is exactly the same, only without the UI."
                 }
             },
@@ -111,7 +128,6 @@
                     "numinlets": 1,
                     "numoutlets": 0,
                     "patching_rect": [ 344.0, 226.0, 224.0, 33.0 ],
-                    "presentation_linecount": 2,
                     "text": "just call the prompt function and use the prompt as an argument"
                 }
             },
@@ -123,7 +139,6 @@
                     "numinlets": 1,
                     "numoutlets": 0,
                     "patching_rect": [ 490.0, 155.0, 229.0, 20.0 ],
-                    "presentation_linecount": 3,
                     "text": "THE BADASS WAY, 100% MAX STYLE"
                 }
             },
@@ -182,9 +197,10 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 257.0, 733.0, 420.0, 140.0 ],
+                    "parameter_enable": 0,
+                    "patching_rect": [ 255.0, 795.0, 420.0, 140.0 ],
                     "prompt_sent": 0,
-                    "prompt_text": ""
+                    "prompt_text": "remember me too!"
                 }
             },
             {
@@ -287,9 +303,9 @@
                     "maxclass": "bpatcher",
                     "name": "bachmcp.bpatcher.algorithm.maxpat",
                     "numinlets": 1,
-                    "numoutlets": 4,
+                    "numoutlets": 3,
                     "offset": [ 0.0, 0.0 ],
-                    "outlettype": [ "", "", "", "" ],
+                    "outlettype": [ "", "", "" ],
                     "patching_rect": [ 245.0, 269.0, 288.0, 365.0 ],
                     "viewvisibility": 1
                 }
@@ -373,6 +389,12 @@
             },
             {
                 "patchline": {
+                    "destination": [ "obj-1", 0 ],
+                    "source": [ "obj-5", 0 ]
+                }
+            },
+            {
+                "patchline": {
                     "destination": [ "obj-4", 0 ],
                     "midpoints": [ 99.5, 183.1328125, 23.5, 183.1328125 ],
                     "source": [ "obj-6", 0 ]
@@ -385,6 +407,7 @@
                 }
             }
         ],
-        "autosave": 0
+        "autosave": 0,
+        "patchlinecolor": [ 0.592156862745098, 0.592156862745098, 0.592156862745098, 1.0 ]
     }
 }
