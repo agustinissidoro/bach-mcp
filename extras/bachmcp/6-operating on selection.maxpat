@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 260.0, 102.0, 1194.0, 853.0 ],
+        "rect": [ 260.0, 95.0, 1194.0, 853.0 ],
         "boxes": [
             {
                 "box": {
@@ -26,7 +26,7 @@
                     "numvoices": 1,
                     "out": "nnnnnnnn",
                     "outlettype": [ "", "", "", "", "", "", "", "" ],
-                    "patching_rect": [ 19.0, 159.0, 526.0, 117.83333333333334 ],
+                    "patching_rect": [ 19.0, 159.0, 524.0, 151.0 ],
                     "pitcheditrange": [ "null" ],
                     "stafflines": [ 5 ],
                     "textcolor": [ 0.0, 0.0, 0.0, 1.0 ],
@@ -111,7 +111,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 19.0, 312.0, 61.0, 22.0 ],
+                    "patching_rect": [ 19.0, 333.0, 61.0, 22.0 ],
                     "text": "s from.roll"
                 }
             },
@@ -183,9 +183,9 @@
                     "maxclass": "bpatcher",
                     "name": "bachmcp.bpatcher.algorithm.maxpat",
                     "numinlets": 1,
-                    "numoutlets": 4,
+                    "numoutlets": 3,
                     "offset": [ 0.0, 0.0 ],
-                    "outlettype": [ "", "", "", "" ],
+                    "outlettype": [ "", "", "" ],
                     "patching_rect": [ 578.0, 404.0, 288.0, 365.0 ],
                     "viewvisibility": 1
                 }

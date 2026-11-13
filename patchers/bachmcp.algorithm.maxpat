@@ -13,6 +13,17 @@
         "boxes": [
             {
                 "box": {
+                    "id": "obj-64",
+                    "maxclass": "newobj",
+                    "numinlets": 2,
+                    "numoutlets": 1,
+                    "outlettype": [ "bang" ],
+                    "patching_rect": [ 55.0, 110.0, 61.0, 22.0 ],
+                    "text": "delay 500"
+                }
+            },
+            {
+                "box": {
                     "id": "obj-90",
                     "linecount": 2,
                     "maxclass": "comment",
@@ -40,7 +51,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 55.0, 101.0, 54.0, 22.0 ],
+                    "patching_rect": [ 55.0, 146.0, 54.0, 22.0 ],
                     "text": "deferlow"
                 }
             },
@@ -209,8 +220,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.filechecker.js",
@@ -504,8 +513,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script bachmcp.filechecker.js",
@@ -729,7 +736,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 406.0, 191.0, 799.0, 780.0 ],
+                        "rect": [ 406.0, 168.0, 799.0, 780.0 ],
                         "boxes": [
                             {
                                 "box": {
@@ -1045,7 +1052,7 @@
                             }
                         ]
                     },
-                    "patching_rect": [ 55.0, 136.0, 116.0, 22.0 ],
+                    "patching_rect": [ 55.0, 181.0, 116.0, 22.0 ],
                     "text": "p check_playground"
                 }
             },
@@ -4161,7 +4168,7 @@
             },
             {
                 "patchline": {
-                    "destination": [ "obj-63", 0 ],
+                    "destination": [ "obj-64", 0 ],
                     "source": [ "obj-11", 0 ]
                 }
             },
@@ -4447,12 +4454,6 @@
             },
             {
                 "patchline": {
-                    "destination": [ "obj-82", 0 ],
-                    "source": [ "obj-89", 5 ]
-                }
-            },
-            {
-                "patchline": {
                     "destination": [ "obj-39", 0 ],
                     "source": [ "obj-57", 0 ]
                 }
@@ -4485,6 +4486,12 @@
                 "patchline": {
                     "destination": [ "obj-30", 0 ],
                     "source": [ "obj-63", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-63", 0 ],
+                    "source": [ "obj-64", 0 ]
                 }
             },
             {
@@ -4554,6 +4561,12 @@
                 "patchline": {
                     "destination": [ "obj-75", 0 ],
                     "source": [ "obj-78", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-82", 0 ],
+                    "source": [ "obj-89", 5 ]
                 }
             }
         ],

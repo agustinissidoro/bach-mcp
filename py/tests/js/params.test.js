@@ -99,15 +99,15 @@ test("an empty panel: No algorithm loaded., under the set_name name if there is 
     m.ctx.paint();
     return m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
   };
-  assert.deepEqual(texts(), ["No algorithm loaded.", "set active"]);
+  assert.deepEqual(texts(), ["No algorithm loaded.", "auto dump"]);
   m.send("set_name", "t1");
-  assert.deepEqual(texts(), ["t1", "No algorithm loaded.", "set active"]);
+  assert.deepEqual(texts(), ["t1", "No algorithm loaded.", "auto dump"]);
   m.send("set_name");
-  assert.deepEqual(texts(), ["No algorithm loaded.", "set active"], "set active is always there");
+  assert.deepEqual(texts(), ["No algorithm loaded.", "auto dump"], "auto dump is always there");
   const named = loadPanel({ width: 200, height: 60, args: ["t2"] });
   named.ctx.paint();
   assert.deepEqual(named.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]),
-                   ["t2", "No algorithm loaded.", "set active"], "the box's first argument is the name");
+                   ["t2", "No algorithm loaded.", "auto dump"], "the box's first argument is the name");
 });
 
 test("slider: click jumps, drag follows, shift drag is fine, double-click resets", () => {
@@ -348,9 +348,7 @@ test("a transformer's panel has its source row and a capture button", () => {
   const b = m.ctx.panel.captureRect(320);
   m.ctx.onclick(b.x + 5, b.y + 5, 1, 0, 0, 0, 0, 0);
   assert.deepEqual(sent(m), [["capture"]]);
-  const w = m.ctx.panel.writeRect(320);
-  m.ctx.onclick(w.x + 5, w.y + 5, 1, 0, 0, 0, 0, 0);
-  assert.deepEqual(sent(m), [["write_to_playground"]]);
+  assert.ok(!texts.includes("write") && !texts.includes("repeat") && !texts.includes("OUTPUT"), "no output row");
   m.send("source", 12, "inlet");  // an old runner's message: taken, shown nowhere
   const generator = panelWith();
   generator.ctx.paint();
@@ -483,20 +481,45 @@ test("reset all in the options, and hovering a card redraws only when it changes
 
 const M_TITLE = 30;
 
-test("set active sits in the title row, also with no algorithm, and sends set_as_active_instance", () => {
+test("auto dump sits in the title row, on by default, toggles auto_dump 0|1 and follows the runner's echo", () => {
   const m = panelWith(KINDS);
   const panel = m.ctx.panel;
   const p = panel.ui(panel.width);
-  assert.ok(p.setActive.y < M_TITLE && p.bypass.x + p.bypass.w <= p.setActive.x, "on top, right of bypass");
-  m.ctx.onclick(p.setActive.x + 2, p.setActive.y + 2, 1, 0, 0, 0, 0, 0);
+  assert.ok(p.autoDump.y < M_TITLE && p.bypass.x + p.bypass.w <= p.autoDump.x, "on top, right of bypass");
+  assert.equal(panel.autoDump, true);
+  m.ctx.onclick(p.autoDump.x + 2, p.autoDump.y + 2, 1, 0, 0, 0, 0, 0);
   release(m);
-  assert.deepEqual(sent(m), [["set_as_active_instance"]]);
+  assert.deepEqual(sent(m), [["auto_dump", 0]]);
+  m.ctx.onclick(p.autoDump.x + 2, p.autoDump.y + 2, 1, 0, 0, 0, 0, 0);
+  release(m);
+  assert.deepEqual(sent(m), [["auto_dump", 1]]);
+  m.send("auto_dump", 0);
+  assert.equal(panel.autoDump, false, "the runner's echo");
+  m.ctx.save();
+  const fresh = loadPanel({ width: 320, height: 100 });
+  fresh.send("restore", m.embedded[m.embedded.length - 1][1]);
+  assert.equal(fresh.ctx.panel.autoDump, false, "kept with the patch");
+  assert.equal(JSON.stringify(fresh.ctx.panel.setSpec(KINDS).filter((x) => x[0] === "auto_dump")), JSON.stringify([["auto_dump", 0]]), "told to the runner on a load");
   const empty = loadPanel({ width: 320, height: 100 });
-  const q = empty.ctx.panel.ui(320);
-  assert.ok(q.setActive && !q.bypass, "an instance with no algorithm can be made active");
-  empty.ctx.onclick(q.setActive.x + 2, q.setActive.y + 2, 1, 0, 0, 0, 0, 0);
-  release(empty);
-  assert.deepEqual(sent(empty), [["set_as_active_instance"]]);
+  assert.ok(empty.ctx.panel.ui(320).autoDump, "also with no algorithm");
+});
+
+test("the source buttons are never cut, a selector's on two rows when one does not hold them", () => {
+  for (const type of ["transformer", "selector"]) {
+    for (const width of [220, 300, 600]) {
+      const m = loadPanel({ width, height: 100 });
+      m.send("spec", JSON.stringify(Object.assign({}, SPEC, { type })));
+      for (const mode of [1, 0]) {
+        m.send("source_mode", mode);
+        m.ctx.mgraphics.calls.length = 0;
+        m.ctx.paint();
+        const shown = m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => c[1]);
+        for (const t of [mode ? "non-destructive" : "destructive", "capture", "process sel."]) assert.ok(shown.includes(t), `${type} ${width}: ${t}`);
+      }
+      const p = m.ctx.panel.ui(width);
+      for (const r of [p.capture, p.mode, p.within, p.only].filter(Boolean)) assert.ok(r.x >= 0 && r.x + r.w <= width + 0.5);
+    }
+  }
 });
 
 test("bypass sits in the title row; a pitch card's toggle cycles ½ | ¼ | free, sets its grid and is sent as snap", () => {
@@ -607,6 +630,22 @@ test("the description comes with the spec, is drawn under the title and is kept 
   assert.equal(panel.description, "", "a file without one clears it");
 });
 
+test("a long description wraps on up to four lines, and the parameters move down to make room", () => {
+  const long = "Random walks in a narrow range, each walker stepping by the interval it draws, " +
+    "then folded back into the register; the times set how often a walker moves and how long it holds. " +
+    "A last sentence that will not fit at all, whatever the panel does.";
+  const m = panelWith(Object.assign({}, SPEC, { description: long }));
+  const short = panelWith(Object.assign({}, SPEC, { description: "Random walks." }));
+  const lines = m.ctx.panel.descriptionLines(320);
+  assert.equal(lines.length, 4);
+  assert.ok(m.ctx.panel.rows[0].y > short.ctx.panel.rows[0].y, "the parameters start lower");
+  m.ctx.mgraphics.calls.length = 0;
+  m.ctx.paint();
+  const shown = m.ctx.mgraphics.calls.filter((c) => c[0] === "show_text").map((c) => String(c[1]));
+  assert.ok(shown.some((t) => t.indexOf("Random walks") === 0), "the first line");
+  assert.ok(shown.some((t) => /…$/.test(t)), "the last line cut");
+});
+
 test("a wider panel draws bigger, as far as its height holds it; height left over goes to lists and curves", () => {
   const panel = loadPanel({ width: 320, height: 100 }).ctx.panel;
   panel.setSpec(SPEC);
@@ -620,8 +659,8 @@ test("a wider panel draws bigger, as far as its height holds it; height left ove
   assert.ok(big.h === small.h * 2 && big.w >= small.w * 2, "controls grow with the panel");
   // the rest grows less: the title row and its buttons a third as much
   assert.equal(panel.chrome, 1 + 0.33);
-  assert.ok(Math.abs(panel.places.setActive.h - 20 * 1.33) < 1e-9, "set active grows a third as much");
-  assert.ok(panel.places.repeat.w < 50 * 2, "so do the output buttons");
+  assert.ok(Math.abs(panel.places.autoDump.h - 20 * 1.33) < 1e-9, "auto dump grows a third as much");
+  assert.ok(panel.places.autoDump.w < 62 * 2, "in width too");
   // twice as wide, the same height: as big as the height holds (here, scale 1)
   panel.layout(600, natural);
   assert.equal(panel.scale, 1);
@@ -769,8 +808,8 @@ test("an fx: sliders are knobs in a grid, no output or source rows, mute and byp
   assert.ok(p.find("cutoff").knob && p.find("wet").knob && !p.find("shape").knob);
   assert.equal(p.find("cutoff").type, "slider", "a knob is still a slider to the runner and to presets");
   const shown = texts(m);
-  for (const t of ["mute", "bypass", "set active", "fx", "cutoff", "1000 Hz"]) assert.ok(shown.includes(t), t);
-  for (const t of ["repeat", "write", "capture", "OUTPUT"]) assert.ok(!shown.includes(t), t);
+  for (const t of ["mute", "bypass", "fx", "cutoff", "1000 Hz"]) assert.ok(shown.includes(t), t);
+  for (const t of ["auto dump", "capture", "SOURCE"]) assert.ok(!shown.includes(t), t);
   const knobs = p.rows.filter((r) => r.card);
   assert.equal(knobs.length, 3);
   assert.equal(knobs[0].y, knobs[1].y, "side by side");

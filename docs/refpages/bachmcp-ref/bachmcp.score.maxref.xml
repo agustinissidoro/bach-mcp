@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.score" module="bachmcp" category="bachmcp">
+	<digest>An instance the model writes a score for</digest>
+	<description>Prompt it and the model writes a whole score (with <i>write_score</i>), not an algorithm. When the score is ready it is read from <i>&lt;playground&gt;/scores/&lt;name&gt;.json</i> and goes out of the left outlet as an llll, for a <o>bach.roll</o>. Its type is <m>score</m>. It talks to the <o>bachmcp.server</o> open in any patch.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">score</metadata>
+		<metadata name="tag">write</metadata>
+		<metadata name="tag">compose</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>prompt, name, get_name, get_type, set_as_active_instance, remove</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>The score the model wrote (llll), for bach.roll</digest>
+		</outlet>
+		<outlet id="1" type="">
+			<digest>Dumpout: name, type</digest>
+		</outlet>
+	</outletlist>
+	<objarglist>
+		<objarg name="name" optional="0" type="symbol">
+			<digest>Instance name</digest>
+			<description>The name the model and the server know this instance by. Unique across open patches.</description>
+		</objarg>
+	</objarglist>
+	<methodlist>
+		<method name="prompt">
+			<arglist><arg name="text" optional="0" type="list" /></arglist>
+			<digest>Prompt the model</digest>
+			<description>Sends the text to this instance's conversation, after its <at>skills</at> and <at>profile</at>. The model, local or Claude (whichever <o>bachmcp.server</o> runs), answers by writing for this instance, and what it writes loads by itself. Connect a <o>bachmcp.prompt</o> to send it.</description>
+		</method>
+		<method name="name">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Rename the instance</digest>
+			<description>Gives the instance a new name: the server and the model know it by this one from now on. One word.</description>
+		</method>
+		<method name="get_name">
+			<arglist></arglist>
+			<digest>Report the name</digest>
+			<description>Sends <m>name &lt;name&gt;</m> out of the dumpout outlet.</description>
+		</method>
+		<method name="get_type">
+			<arglist></arglist>
+			<digest>Report the type</digest>
+			<description>Sends <m>type &lt;type&gt;</m> out of the dumpout outlet.</description>
+		</method>
+		<method name="set_as_active_instance">
+			<arglist></arglist>
+			<digest>Make it the active instance</digest>
+			<description>Makes this the active instance: the one a Claude written to directly (Claude Desktop or Claude Code) works for.</description>
+		</method>
+		<method name="remove">
+			<arglist></arglist>
+			<digest>Forget its conversation</digest>
+			<description>The server forgets everything it holds for this instance: its answer (stopped), its prompts waiting, its conversation and its own skills. Files stay: <i>prompts/&lt;name&gt;.jsonl</i> is read again if it is prompted later.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="skills" get="1" set="1" type="atom" size="0">
+			<digest>Skills for this instance</digest>
+			<description><m>global</m> (default): the skills the <o>bachmcp.server</o> chose (its <at>skills</at>). Otherwise the names of skill files in <i>playground/skills/</i> (without <i>.md</i>), read after the profile's: this instance then reads only what it chose. Applied at the next prompt.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="atom" size="1" value="global" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Skills" />
+			</attributelist>
+		</attribute>
+		<attribute name="profile" get="1" set="1" type="symbol" size="1">
+			<digest>Profile for this instance</digest>
+			<description><m>global</m> (default): the server's profile (its <at>profile</at>). Otherwise a file in <i>playground/skills/profiles/</i> (without <i>.json</i>), e.g. <m>minimal-algorithmic-composer</m> or <m>minimal-electronic-composer</m>. Applied at the next prompt.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="global" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Profile" />
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<seealsolist>
+		<seealso name="bachmcp.algorithm" />
+		<seealso name="bachmcp.prompt" />
+		<seealso name="bachmcp.server" />
+		<seealso name="bachmcp.translate" />
+		<seealso name="bach.roll" />
+	</seealsolist>
+</c74object>

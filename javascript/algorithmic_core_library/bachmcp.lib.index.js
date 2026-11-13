@@ -6,7 +6,7 @@ imports. This file is the one list of it. Each topic is a file of its own:
 
     bachmcp.lib.units.js       SEMITONE ... SECOND, pitch(), name() (and the pitch range, the note limit)
     bachmcp.lib.build.js       score(), voices, notes and chords; copy, eachNote
-    bachmcp.lib.markers.js     timesig, barline, division, subdivision, tempo, grid, markersOf, clearGrid
+    bachmcp.lib.markers.js     label, timesig, barline, division, subdivision, tempo, grid, markersOf, clearGrid
     bachmcp.lib.random.js      rng(name), seeded Math.random
     bachmcp.lib.numbers.js     lerp, clamp, rescale, wrap, fold, snap, seq, linspace, sum, accumulate, env, warp
     bachmcp.lib.procedures.js  iterate, walk, markov, rewrite, automaton, euclid

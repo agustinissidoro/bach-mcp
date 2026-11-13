@@ -355,8 +355,8 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
                 "breakpoints" for a glissando ([[0, 0, 0], [1, 200, 0]]).
         One entry in "voices" per instrument, top staff first, its name at the same place in
         header "voicenames". Silence is a gap between onsets.
-        Optional header "markers": [{"onset": 0, "name": ["A"], "role": "none"}, ...]. To change only
-        the markers of a score, use write_markers.
+        Markers (header "markers") only when the request asks for them; to change only the markers
+        of a score, use write_markers.
         A header element you give replaces the roll's; what you leave out stays as it is.
 
         add: False replaces the notes, True adds these chords (and markers) to them.
@@ -366,7 +366,8 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
 
     @mcp.tool()
     def write_markers(markers: Union[List[Dict[str, Any]], str], add: bool = False) -> str:
-        """Write the markers of the score, leaving its notes as they are.
+        """Write the markers of the score, leaving its notes as they are. Only when the request
+        asks for markers, sections, measures, a meter or barlines: never on your own initiative.
 
         markers = [{"onset": 0, "name": [], "role": "timesig", "content": [4, 4]},
                    {"onset": 2000, "name": [], "role": "barline"}, ...]

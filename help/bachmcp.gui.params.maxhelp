@@ -149,13 +149,15 @@
                                     "fontsize": 13.0,
                                     "maxclass": "newobj",
                                     "numinlets": 1,
-                                    "numoutlets": 3,
+                                    "numoutlets": 5,
                                     "outlettype": [
                                         "dictionary",
                                         "",
+                                        "",
+                                        "bang",
                                         ""
                                     ],
-                                    "text": "bachmcp.algo.generate help_params",
+                                    "text": "bachmcp.algorithm help_params generator",
                                     "id": "obj-4",
                                     "patching_rect": [
                                         30.0,
@@ -253,7 +255,7 @@
                                     ],
                                     "source": [
                                         "obj-4",
-                                        1
+                                        2
                                     ]
                                 }
                             },

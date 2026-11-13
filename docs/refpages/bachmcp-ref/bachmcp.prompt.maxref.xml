@@ -3,7 +3,7 @@
 
 <c74object name="bachmcp.prompt" module="bachmcp" category="bachmcp">
 	<digest>A chat-style prompt box</digest>
-	<description>Click it and type. Enter sends and Shift+Enter is a new line. The whole text leaves as one symbol, with commas, semicolons, quotes and new lines included, so it reaches an instance as one prompt whatever is typed. After sending, the text stays dimmed, and the box ignores keys until clicked again.</description>
+	<description>Click it and type. Enter sends and Shift+Enter is a new line. The whole text leaves as one symbol, with commas, semicolons, quotes and new lines included, so it reaches an instance as one prompt whatever is typed. After sending, the text stays dimmed, and the box ignores keys until clicked again. Cmd+Z undoes and Cmd+Shift+Z redoes, 20 steps. It works with <o>pattr</o>, <o>pattrstorage</o> and <o>preset</o>: recalling replaces the text like <m>set</m>.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
@@ -14,19 +14,19 @@
 	</metadatalist>
 	<inletlist>
 		<inlet id="0" type="">
-			<digest>bang, set, append, clear, paste</digest>
+			<digest>set, append, clear, bang, paste, placeholder, undo, redo</digest>
 		</inlet>
 	</inletlist>
 	<outletlist>
 		<outlet id="0" type="">
-			<digest>prompt &lt;text&gt;</digest>
+			<digest>prompt &lt;text&gt;: the whole text as one symbol, on Enter</digest>
 		</outlet>
 	</outletlist>
 	<methodlist>
 		<method name="bang">
 			<arglist></arglist>
 			<digest>Send</digest>
-			<description>Sends what is typed.</description>
+			<description>Sends what is typed. Empty prompts are not sent.</description>
 		</method>
 		<method name="set">
 			<arglist><arg name="text" optional="0" type="list" /></arglist>
@@ -36,7 +36,7 @@
 		<method name="append">
 			<arglist><arg name="text" optional="0" type="list" /></arglist>
 			<digest>Add to the text</digest>
-			<description>Adds to the end of the text.</description>
+			<description>Adds to the text at the caret.</description>
 		</method>
 		<method name="clear">
 			<arglist></arglist>
@@ -47,6 +47,16 @@
 			<arglist></arglist>
 			<digest>Paste</digest>
 			<description>Pastes the clipboard at the caret.</description>
+		</method>
+		<method name="undo">
+			<arglist></arglist>
+			<digest>Undo</digest>
+			<description>Undoes the last change (20 steps; typing is grouped by word).</description>
+		</method>
+		<method name="redo">
+			<arglist></arglist>
+			<digest>Redo</digest>
+			<description>Redoes what <m>undo</m> undid.</description>
 		</method>
 	</methodlist>
 	<attributelist>
@@ -61,7 +71,7 @@
 		</attribute>
 		<attribute name="maxheight" get="1" set="1" type="float" size="1">
 			<digest>Height to grow to</digest>
-			<description>With <at>autoheight</at> 1, it grows to this height and then scrolls.</description>
+			<description>With <at>autoheight</at> 1, it grows to this height and then scrolls. At least 20.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="float" size="1" value="400" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Maximum Height" />
@@ -93,11 +103,76 @@
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Placeholder" />
 			</attributelist>
 		</attribute>
+		<attribute name="bgcolor" get="1" set="1" type="float" size="4">
+			<digest>Background color</digest>
+			<description>Background color.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0.13 0.13 0.14 1." />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Background Color" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="rgba" />
+			</attributelist>
+		</attribute>
+		<attribute name="textcolor" get="1" set="1" type="float" size="4">
+			<digest>Text color</digest>
+			<description>Text color.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0.92 0.92 0.92 1." />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Text Color" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="rgba" />
+			</attributelist>
+		</attribute>
+		<attribute name="sentcolor" get="1" set="1" type="float" size="4">
+			<digest>Color of the text once sent</digest>
+			<description>Color of the text once sent.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0.6 0.6 0.62 1." />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Sent Text Color" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="rgba" />
+			</attributelist>
+		</attribute>
+		<attribute name="bordercolor" get="1" set="1" type="float" size="4">
+			<digest>Border color</digest>
+			<description>Border color.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0.35 0.35 0.38 1." />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Border Color" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="rgba" />
+			</attributelist>
+		</attribute>
+		<attribute name="focuscolor" get="1" set="1" type="float" size="4">
+			<digest>Border color while typing</digest>
+			<description>Border color while typing.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0.45 0.62 0.95 1." />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Focus Border Color" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="rgba" />
+			</attributelist>
+		</attribute>
+		<attribute name="hintcolor" get="1" set="1" type="float" size="4">
+			<digest>Placeholder color</digest>
+			<description>Placeholder color.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0.5 0.5 0.52 1." />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Placeholder Color" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="rgba" />
+			</attributelist>
+		</attribute>
+		<attribute name="selcolor" get="1" set="1" type="float" size="4">
+			<digest>Selection color</digest>
+			<description>Selection color.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0.3 0.42 0.7 0.6" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Selection Color" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="rgba" />
+			</attributelist>
+		</attribute>
 	</attributelist>
 	<seealsolist>
 		<seealso name="bachmcp.generator" />
 		<seealso name="bachmcp.transformer" />
 		<seealso name="bachmcp.selector" />
+		<seealso name="bachmcp.score" />
+		<seealso name="bachmcp.algorithm~" />
 		<seealso name="bachmcp.server" />
 	</seealsolist>
 </c74object>

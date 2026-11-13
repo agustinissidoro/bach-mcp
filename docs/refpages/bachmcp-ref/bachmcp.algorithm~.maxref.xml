@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.algorithm~" module="bachmcp" category="bachmcp">
+	<digest>A sound instance the model writes gen~ code for</digest>
+	<description>An instance of type <m>synth</m> or <m>fx</m>: the model answers a prompt by writing GenExpr, saved as <i>&lt;playground&gt;/gen/&lt;name&gt;.gendsp</i> and loaded in the <o>gen~</o> inside; its parameters, from <i>gen/&lt;name&gt;.json</i>, become knobs in a <o>bachmcp.gui.params</o> connected to its panel outlet and back. When the patch opens it loads the file of its name, if there is one. It talks to the <o>bachmcp.server</o> open in any patch.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">audio</metadata>
+		<metadata name="tag">gen</metadata>
+		<metadata name="tag">synth</metadata>
+		<metadata name="tag">fx</metadata>
+		<metadata name="tag">algorithm</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>prompt, param, mute, bypass, open, name ...</digest>
+		</inlet>
+		<inlet id="1" type="signal">
+			<digest>Audio in (fx)</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="signal">
+			<digest>Audio out</digest>
+		</outlet>
+		<outlet id="1" type="signal">
+			<digest>Audio out: the input, while bypassed</digest>
+		</outlet>
+		<outlet id="2" type="">
+			<digest>To bachmcp.gui.params</digest>
+		</outlet>
+		<outlet id="3" type="">
+			<digest>Dumpout: name, type, the gen~ code's messages</digest>
+		</outlet>
+	</outletlist>
+	<objarglist>
+		<objarg name="name" optional="0" type="symbol">
+			<digest>Instance name</digest>
+			<description>The name the model and the server know this instance by. Unique across open patches.</description>
+		</objarg>
+		<objarg name="type" optional="0" type="symbol">
+			<digest>synth or fx</digest>
+			<description><m>synth</m>: makes sound. <m>fx</m>: processes the audio at the right inlet.</description>
+		</objarg>
+	</objarglist>
+	<methodlist>
+		<method name="prompt">
+			<arglist><arg name="text" optional="0" type="list" /></arglist>
+			<digest>Prompt the model</digest>
+			<description>Sends the text to this instance's conversation, after its <at>skills</at> and <at>profile</at>. The model, local or Claude (whichever <o>bachmcp.server</o> runs), answers by writing for this instance, and what it writes loads by itself. Connect a <o>bachmcp.prompt</o> to send it.</description>
+		</method>
+		<method name="open">
+			<arglist></arglist>
+			<digest>Open the code</digest>
+			<description>Opens the <o>gen~</o> code.</description>
+		</method>
+		<method name="name">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Rename the instance</digest>
+			<description>Gives the instance a new name: the server and the model know it by this one from now on. One word.</description>
+		</method>
+		<method name="get_name">
+			<arglist></arglist>
+			<digest>Report the name</digest>
+			<description>Sends <m>name &lt;name&gt;</m> out of the dumpout outlet.</description>
+		</method>
+		<method name="get_type">
+			<arglist></arglist>
+			<digest>Report the type</digest>
+			<description>Sends <m>type &lt;type&gt;</m> out of the dumpout outlet.</description>
+		</method>
+		<method name="set_as_active_instance">
+			<arglist></arglist>
+			<digest>Make it the active instance</digest>
+			<description>Makes this the active instance: the one a Claude written to directly (Claude Desktop or Claude Code) works for.</description>
+		</method>
+		<method name="remove">
+			<arglist></arglist>
+			<digest>Forget its conversation</digest>
+			<description>The server forgets everything it holds for this instance: its answer (stopped), its prompts waiting, its conversation and its own skills. Files stay: <i>prompts/&lt;name&gt;.jsonl</i> is read again if it is prompted later.</description>
+		</method>
+		<method name="param">
+			<arglist><arg name="name" optional="0" type="symbol" /><arg name="value" optional="0" type="float" /></arglist>
+			<digest>Set a parameter</digest>
+			<description>Sets a parameter of the <o>gen~</o> code, e.g. <m>param feedback 0.4</m>. The panel sends these.</description>
+		</method>
+		<method name="mute">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Mute</digest>
+			<description><m>1</m>: silence at both outlets. <m>0</m>: sound.</description>
+		</method>
+		<method name="bypass">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Bypass</digest>
+			<description><m>1</m>: the input goes straight out, around the <o>gen~</o> code. <m>0</m>: through it.</description>
+		</method>
+		<method name="gen">
+			<arglist><arg name="path" optional="0" type="symbol" /></arglist>
+			<digest>Load a gen~ file</digest>
+			<description>Loads a <i>.gendsp</i> file in the <o>gen~</o> inside. What the model's <i>send_gen</i> does, by name.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="skills" get="1" set="1" type="atom" size="0">
+			<digest>Skills for this instance</digest>
+			<description><m>global</m> (default): the skills the <o>bachmcp.server</o> chose (its <at>skills</at>). Otherwise the names of skill files in <i>playground/skills/</i> (without <i>.md</i>), read after the profile's: this instance then reads only what it chose. Applied at the next prompt.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="atom" size="1" value="global" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Skills" />
+			</attributelist>
+		</attribute>
+		<attribute name="profile" get="1" set="1" type="symbol" size="1">
+			<digest>Profile for this instance</digest>
+			<description><m>global</m> (default): the server's profile (its <at>profile</at>). Otherwise a file in <i>playground/skills/profiles/</i> (without <i>.json</i>), e.g. <m>minimal-algorithmic-composer</m> or <m>minimal-electronic-composer</m>. Applied at the next prompt.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="global" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Profile" />
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<seealsolist>
+		<seealso name="bachmcp.gui.params" />
+		<seealso name="bachmcp.prompt" />
+		<seealso name="bachmcp.server" />
+		<seealso name="gen~" />
+	</seealsolist>
+</c74object>

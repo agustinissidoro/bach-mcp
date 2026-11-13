@@ -3,7 +3,7 @@
 
 <c74object name="bachmcp.server" module="bachmcp" category="bachmcp">
 	<digest>Run the bach-mcp server</digest>
-	<description>Starts and stops the bach-mcp server: a local model (<m>local</m>) or Claude (<m>claude</m>). One per patch, except one <m>local</m> and one <m>claude</m> together. Every instance in Max (<o>bachmcp.generator</o>, <o>bachmcp.transformer</o>, <o>bachmcp.selector</o>) talks to it. The attributes are written to <i>bachmcp.toml</i> when the object is created.</description>
+	<description>Starts and stops the bach-mcp server: a local model (<m>local</m>) or Claude (<m>claude</m>). One per patch, except one <m>local</m> and one <m>claude</m> together. Every instance in Max (<o>bachmcp.generator</o>, <o>bachmcp.transformer</o>, <o>bachmcp.selector</o>, <o>bachmcp.algorithm</o>, <o>bachmcp.score</o>, <o>bachmcp.algorithm~</o>) talks to it. The attributes are written to <i>bachmcp.toml</i> when the object is created; one left out keeps the value the file has.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
@@ -13,7 +13,7 @@
 	</metadatalist>
 	<inletlist>
 		<inlet id="0" type="">
-			<digest>start, stop, map_refresh, open, debug, install, model_catalog, download</digest>
+			<digest>start, stop, map_refresh, open, debug, verbose, get_active_instance, set_skills, set_profile, install, model_catalog, download</digest>
 		</inlet>
 	</inletlist>
 	<outletlist>
@@ -21,16 +21,16 @@
 			<digest>To bach.roll: writetxt, when a tool asks for the score</digest>
 		</outlet>
 		<outlet id="1" type="dictionary">
-			<digest>Each answer, as a dictionary: instance, tokens, time, answer</digest>
+			<digest>Each answer (instance, tokens, time, answer) and each prompt's stage (instance, status, profile, skills, skills_size), as a dictionary</digest>
 		</outlet>
 		<outlet id="2" type="">
-			<digest>Output of the server and the installer</digest>
+			<digest>Dumpout: the output of the server and the installer, the active instance</digest>
 		</outlet>
 	</outletlist>
 	<objarglist>
 		<objarg name="host" optional="0" type="symbol">
 			<digest>local or claude</digest>
-			<description><m>local</m>: a model running on this computer. <m>claude</m>: the tools served to Claude over MCP.</description>
+			<description><m>local</m>: a model running on this computer (<i>main.py run</i>). <m>claude</m>: prompts answered by Claude Code on your account, the tools served over MCP (<i>main.py serve</i>).</description>
 		</objarg>
 	</objarglist>
 	<methodlist>
@@ -52,17 +52,37 @@
 		<method name="map_refresh">
 			<arglist></arglist>
 			<digest>Resend the instances</digest>
-			<description>Sends again the names and types of every bachmcp instance in Max.</description>
+			<description>Asks every bachmcp instance in Max for its name and type, and sends the map to the server again.</description>
 		</method>
 		<method name="open">
 			<arglist></arglist>
 			<digest>Open the chat page</digest>
-			<description>Opens the chat page in the browser. Only for <m>local</m>.</description>
+			<description>Opens the chat page in the browser.</description>
 		</method>
 		<method name="debug">
 			<arglist><arg name="on" optional="0" type="int" /></arglist>
 			<digest>Print what Python sends</digest>
 			<description><m>1</m> prints every line from Python in the Max console.</description>
+		</method>
+		<method name="verbose">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Print each prompt's stage</digest>
+			<description><m>1</m>: prints in the Max console each stage of every prompt (received, queued, thinking, calling a tool, done...). The same as <at>verbose</at>.</description>
+		</method>
+		<method name="get_active_instance">
+			<arglist></arglist>
+			<digest>Report the active instance</digest>
+			<description>Sends the name of the active instance out of the dumpout outlet.</description>
+		</method>
+		<method name="set_skills">
+			<arglist><arg name="skills" optional="1" type="list" /></arglist>
+			<digest>Skills for every instance</digest>
+			<description>The skill files (in <i>playground/skills/</i>, without <i>.md</i>) read after the profile's, by every instance whose <at>skills</at> is <m>global</m>. <m>none</m>: no extra skills. Applied at the next prompt. The same as <at>skills</at>.</description>
+		</method>
+		<method name="set_profile">
+			<arglist><arg name="profile" optional="0" type="symbol" /></arglist>
+			<digest>Profile for every instance</digest>
+			<description>A profile in <i>playground/skills/profiles/</i> (without <i>.json</i>), read by every instance whose <at>profile</at> is <m>global</m>. Applied at the next prompt. The same as <at>profile</at>.</description>
 		</method>
 		<method name="install">
 			<arglist><arg name="what" optional="1" type="symbol" /></arglist>
@@ -81,9 +101,18 @@
 		</method>
 	</methodlist>
 	<attributelist>
+		<attribute name="active" get="1" set="1" type="int" size="1">
+			<digest>Start when the patch opens</digest>
+			<description><m>1</m>: the server starts by itself once the patch has loaded. <m>0</m> (default): it waits for <m>start</m>.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Start On Load" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
 		<attribute name="listen_port" get="1" set="1" type="int" size="1">
 			<digest>Port the server sends to Max</digest>
-			<description>UDP port Max listens on.</description>
+			<description>UDP port Max listens on (<i>[max] send_port</i>).</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="int" size="1" value="3000" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Listen Port" />
@@ -91,7 +120,7 @@
 		</attribute>
 		<attribute name="prompt_port" get="1" set="1" type="int" size="1">
 			<digest>Port Max sends to the server</digest>
-			<description>UDP port the server listens on.</description>
+			<description>UDP port the server listens on (<i>[max] receive_port</i>). One server at a time can hold it.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="int" size="1" value="3001" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Prompt Port" />
@@ -115,21 +144,73 @@
 		</attribute>
 		<attribute name="playground" get="1" set="1" type="symbol" size="1">
 			<digest>Folder for everything the model makes</digest>
-			<description>Algorithms, scores and conversations are saved here. Default: <i>playground/</i> in the package.</description>
+			<description>Algorithms, scores, gen~ code, skills and conversations are kept here. Default: <i>playground/</i> in the package.</description>
 			<attributelist>
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Playground" />
 			</attributelist>
 		</attribute>
 		<attribute name="model" get="1" set="1" type="symbol" size="1">
-			<digest>Local model</digest>
-			<description>A folder name in <i>models/</i>, a path, or a Hugging Face repo. Only for <m>local</m>.</description>
+			<digest>The model</digest>
+			<description><m>local</m>: a folder name in <i>models/</i>, a path, or a Hugging Face repo. <m>claude</m>: <m>opus</m>, <m>sonnet</m>, <m>haiku</m> or <m>fable</m>. Left out: the one in <i>bachmcp.toml</i>.</description>
 			<attributelist>
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Model" />
 			</attributelist>
 		</attribute>
+		<attribute name="effort" get="1" set="1" type="symbol" size="1">
+			<digest>How much Claude thinks</digest>
+			<description><m>claude</m> only: <m>low</m>, <m>medium</m>, <m>high</m>, <m>xhigh</m> or <m>max</m>. More thinking: slower, more tokens.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="medium" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Effort" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="5">
+					<enum name="low" />
+					<enum name="medium" />
+					<enum name="high" />
+					<enum name="xhigh" />
+					<enum name="max" />
+				</attribute>
+			</attributelist>
+		</attribute>
+		<attribute name="claude_code_prompt" get="1" set="1" type="symbol" size="1">
+			<digest>Claude Code's own system prompt</digest>
+			<description><m>claude</m> only. <m>true</m>: Claude Code's system prompt with the skill added to it. <m>false</m>: the skill alone, as the local model reads it (about 2,300 fewer tokens per request).</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="false" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Claude Code Prompt" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="2">
+					<enum name="true" />
+					<enum name="false" />
+				</attribute>
+			</attributelist>
+		</attribute>
+		<attribute name="profile" get="1" set="1" type="symbol" size="1">
+			<digest>Profile every instance reads</digest>
+			<description>A profile in <i>playground/skills/profiles/</i> (without <i>.json</i>): the list of skills new conversations read. Instances with their own <at>profile</at> read theirs.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="minimal-algorithmic-composer" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Profile" />
+			</attributelist>
+		</attribute>
+		<attribute name="skills" get="1" set="1" type="atom" size="0">
+			<digest>Skills every instance adds</digest>
+			<description>Skill files in <i>playground/skills/</i> (without <i>.md</i>), read after the profile's. <m>none</m> (default): none.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="atom" size="1" value="none" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Skills" />
+			</attributelist>
+		</attribute>
+		<attribute name="verbose" get="1" set="1" type="int" size="1">
+			<digest>Print each prompt's stage</digest>
+			<description><m>1</m>: prints in the Max console each stage of every prompt.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Verbose" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
 		<attribute name="context_size" get="1" set="1" type="int" size="1">
 			<digest>Tokens of conversation</digest>
-			<description>GGUF models: tokens the model reserves memory for.</description>
+			<description><m>local</m>, GGUF models: tokens the model reserves memory for.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="int" size="1" value="65536" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Context Size" />
@@ -137,14 +218,14 @@
 		</attribute>
 		<attribute name="extra_args" get="1" set="1" type="atom" size="0">
 			<digest>More flags for the model server</digest>
-			<description>Passed as they are to the model server.</description>
+			<description><m>local</m>: passed as they are to the model server.</description>
 			<attributelist>
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Extra Arguments" />
 			</attributelist>
 		</attribute>
 		<attribute name="max_tokens" get="1" set="1" type="int" size="1">
 			<digest>Limit for one reply</digest>
-			<description>Includes the thinking.</description>
+			<description><m>local</m>: includes the thinking.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="int" size="1" value="16384" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Max Tokens" />
@@ -152,7 +233,7 @@
 		</attribute>
 		<attribute name="temperature" get="1" set="1" type="float" size="1">
 			<digest>Sampling temperature</digest>
-			<description>Sampling temperature.</description>
+			<description><m>local</m>: sampling temperature.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="float" size="1" value="0.7" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Temperature" />
@@ -160,7 +241,7 @@
 		</attribute>
 		<attribute name="top_p" get="1" set="1" type="float" size="1">
 			<digest>Nucleus sampling</digest>
-			<description>Nucleus sampling.</description>
+			<description><m>local</m>: nucleus sampling.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="float" size="1" value="0.8" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Top P" />
@@ -168,7 +249,7 @@
 		</attribute>
 		<attribute name="top_k" get="1" set="1" type="int" size="1">
 			<digest>Top-k sampling</digest>
-			<description>Top-k sampling.</description>
+			<description><m>local</m>: top-k sampling.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="int" size="1" value="20" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Top K" />
@@ -176,7 +257,7 @@
 		</attribute>
 		<attribute name="presence_penalty" get="1" set="1" type="float" size="1">
 			<digest>Against repetition (0-2)</digest>
-			<description>0 is off.</description>
+			<description><m>local</m>: 0 is off.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="float" size="1" value="1.5" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Presence Penalty" />
@@ -184,7 +265,7 @@
 		</attribute>
 		<attribute name="reasoning" get="1" set="1" type="symbol" size="1">
 			<digest>Let the model think first</digest>
-			<description><m>on</m> or <m>off</m>.</description>
+			<description><m>local</m>: <m>on</m> or <m>off</m>.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="symbol" size="1" value="off" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Reasoning" />
@@ -203,7 +284,7 @@
 		</attribute>
 		<attribute name="max_tool_rounds" get="1" set="1" type="int" size="1">
 			<digest>Tool calls in one answer</digest>
-			<description>Tool calls the model may chain in one answer.</description>
+			<description><m>local</m>: rounds of tool calls the model may chain in one answer.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="int" size="1" value="8" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Max Tool Rounds" />
@@ -223,7 +304,7 @@
 		</attribute>
 		<attribute name="open_browser" get="1" set="1" type="symbol" size="1">
 			<digest>Open the chat page</digest>
-			<description>Opens the chat page when the model is ready.</description>
+			<description>Opens the chat page when the model is ready (<m>1</m>/<m>0</m> also work).</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="symbol" size="1" value="true" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Open Browser" />
@@ -250,6 +331,9 @@
 		<seealso name="bachmcp.generator" />
 		<seealso name="bachmcp.transformer" />
 		<seealso name="bachmcp.selector" />
+		<seealso name="bachmcp.score" />
+		<seealso name="bachmcp.algorithm~" />
+		<seealso name="bachmcp.chat" />
 		<seealso name="bachmcp.translate" />
 	</seealsolist>
 </c74object>

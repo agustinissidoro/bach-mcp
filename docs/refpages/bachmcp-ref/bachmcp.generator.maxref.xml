@@ -3,25 +3,170 @@
 
 <c74object name="bachmcp.generator" module="bachmcp" category="bachmcp">
 	<digest>Generator with its parameter panel</digest>
-	<description>Typed in a box, becomes a bpatcher of <o>bachmcp.bpatcher.generator</o>: <o>bachmcp.algo.generate</o> with its <o>bachmcp.gui.params</o> panel and two <o>bachmcp.translate</o>, ready to connect to a <o>bach.roll</o>. The first argument is the instance's name.</description>
+	<description>Typed in a box with a name, e.g. <m>bachmcp.generator t1</m>, it replaces itself with a <o>bpatcher</o> of <o>bachmcp.bpatcher.algorithm</o> of type <m>generator</m>: a generator (<m>function produce(p)</m>: music from nothing), with its <o>bachmcp.gui.params</o> panel and a <o>bachmcp.translate</o> on each side, ready to connect to a <o>bach.roll</o>. Every parameter change outputs a new score (<at>auto_dump</at> 1). Without a name it says so in the Max console and stays as it is.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
 		<metadata name="tag">algorithm</metadata>
-		<metadata name="tag">generate</metadata>
 		<metadata name="tag">score</metadata>
 		<metadata name="tag">panel</metadata>
+		<metadata name="tag">generate</metadata>
 	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>llll from bach.roll; prompt, param, bang, load_algo, open, name ...</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>To bach.roll: the score (llll), and dump, clearselection, sel note ...</digest>
+		</outlet>
+		<outlet id="1" type="bang">
+			<digest>bang when a process is done</digest>
+		</outlet>
+		<outlet id="2" type="">
+			<digest>Dumpout: <m>algo_loaded</m>, <m>algo_done</m>, <m>algo_error</m>, <m>error</m>, <m>processing</m>, <m>specs</m>, <m>name</m>, <m>type</m></digest>
+		</outlet>
+	</outletlist>
 	<objarglist>
 		<objarg name="name" optional="0" type="symbol">
 			<digest>Instance name</digest>
 			<description>The name the model and the server know this instance by. Unique across open patches.</description>
 		</objarg>
 	</objarglist>
+	<methodlist>
+		<method name="llll">
+			<arglist><arg name="score" optional="0" type="llll" /></arglist>
+			<digest>Score in (llll)</digest>
+			<description>A score from <o>bach.roll</o> (gathered syntax), translated to a dictionary on the way in: only passed through while bypassed.</description>
+		</method>
+		<method name="prompt">
+			<arglist><arg name="text" optional="0" type="list" /></arglist>
+			<digest>Prompt the model</digest>
+			<description>Sends the text to this instance's conversation, after its <at>skills</at> and <at>profile</at>. The model, local or Claude (whichever <o>bachmcp.server</o> runs), answers by writing for this instance, and what it writes loads by itself. Connect a <o>bachmcp.prompt</o> to send it.</description>
+		</method>
+		<method name="open">
+			<arglist></arglist>
+			<digest>Open the code</digest>
+			<description>Opens the loaded algorithm's code in an editor.</description>
+		</method>
+		<method name="name">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Rename the instance</digest>
+			<description>Gives the instance a new name: the server and the model know it by this one from now on. One word.</description>
+		</method>
+		<method name="get_name">
+			<arglist></arglist>
+			<digest>Report the name</digest>
+			<description>Sends <m>name &lt;name&gt;</m> out of the dumpout outlet.</description>
+		</method>
+		<method name="get_type">
+			<arglist></arglist>
+			<digest>Report the type</digest>
+			<description>Sends <m>type &lt;type&gt;</m> out of the dumpout outlet.</description>
+		</method>
+		<method name="set_as_active_instance">
+			<arglist></arglist>
+			<digest>Make it the active instance</digest>
+			<description>Makes this the active instance: the one a Claude written to directly (Claude Desktop or Claude Code) works for.</description>
+		</method>
+		<method name="remove">
+			<arglist></arglist>
+			<digest>Forget its conversation</digest>
+			<description>The server forgets everything it holds for this instance: its answer (stopped), its prompts waiting, its conversation and its own skills. Files stay: <i>prompts/&lt;name&gt;.jsonl</i> is read again if it is prompted later.</description>
+		</method>
+		<method name="bang">
+			<arglist></arglist>
+			<digest>Output the score</digest>
+			<description>Outputs the score of the current settings: the last one again if nothing changed since, otherwise a new run. A load is not a run: nothing goes out until a <m>bang</m> (or a parameter change with <at>auto_dump</at> 1).</description>
+		</method>
+		<method name="run">
+			<arglist></arglist>
+			<digest>Run now</digest>
+			<description>Runs the algorithm now, changed or not.</description>
+		</method>
+		<method name="repeat">
+			<arglist></arglist>
+			<digest>Output again</digest>
+			<description>Sends the last score (and a selector's commands to the roll) again.</description>
+		</method>
+		<method name="param">
+			<arglist><arg name="name" optional="0" type="symbol" /><arg name="value" optional="0" type="list" /></arglist>
+			<digest>Set a parameter</digest>
+			<description>Sets a parameter of the algorithm, e.g. <m>param times 32</m> or <m>param register 4800 8400</m>. Pitch parameters also take note names (<m>param root Db4</m>). Parameters come in only this way, so any name is free for them; a bare <m>times 32</m> is refused.</description>
+		</method>
+		<method name="load">
+			<arglist><arg name="path" optional="0" type="symbol" /></arglist>
+			<digest>Load an algorithm file</digest>
+			<description>Loads a file. A load is not a run: it says <m>algo_loaded</m> out of the dumpout outlet and nothing else goes out until a <m>bang</m>.</description>
+		</method>
+		<method name="load_algo">
+			<arglist><arg name="path" optional="0" type="symbol" /></arglist>
+			<digest>Load an algorithm file</digest>
+			<description>The same as <m>load</m>; a failure says <m>error: impossible to load ...</m>. This is what the model's <i>send_algorithm</i> sends.</description>
+		</method>
+		<method name="try_load_algo">
+			<arglist><arg name="path" optional="0" type="symbol" /></arglist>
+			<digest>Load, silently</digest>
+			<description>The same as <m>load</m>, but a file that cannot be loaded is ignored without an error.</description>
+		</method>
+		<method name="reload">
+			<arglist></arglist>
+			<digest>Read the file again</digest>
+			<description>Reads the algorithm file again. It also happens by itself when the file changes (see <m>watch</m>).</description>
+		</method>
+		<method name="get_specs">
+			<arglist></arglist>
+			<digest>Send the parameters to the panel</digest>
+			<description>Sends the loaded algorithm's parameters to the panel again, with their current values. Answers <m>specs 1</m> (sent) or <m>specs 0</m> (no algorithm loaded) out of the dumpout outlet.</description>
+		</method>
+		<method name="auto_dump">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Output on every parameter change</digest>
+			<description><m>1</m> (default): a parameter change outputs a score. <m>0</m>: only <m>bang</m> does.</description>
+		</method>
+		<method name="snap">
+			<arglist><arg name="mode" optional="0" type="int" /></arglist>
+			<digest>Round the output's pitches</digest>
+			<description><m>0</m> semitones, <m>1</m> quarter tones, <m>3</m> free (default).</description>
+		</method>
+		<method name="bypass">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Bypass</digest>
+			<description><m>1</m>: runs do nothing, and a score at the inlet goes straight out. <m>0</m> (default): the algorithm runs.</description>
+		</method>
+		<method name="write_to_playground">
+			<arglist></arglist>
+			<digest>Save the last score</digest>
+			<description>Writes the last score sent to <i>&lt;playground&gt;/scores/&lt;name&gt;.json</i>.</description>
+		</method>
+		<method name="verbose">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Say what happens</digest>
+			<description><m>1</m>: says in the Max console what happens. Default <m>0</m>: only errors.</description>
+		</method>
+		<method name="watch">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Reload on file changes</digest>
+			<description><m>1</m> (default): reloads the file when it changes on disk.</description>
+		</method>
+		<method name="sync">
+			<arglist><arg name="message" optional="0" type="list" /></arglist>
+			<digest>Apply the panel's values without running</digest>
+			<description>What the panel sends after a load: <m>sync param ...</m>, <m>sync snap ...</m>, <m>sync bypass ...</m>, <m>sync source_mode ...</m>, <m>sync process_only_selection ...</m>, <m>sync dump_selection_only ...</m>. Applied without a run.</description>
+		</method>
+		<method name="dictionary">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Score in</digest>
+			<description>A score as a dictionary (bachjson-complete). A transformer and a selector take it as their source, according to <at>source_mode</at>; it never runs the algorithm by itself, so there is no loop through a roll. A generator only passes it through while bypassed.</description>
+		</method>
+	</methodlist>
 	<seealsolist>
-		<seealso name="bachmcp.bpatcher.generator" />
-		<seealso name="bachmcp.algo.generate" />
+		<seealso name="bachmcp.bpatcher.algorithm" />
+		<seealso name="bachmcp.algorithm" />
 		<seealso name="bachmcp.gui.params" />
+		<seealso name="bachmcp.prompt" />
+		<seealso name="bachmcp.server" />
 		<seealso name="bach.roll" />
 	</seealsolist>
 </c74object>

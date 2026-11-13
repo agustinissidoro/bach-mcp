@@ -1,8 +1,9 @@
 /*
 bachmcp.lib.markers.js
 ----------------------
-Markers with a role: the measures of a score still written in milliseconds.
-bach.quantize (measureinfo "auto") reads them to turn a bach.roll into measured
+Markers: labels on the timeline (a section, a point to find again), and markers
+with a role, the measures of a score still written in milliseconds, which
+bach.quantize (measureinfo "auto") reads to turn a bach.roll into measured
 notation. They live in the score's header, in bachjson-complete:
 
     header.markers: [{onset, name: [], role, content?}, ...]
@@ -10,6 +11,7 @@ notation. They live in the score's header, in bachjson-complete:
 `x` is a score: one being built (score()), or a source. Every function writes
 into x.header.markers, kept in time order, and returns x (grid returns where it ended).
 
+    label(x, onset, "A")             a plain marker with a name (role "none")
     timesig(x, onset, [4, 4])        a time signature; it is also the barline of the measure it opens
     barline(x, onset)                a barline (not where a timesig already is)
     division(x, onset)               a beat inside a measure (not the first: that is the barline)
@@ -79,6 +81,22 @@ function put(x, what, onset, role, content, name) {
   if (content) marker.content = content;
   markers.push(marker);
   sort(markers);
+  return x;
+}
+
+/** A plain marker with a name: a label. The same name at the same time is written once. */
+function label(x, onset, name) {
+  const markers = list(x, "label");
+  if (!isNumber(onset)) throw new AlgoError(`label: onset must be a number of milliseconds, got ${JSON.stringify(onset)}`);
+  const names = [].concat(name === undefined ? [] : name).filter((n) => n !== "");
+  if (!names.length || !names.every((n) => typeof n === "string" || isNumber(n))) {
+    throw new AlgoError(`label: a label has a name, e.g. label(x, 0, "A"), got ${JSON.stringify(name)}`);
+  }
+  const text = JSON.stringify(names);
+  if (!markers.some((m) => m.onset === onset && (m.role || "none") === "none" && JSON.stringify(m.name) === text)) {
+    markers.push({ onset, name: names, role: "none" });
+    sort(markers);
+  }
   return x;
 }
 
@@ -155,4 +173,4 @@ function clearGrid(x) {
   return x;
 }
 
-module.exports = { timesig, barline, division, subdivision, tempo, grid, markersOf, clearGrid, ROLES };
+module.exports = { label, timesig, barline, division, subdivision, tempo, grid, markersOf, clearGrid, ROLES };

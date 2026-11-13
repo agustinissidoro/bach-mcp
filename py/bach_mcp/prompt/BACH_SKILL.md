@@ -289,8 +289,15 @@ In scope, without imports:
 - **Score**: `const s = score()`; `const v = s.voice("Flute")` (created on
   first use, top staff first); `v.note(onset, pitch, dur, fields)`;
   `v.chord(onset, [pitch, ...], dur, fields)` (both return the chord);
-  `s.marker(onset, "A")`; `v.end` and `s.end` (ms). `fields` are the note's
-  own, see Marks. `produce` returns `s`.
+  `v.end` and `s.end` (ms). `fields` are the note's own, see Marks. `produce`
+  returns `s`.
+- **Labels**: `label(x, onset, "A")` puts a named marker on the timeline of
+  any score, the one you are making or a `source`: a section, a point to find
+  again. Only when the request asks for sections or labels.
+<!-- selector -->
+  A selector writes them into `source` and still returns the notes it picks;
+  the markers of `source` then replace the roll's.
+<!-- /selector -->
 - **Units**: `SEMITONE` 100, `QUARTERTONE` 50, `OCTAVE` 1200, `MIDDLE_C` 6000,
   `SECOND` 1000.
 - **Randomness**, seeded: the same parameters always give the same score.
@@ -319,7 +326,7 @@ In scope, without imports:
     `pitchesOf(x)`, `span(x)` (`[start, end]` in ms), `between(x, from, to)`
     (chords starting then), `sounding(x, t)`, `chordEnd(chord)`.
   - Parts: `phrases(x, gap)` (groups separated by more than `gap` ms of
-    silence), `sections(x, gap)` (at the markers, else at silences longer
+    silence), `sections(x, gap)` (at the labels, else at silences longer
     than `gap`).
   - Lines: `melody(x, which)` (one pitch per onset: "top", "bottom" or
     "mean"), `intervals(values)`, `contour(x)` (1 up, 0 same, -1 down),

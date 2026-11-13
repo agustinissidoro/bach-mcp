@@ -13,12 +13,12 @@ The panel builds itself from the spec the runner sends when it loads a file
 (bachmcp.gui.params.panel.js, with the elements of bachmcp.gui.params.elements.js),
 or from a file: spec_file <path> reads the same spec from a .json (the one send_gen writes
 for a synth or an fx, gen/<name>.json):
-  title       set active ("set_as_active_instance": the instance Claude's tools work for), bypass;
+  title       bypass ("bypass 0|1"), auto dump ("auto_dump 1|0", on by default; not for a synth or an fx);
+              the algorithm's description under it, wrapped on up to four lines;
   options     drags land on round values (alt lets one through; on a card set free, alt snaps it);
-              reset all; a source's process sel. ("process_only_selection 0|1"); bypass ("bypass 0|1"), repeat; a pitch card's snap toggle ½ | ¼ | free ("snap 0|1|3"),
+              reset all; a source's process sel. ("process_only_selection 0|1"); a pitch card's snap toggle ½ | ¼ | free ("snap 0|1|3"),
               a time card's 100ms | 10ms | free;
-              a transformer's source: notes, write
-              (write_to_playground), capture and its mode,
+              a transformer's source: capture and its mode,
               non-destructive | destructive (sends "source_mode 1|0");
               a selector's: the same, and whole score | selection only (sends "dump_selection_only 0|1")
   parameters  one card each. Moving a control sends "param <name> <value...>".
@@ -31,8 +31,8 @@ It is saved with the patch (parameters, values and the file path) and shows
 them again on reopening; it sends nothing then (no load to the runner). It also
 works with pattr / pattrstorage: give it a scripting name to store presets.
 
-The algorithm's one-line description comes in the spec (the // comment that opens
-its file) and is drawn under the title row; one_line_description <text...> replaces
+The algorithm's description comes in the spec (the // comment that opens its file)
+and is drawn under the title row, wrapped; one_line_description <text...> replaces
 it by hand (no text removes it).
 
 The prompt's progress: one animated icon left of the type, fed by bachmcp.server's
@@ -47,7 +47,7 @@ algorithm is loaded (title row, output and, for a transformer or a selector, the
 source row); kept by clear and saved with the patch. The runner's type echo does
 the same. A synth or an fx (a spec_file's "type") looks its own way: knobs instead
 of sliders, mute in the title row (sends "mute 0|1"; bypass for an fx only), no
-output or source rows. mute 0|1 sets it from outside, as bypass 0|1 does.
+auto dump, no source row. mute 0|1 sets it from outside, as bypass 0|1 does.
 
 Other messages: reset (all parameters to their declared values), bang (send
 every value), clear, autosize 0/1, set_name [name] (drawn while no algorithm is
@@ -77,7 +77,7 @@ if (!panel) post("bachmcp.gui.params: cannot load bachmcp.gui.params.panel.js; t
 let autosizing = true;
 
 setinletassist(0, "from a runner's middle outlet: spec, set, status, source, source_mode; one_line_description <text>; prompt <stage> [detail]");
-setoutletassist(0, "to the runner: param <name> <value...>; capture, write_to_playground, source_mode, set_as_active_instance; bypass, mute");
+setoutletassist(0, "to the runner: param <name> <value...>; capture, source_mode, auto_dump; bypass, mute");
 
 function emit(messages) {
   for (const m of messages) outlet(0, m);
@@ -228,8 +228,10 @@ function type(t) {
   set_type(t);
 }
 
-// the runner's auto_dump echo: nothing to show yet
-function auto_dump() {}
+// the runner's auto_dump echo: the toggle shows it
+function auto_dump(flag) {
+  if (panel && panel.setAutoDump(flag)) mgraphics.redraw();
+}
 
 function one_line_description(...text) {
   if (panel && panel.setDescription(text.join(" "))) refresh();

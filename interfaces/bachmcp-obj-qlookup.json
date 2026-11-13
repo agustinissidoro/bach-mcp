@@ -11,18 +11,6 @@
       "MCP"
     ]
   },
-  "bachmcp.algo.transform": {
-    "digest": "Transform a score with an algorithm",
-    "module": "bachmcp",
-    "category": [
-      "bachmcp"
-    ],
-    "keywords": [
-      "algorithm",
-      "transform",
-      "score"
-    ]
-  },
   "bachmcp.translate": {
     "digest": "Convert scores between bach and dictionaries",
     "module": "bachmcp",
@@ -34,32 +22,6 @@
       "json",
       "dictionary",
       "llll"
-    ]
-  },
-  "bachmcp.algo.select": {
-    "digest": "Select notes of a score with an algorithm",
-    "module": "bachmcp",
-    "category": [
-      "bachmcp"
-    ],
-    "keywords": [
-      "algorithm",
-      "select",
-      "selection",
-      "score"
-    ]
-  },
-  "bachmcp.algo.generate": {
-    "digest": "Generate a score with an algorithm",
-    "module": "bachmcp",
-    "category": [
-      "bachmcp"
-    ],
-    "keywords": [
-      "algorithm",
-      "generate",
-      "produce",
-      "score"
     ]
   },
   "bachmcp.gui.params": {
@@ -115,42 +77,6 @@
       "panel"
     ]
   },
-  "bachmcp.bpatcher.transformer": {
-    "digest": "Transformer and panel, for a bpatcher",
-    "module": "bachmcp",
-    "category": [
-      "bachmcp"
-    ],
-    "keywords": [
-      "algorithm",
-      "transform",
-      "bpatcher"
-    ]
-  },
-  "bachmcp.bpatcher.selector": {
-    "digest": "Selector and panel, for a bpatcher",
-    "module": "bachmcp",
-    "category": [
-      "bachmcp"
-    ],
-    "keywords": [
-      "algorithm",
-      "select",
-      "bpatcher"
-    ]
-  },
-  "bachmcp.bpatcher.generator": {
-    "digest": "Generator and panel, for a bpatcher",
-    "module": "bachmcp",
-    "category": [
-      "bachmcp"
-    ],
-    "keywords": [
-      "algorithm",
-      "generate",
-      "bpatcher"
-    ]
-  },
   "bachmcp.prompt": {
     "digest": "A chat-style prompt box",
     "module": "bachmcp",
@@ -162,6 +88,70 @@
       "text",
       "interface",
       "chat"
+    ]
+  },
+  "bachmcp.algorithm": {
+    "digest": "An algorithm instance of any type",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "generate",
+      "transform",
+      "select",
+      "score"
+    ]
+  },
+  "bachmcp.bpatcher.algorithm": {
+    "digest": "An algorithm instance with its panel, as a bpatcher",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "algorithm",
+      "bpatcher",
+      "panel"
+    ]
+  },
+  "bachmcp.score": {
+    "digest": "An instance the model writes a score for",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "score",
+      "write",
+      "compose"
+    ]
+  },
+  "bachmcp.algorithm~": {
+    "digest": "A sound instance the model writes gen~ code for",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "audio",
+      "gen",
+      "synth",
+      "fx",
+      "algorithm"
+    ]
+  },
+  "bachmcp.chat": {
+    "digest": "The chat page in a Max window",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "chat",
+      "page",
+      "interface"
     ]
   }
 }

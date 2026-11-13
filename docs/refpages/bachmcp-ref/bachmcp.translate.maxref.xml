@@ -3,7 +3,7 @@
 
 <c74object name="bachmcp.translate" module="bachmcp" category="bachmcp">
 	<digest>Convert scores between bach and dictionaries</digest>
-	<description>Converts a <o>bach.roll</o> score to a dictionary (bachjson) and back, without losing anything. The dictionary has an optional <i>header</i> (clefs, keys, voicenames, markers, slotinfo...) and <i>voices</i> &gt; <i>chords</i> (<i>onset</i>, <i>notes</i>) &gt; <i>notes</i> (<i>pitch</i>, <i>dur</i>, <i>vel</i>, and optionally <i>breakpoints</i>, <i>slots</i>, <i>articulations</i>, <i>name</i>, <i>flag</i>). Times in ms, pitches in midicents (6000 = middle C). Full specification: <i>bachjson-syntax-specification.md</i>.</description>
+	<description>Converts a <o>bach.roll</o> score to a dictionary (bachjson-complete) and back, without losing anything, and translates files with <m>read</m> and <m>readwrite</m>. The dictionary has an optional <i>header</i> (clefs, keys, voicenames, markers, slotinfo...) and <i>voices</i> &gt; <i>chords</i> (<i>onset</i>, <i>notes</i>) &gt; <i>notes</i> (<i>pitch</i>, <i>dur</i>, <i>vel</i>, and optionally <i>breakpoints</i>, <i>slots</i>, <i>articulations</i>, <i>name</i>, <i>flag</i>). Times in ms, pitches in midicents (6000 = middle C). Every direction works, <m>json</m> to <m>json</m> and <m>llll</m> to <m>llll</m> included: they come out checked and in bach's order. Full specification: <i>bachjson-syntax-specification.md</i>.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
@@ -14,31 +14,42 @@
 	</metadatalist>
 	<inletlist>
 		<inlet id="0" type="">
-			<digest>llll or dictionary</digest>
+			<digest>llll or dictionary; read, readwrite</digest>
 		</inlet>
 	</inletlist>
 	<outletlist>
 		<outlet id="0" type="">
 			<digest>Score in the @to format, or a message passed through (@transparent 1)</digest>
 		</outlet>
+		<outlet id="1" type="">
+			<digest>readwrite done</digest>
+		</outlet>
 	</outletlist>
-	<objarglist>
-	</objarglist>
 	<methodlist>
 		<method name="llll">
 			<arglist><arg name="score" optional="0" type="llll" /></arglist>
 			<digest>Score in (llll)</digest>
-			<description>A score in <o>bach.roll</o>'s gathered syntax, when <at>from</at> is <m>llll</m> or <m>t</m>.</description>
+			<description>A score in <o>bach.roll</o>'s gathered syntax, when <at>from</at> is <m>llll</m> (native) or <m>t</m> (text).</description>
 		</method>
 		<method name="dictionary">
 			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
 			<digest>Score in (dictionary)</digest>
 			<description>A score as a dictionary, when <at>from</at> is <m>json</m>.</description>
 		</method>
+		<method name="read">
+			<arglist><arg name="path" optional="0" type="symbol" /></arglist>
+			<digest>Translate a file out</digest>
+			<description>Reads a file and sends it, translated, out of the left outlet in the <at>to</at> format. A file is JSON when its first character is <m>{</m>, whatever its extension; anything else is read as bach text.</description>
+		</method>
+		<method name="readwrite">
+			<arglist><arg name="in" optional="0" type="symbol" /><arg name="out" optional="1" type="symbol" /></arglist>
+			<digest>Translate a file into a file</digest>
+			<description>Translates a file into another, then sends <m>readwrite done</m> out of the right outlet. Without <m>out</m> the result goes next to <m>in</m> with the same name: a JSON file becomes <i>&lt;name&gt;.txt</i> (bach text), a bach file <i>&lt;name&gt;.json</i>. An <m>out</m> ending in <i>.json</i> is written as JSON, any other as bach text.</description>
+		</method>
 		<method name="anything">
 			<arglist><arg name="message" optional="0" type="list" /></arglist>
 			<digest>Any other message</digest>
-			<description>With <at>transparent</at> 1, any message that is not a native llll or <m>dictionary</m> &lt;name&gt; goes out of the outlet unchanged. With <at>transparent</at> 0 it is refused with an error. With <at>from</at> <m>t</m> every message is read as a text llll, so nothing is passed through.</description>
+			<description>With <at>transparent</at> 1, any message that is not a native llll or <m>dictionary</m> &lt;name&gt; (a <m>bang</m>, a number, <m>dump</m>...) goes out of the outlet unchanged. With <at>transparent</at> 0 it is refused with an error. With <at>from</at> <m>t</m> every message is read as a text llll, so nothing is passed through.</description>
 		</method>
 	</methodlist>
 	<attributelist>
@@ -57,7 +68,7 @@
 		</attribute>
 		<attribute name="to" get="1" set="1" type="symbol" size="1">
 			<digest>Output format</digest>
-			<description><m>json</m>: a dictionary. <m>llll</m>: native bach llll. <m>t</m>: text llll.</description>
+			<description><m>json</m>: a dictionary this object owns, filled again at every output. <m>llll</m>: native bach llll. <m>t</m>: text llll (Max's message limit applies).</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="symbol" size="1" value="json" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Output Format" />
@@ -70,17 +81,36 @@
 		</attribute>
 		<attribute name="transparent" get="1" set="1" type="int" size="1">
 			<digest>Pass other messages through</digest>
-			<description>1 (default): messages that are not a native llll or a dictionary go out of the outlet unchanged. 0: only lllls and dictionaries are taken. With <at>from</at> <m>t</m> every message is a text llll, so nothing is passed through.</description>
+			<description><m>1</m> (default): messages that are not a native llll or a dictionary go out of the outlet unchanged. <m>0</m>: only lllls and dictionaries are taken.</description>
 			<attributelist>
 				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
 				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Pass Other Messages Through" />
 				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
 			</attributelist>
 		</attribute>
+		<attribute name="merge_onset_chords" get="1" set="1" type="int" size="1">
+			<digest>One chord per onset in each voice</digest>
+			<description><m>1</m>: in each voice, the chords with the same onset go out as one chord (the first one's, then the others' notes, in order). <m>0</m> (default): chords as they came. It applies to every output: the outlet, <m>read</m> and <m>readwrite</m>.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="One Chord Per Onset In Each Voice" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+		<attribute name="force_json_as_txt" get="1" set="1" type="int" size="1">
+			<digest>Write JSON into .txt files</digest>
+			<description><m>readwrite</m>: <m>1</m> writes JSON into <i>.txt</i> names instead; without <m>out</m>, <i>&lt;name&gt;.txt</i>, so a bach <i>.txt</i> file is replaced by its JSON.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Write JSON Into .txt Files" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
 	</attributelist>
 	<seealsolist>
 		<seealso name="bach.roll" />
-		<seealso name="bachmcp.algo.transform" />
+		<seealso name="bachmcp.algorithm" />
+		<seealso name="bachmcp.bpatcher.algorithm" />
 		<seealso name="dict" />
 	</seealsolist>
 </c74object>

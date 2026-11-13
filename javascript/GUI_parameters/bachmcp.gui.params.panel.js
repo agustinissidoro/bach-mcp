@@ -1,14 +1,14 @@
 /*
 bachmcp.gui.params.panel.js
 ---------------------------
-The Panel: a title row (the algorithm, its type, bypass and "set active": the
-instance Claude's tools work for, sent as "set_as_active_instance"), under it the
-algorithm's one-line description when its file has one (the spec's description:
-the // comment that opens the file), then two sections.
+The Panel: a title row (the algorithm, its type, bypass and the "auto dump" toggle,
+sent as "auto_dump 1|0", on by default), under it the algorithm's description when
+its file has one (the spec's description: the // comment that opens the file),
+wrapped on up to DESCRIPTION_LINES lines, then the sections.
 Left of the type, one animated icon follows the instance's prompt (setPrompt).
 Drags land on each slider's grid; alt lets one through. "Options": reset
-all; then bypass ("bypass 0|1"), repeat ("repeat"); pitch cards toggle ½ | ¼ | free ("snap 0|1|3"), time cards 100ms | 10ms | free; a transformer adds its source card: how many notes, write
-(write_to_playground), capture and the source mode as two
+all; pitch cards toggle ½ | ¼ | free ("snap 0|1|3"), time cards 100ms | 10ms | free; a transformer adds its source card:
+capture and the source mode as two
 segments, non-destructive (the source is held; every output starts again from
 it) or destructive (every score at the runner's inlet becomes the source), sent
 as "source_mode 1|0". A selector has the same card, and under the mode
@@ -17,8 +17,8 @@ control. A status line closes the panel.
 
 A synth or an fx (gen~: it makes sound) has its own look: its sliders are knobs
 (elements' Knob: same messages), in a grid of cards before the toggles and menus;
-mute in the title row ("mute 0|1"), and bypass for an fx only; no output or
-source rows, no snap toggles. gen~ takes numbers only: a menu shows its words and
+mute in the title row ("mute 0|1"), and bypass for an fx only; no auto dump, no
+source row, no snap toggles. gen~ takes numbers only: a menu shows its words and
 sends the index of the chosen one, from 0 ("param shape 1").
 
 Size: a bigger panel draws its parameters bigger (layout: the scale grows with
@@ -104,6 +104,7 @@ Panel.prototype.clear = function () {
   this.involutive = false;  // selectors: sel (false) or select (true)
   this.selectionOnly = true;  // selectors: dump_selection_only
   this.bypass = false;
+  this.autoDump = true;  // "auto_dump 1|0": every change outputs a score (the runner's default)
   this.mute = false;  // synth and fx: "mute 0|1"
   this.withinSelection = false;  // process_only_selection
   this.pitchSnap = 3;  // the output's pitches: 0 semitones, 1 quarter tones, 3 free
@@ -183,6 +184,7 @@ Panel.prototype.setSpec = function (spec) {
   if (this.hasSource() && this.sourceMode !== "nondestructive") messages.push(["source_mode", 0]);
   if (this.type === "selector" && !this.selectionOnly) messages.push(["dump_selection_only", 0]);
   if (this.bypass && this.hasBypass()) messages.push(["bypass", 1]);
+  if (!this.autoDump && !this.audio()) messages.push(["auto_dump", 0]);
   if (this.mute && this.audio()) messages.push(["mute", 1]);
   if (this.hasSource() && this.withinSelection) messages.push(["process_only_selection", 1]);
   if (this.pitchSnap !== 3) messages.push(["snap", this.pitchSnap]);
@@ -228,6 +230,13 @@ Panel.prototype.setWithinSelection = function (flag) {
 Panel.prototype.setBypass = function (flag) {
   if (String(flag) !== "0" && String(flag) !== "1") return false;
   this.bypass = String(flag) === "1";
+  return true;
+};
+
+/** auto_dump set from outside (the runner's echo). */
+Panel.prototype.setAutoDump = function (flag) {
+  if (String(flag) !== "0" && String(flag) !== "1") return false;
+  this.autoDump = String(flag) === "1";
   return true;
 };
 
@@ -324,10 +333,44 @@ Panel.prototype.setDescription = function (text) {
   return true;
 };
 
-/** The height of the description line under the title row (0 without one). */
+var DESCRIPTION_LINES = 4;  // the description wraps on up to this many lines, the last cut with "…"
+var DESCRIPTION_SIZE = 11;  // its font size at chrome 1
+
+/**
+ * Words in lines no wider than width, by measure(text) -> width; at most max lines,
+ * the last one taking what is left (cut later by fit).
+ */
+function wrap(text, width, measure, max) {
+  var words = String(text).split(" "), lines = [], line = "";
+  for (var i = 0; i < words.length; i++) {
+    var next = line ? line + " " + words[i] : words[i];
+    if (line && measure(next) > width) {
+      if (lines.length === max - 1) return lines.concat([line + " " + words.slice(i).join(" ")]);
+      lines.push(line);
+      line = words[i];
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/** The description's lines for this width, as the layout counts them (no drawing context: by an average letter). */
+Panel.prototype.descriptionLines = function (width, g) {
+  if (!this.description) return [];
+  var c = this.chrome || 1, w = width - 2 * (this.k || M).pad - 4 * c;
+  var measure = g ? function (t) { return g.text_measure(t)[0]; } : function (t) { return t.length * 5.4 * c; };
+  return wrap(this.description, w, measure, DESCRIPTION_LINES);
+};
+
+/** The height of the description under the title row (0 without one). */
 Panel.prototype.descriptionHeight = function () {
-  var k = this.k || M;
-  return this.description ? k.row + 2 * (this.chrome || 1) : 0;
+  var c = this.chrome || 1;
+  var n = this.descriptionLines(this.width || M.baseWidth).length;
+  return n ? n * this.lineHeight() + 6 * c : 0;
+};
+
+Panel.prototype.lineHeight = function () {
+  return Math.round(DESCRIPTION_SIZE * 1.35 * (this.chrome || 1));
 };
 
 // ── The prompt's progress ───────────────────────────────────────────────── //
@@ -448,11 +491,6 @@ Panel.prototype.captureRect = function (width) {
   return this.ui(width).capture;
 };
 
-/** The button that writes the source to the playground (write_to_playground). */
-Panel.prototype.writeRect = function (width) {
-  return this.ui(width).write;
-};
-
 /** The switch between holding the source (non-destructive) and working on every result (destructive). */
 Panel.prototype.modeRect = function (width) {
   return this.ui(width).mode;
@@ -473,9 +511,8 @@ Panel.prototype.valueWidth = function () {
 /**
  * Place everything for this width (and height, when known); returns the height
  * the panel needs. Title row: the algorithm, its type, the bypass toggle and
- * "set active" (always: to make this instance the one Claude works on again, or
- * the one it starts on before it has an algorithm).
- * "output": repeat, write. Pitch and time cards carry their snap toggle
+ * the auto dump toggle (every type but a synth or an fx, also before an algorithm).
+ * Then the description, wrapped. Pitch and time cards carry their snap toggle
  * (see snapState). "source"
  * (transformers, selectors; its header says how many notes): capture and the
  * toggles destructive and, for selectors, selection only. "parameters": its
@@ -521,39 +558,46 @@ Panel.prototype.place = function (width, compact, s, extra) {
   this.k = k;
   this.width = width;
   this.rows = [];
-  var p = { setActive: null, within: null, bypass: null, mute: null, repeat: null, write: null, capture: null, mode: null, only: null,
+  var p = { autoDump: null, within: null, bypass: null, mute: null, capture: null, mode: null, only: null,
     snap: null, reset: null, sections: [] };
   var audio = this.audio();
   this.places = p;
   var inner = width - 2 * m.pad;
   var section = compact ? v(14) : k.section;
   var y = k.title + this.descriptionHeight() + k.gap;
-  p.setActive = { x: width - k.pad - v(62), y: (k.title - k.button) / 2, w: v(62), h: k.button };
+  var left = width - k.pad + v(4);
+  if (!audio) {
+    p.autoDump = { x: width - k.pad - v(62), y: (k.title - k.button) / 2, w: v(62), h: k.button };
+    left = p.autoDump.x;
+  }
   if (!this.items.length && !this.title && !this.type) return y + k.row + k.status;
-  var left = p.setActive.x;
   if (this.hasBypass()) {
     p.bypass = { x: left - v(4) - v(56), y: (k.title - k.button) / 2, w: v(56), h: k.button };
     left = p.bypass.x;
   }
   if (audio) p.mute = { x: left - v(4) - v(46), y: (k.title - k.button) / 2, w: v(46), h: k.button };
-  // output (the score's: a synth or an fx sends sound)
-  if (!audio) {
-    p.sections.push({ text: "output", y: y, h: section });
-    y += section;
-    p.repeat = { x: k.pad, y: y, w: v(50), h: k.button };
-    p.write = { x: k.pad + v(54), y: y, w: v(44), h: k.button };
-    y += k.button + k.gap;
-  }
   // source
   if (this.hasSource()) {
     p.sections.push({ text: "source", y: y, h: section, source: true });
     y += section;
-    var n = this.type === "selector" ? 4 : 3, gap = v(4), w = (inner - (n - 1) * gap) / n;
-    p.capture = { x: m.pad, y: y, w: w, h: k.button };
-    p.mode = { x: m.pad + w + gap, y: y, w: w, h: k.button };
-    p.within = { x: m.pad + 2 * (w + gap), y: y, w: w, h: k.button };
-    if (n === 4) p.only = { x: m.pad + 3 * (w + gap), y: y, w: w, h: k.button };
-    y += k.button + k.gap;
+    // each button as wide as its longest label needs; on two rows when one does not hold them
+    var names = this.type === "selector" ? ["capture", "mode", "within", "only"] : ["capture", "mode", "within"];
+    var words = { capture: "capture", mode: "non-destructive", within: "process sel.", only: "dump sel." };
+    var gap = v(6), need = function (t) { return v(t.length * 5.6 + 18); };
+    var total = (names.length - 1) * gap, j;
+    for (j = 0; j < names.length; j++) total += need(words[names[j]]);
+    var lines = total <= inner ? [names] : [names.slice(0, 2), names.slice(2)];
+    for (var l = 0; l < lines.length; l++) {
+      var line = lines[l], want = (line.length - 1) * gap;
+      for (j = 0; j < line.length; j++) want += need(words[line[j]]);
+      var grow = (inner - (line.length - 1) * gap) / (want - (line.length - 1) * gap), bx = m.pad;
+      for (j = 0; j < line.length; j++) {
+        var bw = need(words[line[j]]) * grow;
+        p[line[j]] = { x: bx, y: y, w: bw, h: k.button };
+        bx += bw + gap;
+      }
+      y += k.button + (l < lines.length - 1 ? gap : k.gap);
+    }
   }
   // parameters, reset in the header
   var head = { text: "parameters" + (this.items.length ? " · " + this.items.length : ""), y: y, h: section };
@@ -651,7 +695,7 @@ Panel.prototype.paint = function (g, width, height) {
   box(g, 0, 0, width, k.title, THEME.header);
   box(g, 0, k.title - 1, width, 1, THEME.line);
   var kindText = this.title || this.type ? this.type || "generator" : "";
-  var titleLeftmost = p.mute || p.bypass || p.setActive;
+  var titleLeftmost = p.mute || p.bypass || p.autoDump;
   var titleRight = titleLeftmost ? titleLeftmost.x - v(6) : width - k.pad;
   if (kindText) {
     var kw = v(kindText.length * 6 + 14);
@@ -671,7 +715,15 @@ Panel.prototype.paint = function (g, width, height) {
       "left", THEME.text, v(THEME.titleSize), THEME.bold);
   }
   if (this.description) {
-    label(g, this.description, { x: k.pad + v(2), y: k.title + v(1), w: width - 2 * k.pad - v(4), h: k.row }, "left", THEME.dim, v(11));
+    // measured with the font it is drawn in; no more lines than the layout made room for
+    g.select_font_face(THEME.font);
+    g.set_font_size(v(DESCRIPTION_SIZE));
+    var lines = this.descriptionLines(width, g), lh = this.lineHeight();
+    var room = Math.max(1, this.descriptionLines(width).length);
+    if (lines.length > room) lines = lines.slice(0, room - 1).concat([lines.slice(room - 1).join(" ")]);
+    for (var d = 0; d < lines.length; d++) {
+      label(g, lines[d], { x: k.pad + v(2), y: k.title + v(3) + d * lh, w: width - 2 * k.pad - v(4), h: lh }, "left", THEME.dim, v(DESCRIPTION_SIZE));
+    }
   }
   if (!this.items.length && !this.title && !this.type) {
     label(g, "No algorithm loaded.", { x: k.pad + v(2), y: k.title + this.descriptionHeight() + k.gap, w: width - 2 * k.pad, h: k.row },
@@ -679,7 +731,7 @@ Panel.prototype.paint = function (g, width, height) {
   }
   if (p.mute) button(g, p.mute, this.mute ? "muted" : "mute", this.mute, this.hot(p.mute), C);
   if (p.bypass) button(g, p.bypass, this.bypass ? "bypassed" : "bypass", this.bypass, this.hot(p.bypass), C);
-  if (p.setActive) button(g, p.setActive, "set active", false, this.hot(p.setActive), C);
+  if (p.autoDump) button(g, p.autoDump, "auto dump", this.autoDump, this.hot(p.autoDump), C);
   for (var q = 0; q < p.sections.length; q++) {
     var sec = p.sections[q];
     var text = sec.text.toUpperCase(), tc = THEME.faint;
@@ -692,8 +744,6 @@ Panel.prototype.paint = function (g, width, height) {
     */
     label(g, text.toUpperCase(), { x: k.pad + v(2), y: sec.y, w: width - 2 * k.pad, h: sec.h - v(4) }, "left", tc, v(THEME.smallSize), THEME.bold);
   }
-  if (p.repeat) button(g, p.repeat, "repeat", false, this.hot(p.repeat), C);
-  if (p.write) button(g, p.write, "write", false, this.hot(p.write), C);
   if (p.capture) button(g, p.capture, "capture", false, this.hot(p.capture), C);
   if (p.mode) {
     var destructive = this.sourceMode === "destructive";
@@ -761,9 +811,11 @@ Panel.prototype.message = function (item) {
 Panel.prototype.mouseDown = function (x, y, mods) {
   var p = this.width ? this.ui(this.width) : {};
   this.active = null;
-  if (p.setActive && inside(p.setActive, x, y)) return [["set_as_active_instance"]];
+  if (p.autoDump && inside(p.autoDump, x, y)) {
+    this.autoDump = !this.autoDump;
+    return [["auto_dump", this.autoDump ? 1 : 0]];
+  }
   if (p.capture && inside(p.capture, x, y)) return [["capture"]];
-  if (p.write && inside(p.write, x, y)) return [["write_to_playground"]];
   if (p.within && inside(p.within, x, y)) {
     this.withinSelection = !this.withinSelection;
     return [["process_only_selection", this.withinSelection ? 1 : 0]];
@@ -789,7 +841,6 @@ Panel.prototype.mouseDown = function (x, y, mods) {
     this.mute = !this.mute;
     return [["mute", this.mute ? 1 : 0]];
   }
-  if (p.repeat && inside(p.repeat, x, y)) return [["repeat"]];
   for (var k = 0; k < this.rows.length; k++) {
     if (this.rows[k].snapToggle && inside(this.rows[k].snapToggle, x, y)) return this.nextSnap(this.rows[k].item);
   }
@@ -858,7 +909,7 @@ Panel.prototype.snapshot = function () {
   }
   return { title: this.title, description: this.description, path: this.path, type: this.type, params: params, snap: this.snap,
     sourceMode: this.sourceMode, involutive: this.involutive, selectionOnly: this.selectionOnly,
-    bypass: this.bypass, mute: this.mute, withinSelection: this.withinSelection, pitchSnap: this.pitchSnap, timeSnap: this.timeSnap };
+    bypass: this.bypass, autoDump: this.autoDump, mute: this.mute, withinSelection: this.withinSelection, pitchSnap: this.pitchSnap, timeSnap: this.timeSnap };
 };
 
 Panel.prototype.restore = function (snapshot) {
@@ -867,6 +918,7 @@ Panel.prototype.restore = function (snapshot) {
   this.involutive = snapshot.involutive === true;
   this.selectionOnly = snapshot.selectionOnly !== false;
   this.bypass = snapshot.bypass === true;
+  this.autoDump = snapshot.autoDump !== false;
   this.mute = snapshot.mute === true;
   this.withinSelection = snapshot.withinSelection === true;
   this.pitchSnap = [0, 1, 3].indexOf(snapshot.pitchSnap) < 0 ? 3 : snapshot.pitchSnap;

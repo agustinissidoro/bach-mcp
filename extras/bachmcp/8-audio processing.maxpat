@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 95.0, 1444.0, 853.0 ],
+        "rect": [ 34.0, 95.0, 1118.0, 853.0 ],
         "boxes": [
             {
                 "box": {
@@ -115,6 +115,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
+                    "parameter_enable": 0,
                     "patching_rect": [ 545.2054794520548, 104.10958904109589, 420.0, 140.0 ],
                     "prompt_sent": 0,
                     "prompt_text": "generate a spectral delay with fft with at least 5 bands of control"

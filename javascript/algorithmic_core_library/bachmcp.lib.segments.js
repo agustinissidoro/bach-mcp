@@ -44,13 +44,15 @@ function phrases(x, gap) {
 }
 
 /**
- * The large parts of a score: cut at its markers when it has any, else at silences
- * longer than `gap` (default 1500 ms) across all voices.
+ * The large parts of a score: cut at its labels (the markers without a role) when it has
+ * any, else at silences longer than `gap` (default 1500 ms) across all voices. Markers with
+ * a role (barlines, beats, a time signature) are measures, not sections: they do not cut.
  */
 function sections(x, gap = 1500) {
   // a score keeps its markers in its header (bachjson-complete, Score.marker); a plain list at the top is taken too
   const inHeader = x && x.header && Array.isArray(x.header.markers) ? x.header.markers : [];
-  const markers = (x && Array.isArray(x.markers) ? x.markers : inHeader).map((m) => m.onset).sort((a, b) => a - b);
+  const markers = (x && Array.isArray(x.markers) ? x.markers : inHeader)
+    .filter((m) => !m.role || m.role === "none").map((m) => m.onset).sort((a, b) => a - b);
   if (!markers.length) return phrases(x, gap);
   const cuts = markers.filter((t) => t > 0);
   const out = cuts.concat([Infinity]).map(() => []);

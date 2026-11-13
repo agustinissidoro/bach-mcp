@@ -7,3 +7,6 @@ max oblist "bachmcp" bachmcp.selector;
 max oblist "bachmcp" bachmcp.generator;
 max oblist "bachmcp" bachmcp.algorithm;
 max oblist "bachmcp" bachmcp.bpatcher.algorithm;
+max oblist "bachmcp" bachmcp.score;
+max oblist "bachmcp" bachmcp.algorithm~;
+max oblist "bachmcp" bachmcp.chat;

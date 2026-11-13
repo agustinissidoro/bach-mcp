@@ -77,6 +77,8 @@ once, when it changes:
     server prompt <name> calling <tool>       it writes a tool call
     server prompt <name> running <tool>       the tool runs, here in Bach
     server prompt <name> done <tokens> <ms>
+    server prompt <name> skills_size <tokens> at each prompt: the estimated tokens of the skill its
+                                              conversation reads (the compiled file, else the built-in skill)
     server prompt <name> stopped
     server prompt <name> error <message>
 
@@ -129,7 +131,7 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 from ..bridge.protocol import Word, line, words
 from ..prompt.skill import with_gen, with_verbosity
-from ..prompt.skills import SkillError, build, remove_compiled
+from ..prompt.skills import SkillError, build, estimate_tokens, remove_compiled
 from ..tools.playground import prepare
 from ..tools.session import TYPES, NoTarget, Target, direct, serve_instances, serve_targets
 from .engine import Conversation
@@ -697,6 +699,7 @@ class Hub:
         self._said = []
         self._send(name, "thinking", web_only=True)  # the page's busy sign; Max hears the stages
         self._stage(name, "starting")
+        self._report(name, "skills_size", estimate_tokens(conversation.skill))
         events = conversation.send(text)
         try:
             for event in events:

@@ -189,7 +189,8 @@
                             {
                                 "box": {
                                     "args": [
-                                        "help_generator"
+                                        "help_generator",
+                                        "generator"
                                     ],
                                     "bgmode": 0,
                                     "border": 0,
@@ -199,14 +200,16 @@
                                     "lockeddragscroll": 0,
                                     "lockedsize": 0,
                                     "maxclass": "bpatcher",
-                                    "name": "bachmcp.bpatcher.generator.maxpat",
+                                    "name": "bachmcp.bpatcher.algorithm.maxpat",
                                     "numinlets": 1,
-                                    "numoutlets": 1,
+                                    "numoutlets": 3,
                                     "offset": [
                                         0.0,
                                         0.0
                                     ],
                                     "outlettype": [
+                                        "",
+                                        "bang",
                                         ""
                                     ],
                                     "viewvisibility": 1,
@@ -299,7 +302,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "text": "Everything bachmcp.algo.generate takes also works here: see its help patch.",
+                                    "text": "Everything bachmcp.algorithm takes also works here: see its reference page.",
                                     "id": "obj-9",
                                     "patching_rect": [
                                         500.0,

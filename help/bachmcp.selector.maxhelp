@@ -267,7 +267,8 @@
                             {
                                 "box": {
                                     "args": [
-                                        "help_selector"
+                                        "help_selector",
+                                        "selector"
                                     ],
                                     "bgmode": 0,
                                     "border": 0,
@@ -277,15 +278,16 @@
                                     "lockeddragscroll": 0,
                                     "lockedsize": 0,
                                     "maxclass": "bpatcher",
-                                    "name": "bachmcp.bpatcher.selector.maxpat",
+                                    "name": "bachmcp.bpatcher.algorithm.maxpat",
                                     "numinlets": 1,
-                                    "numoutlets": 2,
+                                    "numoutlets": 3,
                                     "offset": [
                                         0.0,
                                         0.0
                                     ],
                                     "outlettype": [
                                         "",
+                                        "bang",
                                         ""
                                     ],
                                     "viewvisibility": 1,
@@ -300,69 +302,11 @@
                             },
                             {
                                 "box": {
-                                    "bwcompatibility": 80300,
-                                    "defaultnoteslots": [
-                                        "null"
-                                    ],
-                                    "fontface": 0,
-                                    "fontname": "Arial",
-                                    "fontsize": 12.0,
-                                    "loop": [
-                                        0.0,
-                                        1000.0
-                                    ],
-                                    "maxclass": "bach.roll",
-                                    "numinlets": 6,
-                                    "numoutlets": 8,
-                                    "numvoices": 1,
-                                    "out": "nnnnnnn",
-                                    "outlettype": [
-                                        "",
-                                        "",
-                                        "",
-                                        "",
-                                        "",
-                                        "",
-                                        "",
-                                        "bang"
-                                    ],
-                                    "pitcheditrange": [
-                                        "null"
-                                    ],
-                                    "stafflines": [
-                                        5
-                                    ],
-                                    "textcolor": [
-                                        0.0,
-                                        0.0,
-                                        0.0,
-                                        1.0
-                                    ],
-                                    "versionnumber": 80300,
-                                    "voicenames": [
-                                        "[",
-                                        "]"
-                                    ],
-                                    "voicespacing": [
-                                        0.0,
-                                        17.0
-                                    ],
-                                    "id": "obj-9",
-                                    "patching_rect": [
-                                        30.0,
-                                        430.0,
-                                        420.0,
-                                        118.0
-                                    ]
-                                }
-                            },
-                            {
-                                "box": {
                                     "fontsize": 13.0,
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "text": "right outlet to the roll: dump and the selection. Left outlet: the selected notes, here into a second roll.",
+                                    "text": "connect it to the roll both ways: the roll's first outlet to its inlet, its outlet to the roll's first inlet. The notes it picks are selected in the roll.",
                                     "linecount": 2,
                                     "id": "obj-10",
                                     "patching_rect": [
@@ -379,7 +323,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "text": "Everything bachmcp.algo.select takes also works here: see its help patch.",
+                                    "text": "Everything bachmcp.algorithm takes also works here: see its reference page.",
                                     "id": "obj-11",
                                     "patching_rect": [
                                         500.0,
@@ -431,18 +375,6 @@
                                 "patchline": {
                                     "destination": [
                                         "obj-7",
-                                        0
-                                    ],
-                                    "source": [
-                                        "obj-8",
-                                        1
-                                    ]
-                                }
-                            },
-                            {
-                                "patchline": {
-                                    "destination": [
-                                        "obj-9",
                                         0
                                     ],
                                     "source": [

@@ -39,9 +39,9 @@ var THEME = {
 
 var M = {
   pad: 8,
-  row: 20,       // a control's height
-  head: 16,      // a parameter's name and value line
-  gap: 4,
+  row: 22,       // a control's height
+  head: 18,      // a parameter's name and value line
+  gap: 6,
   title: 30,
   section: 20,
   button: 20,

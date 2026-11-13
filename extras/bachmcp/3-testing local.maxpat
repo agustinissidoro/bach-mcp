@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 92.0, 1352.0, 954.0 ],
+        "rect": [ 126.0, 95.0, 1352.0, 853.0 ],
         "boxes": [
             {
                 "box": {
@@ -136,6 +136,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
+                    "parameter_enable": 0,
                     "patching_rect": [ 727.0, 190.0, 365.0, 155.0 ],
                     "prompt_sent": 1,
                     "prompt_text": "a scale that comprises an octave and a half and can contain as many notes as wished, all equally distanced."
@@ -263,9 +264,9 @@
                     "maxclass": "bpatcher",
                     "name": "bachmcp.bpatcher.algorithm.maxpat",
                     "numinlets": 1,
-                    "numoutlets": 4,
+                    "numoutlets": 3,
                     "offset": [ 0.0, 0.0 ],
-                    "outlettype": [ "", "", "", "" ],
+                    "outlettype": [ "", "", "" ],
                     "patching_rect": [ 727.0, 396.0, 288.0, 365.0 ],
                     "viewvisibility": 1
                 }

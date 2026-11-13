@@ -118,7 +118,7 @@ class HubTest(unittest.TestCase):
         out = []
         for text in self.bridge.sent:
             said = words(text)
-            if said[:3] == ["server", "prompt", name]:
+            if said[:3] == ["server", "prompt", name] and said[3] != "skills_size":  # a size, not a stage
                 out.append(" ".join(said[3:5] if said[3] == "done" else said[3:]))
         return out
 
@@ -505,6 +505,9 @@ class PromptTests(HubTest):
         self.assertTrue(heard[-1].startswith("notes1 done 7 "))
         self.assertEqual(self.stages("notes1"), ["received", "starting", "sent", "writing", "done 7"],
                          "each stage once, as it happens")
+        size = [t for t in self.bridge.sent if t.startswith("server prompt notes1 skills_size ")]
+        self.assertEqual(len(size), 1, "the skill's size, once for each prompt")
+        self.assertGreater(int(size[0].split()[-1]), 0)
         sent = [t for t in self.bridge.sent if not t.startswith("server prompt ")]
         self.assertEqual([t.split()[1] for t in sent[:2]], ["answer", "done"],
                          "Max gets no echo of its own prompt, no pieces, and no thinking: the stages say it")

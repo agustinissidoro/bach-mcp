@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.chat" module="bachmcp" category="bachmcp">
+	<digest>The chat page in a Max window</digest>
+	<description>Shows the chat page of the running <o>bachmcp.server</o> (<i>http://&lt;url&gt;:&lt;url_port&gt;</i>) in a window of its own, in a <o>jweb</o>. Double-click it, or send <m>open</m>. The page reloads when the server starts.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">chat</metadata>
+		<metadata name="tag">page</metadata>
+		<metadata name="tag">interface</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>open, floating</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+	</outletlist>
+	<methodlist>
+		<method name="open">
+			<arglist></arglist>
+			<digest>Open the window</digest>
+			<description>Opens the chat window.</description>
+		</method>
+		<method name="floating">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Keep the window on top</digest>
+			<description><m>1</m>: the window floats above the patches. <m>0</m>: a normal window.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="floating" get="1" set="1" type="int" size="1">
+			<digest>Keep the window on top</digest>
+			<description><m>1</m>: the window floats above the patches.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Floating" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+		<attribute name="auto_open" get="1" set="1" type="int" size="1">
+			<digest>Open when the patch loads</digest>
+			<description><m>1</m> (default): opens the window when the patch opens.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Open On Load" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<seealsolist>
+		<seealso name="bachmcp.server" />
+		<seealso name="bachmcp.prompt" />
+		<seealso name="jweb" />
+	</seealsolist>
+</c74object>

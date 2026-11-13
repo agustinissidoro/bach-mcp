@@ -3,7 +3,7 @@
 
 <c74object name="bachmcp.gui.params" module="bachmcp" category="bachmcp">
 	<digest>Parameter panel for a bach-mcp algorithm</digest>
-	<description>The panel of an algorithm's parameters (v8ui), which builds itself from the file the runner loads: one card per parameter (slider, range, toggle, menu, seed, curve, list), plus the runner's options. Connect a runner's panel outlet to it and its outlet back to the runner. It is saved with the patch, and works with <o>pattr</o> and <o>pattrstorage</o> when given a scripting name.</description>
+	<description>The panel of an algorithm's parameters (<o>v8ui</o>), which builds itself from the spec the runner sends when it loads a file, or from a <i>.json</i> (<m>spec_file</m>): one card per parameter (slider, range, toggle, menu, seed, curve, list), plus the runner's options and the algorithm's description. A <m>synth</m> or an <m>fx</m> shows knobs and a mute. Connect an instance's panel outlet to it and its outlet back to the instance. It shows each prompt's progress beside the type. It is saved with the patch, and works with <o>pattr</o> and <o>pattrstorage</o> when given a scripting name.</description>
 	<metadatalist>
 		<metadata name="author">Agustín Issidoro</metadata>
 		<metadata name="tag">bachmcp</metadata>
@@ -15,12 +15,12 @@
 	</metadatalist>
 	<inletlist>
 		<inlet id="0" type="">
-			<digest>From a runner's panel outlet; reset, bang, clear, autosize, set_name</digest>
+			<digest>From an instance's panel outlet; reset, bang, clear, autosize, set_name, set_type, spec_file ...</digest>
 		</inlet>
 	</inletlist>
 	<outletlist>
 		<outlet id="0" type="">
-			<digest>To the runner: param, bypass, repeat, snap, source_mode, capture, write_to_playground</digest>
+			<digest>To the instance: param, sync, bypass, mute, auto_dump, snap, capture, source_mode, process_only_selection, dump_selection_only</digest>
 		</outlet>
 	</outletlist>
 	<objarglist>
@@ -33,7 +33,7 @@
 		<method name="reset">
 			<arglist></arglist>
 			<digest>Back to the declared values</digest>
-			<description>Sets every parameter to its declared value. Double-clicking a control does this for one.</description>
+			<description>Sets every parameter to its declared value, and sends them. Double-clicking a control does this for one.</description>
 		</method>
 		<method name="bang">
 			<arglist></arglist>
@@ -43,23 +43,104 @@
 		<method name="clear">
 			<arglist></arglist>
 			<digest>Empty the panel</digest>
-			<description>Forgets the parameters.</description>
+			<description>Forgets the parameters. The type stays.</description>
 		</method>
 		<method name="autosize">
 			<arglist><arg name="on" optional="0" type="int" /></arglist>
 			<digest>Resize to the content</digest>
-			<description><m>1</m> (default): the panel resizes itself to its content.</description>
+			<description><m>1</m> (default): the panel resizes itself to its content. <m>0</m>: it keeps its size.</description>
 		</method>
 		<method name="set_name">
-			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<arglist><arg name="name" optional="1" type="symbol" /></arglist>
 			<digest>Name shown</digest>
-			<description>Drawn while no algorithm is loaded.</description>
+			<description>Drawn while no algorithm is loaded. Without a name: <i>No algorithm loaded.</i></description>
+		</method>
+		<method name="set_type">
+			<arglist><arg name="type" optional="0" type="symbol" /></arglist>
+			<digest>The panel of a type</digest>
+			<description><m>generator</m>, <m>transformer</m>, <m>selector</m>, <m>synth</m> or <m>fx</m>: the base panel of that type before any algorithm is loaded. Kept by <m>clear</m> and saved with the patch. The instance's <m>type</m> echo does the same.</description>
+		</method>
+		<method name="spec_file">
+			<arglist><arg name="path" optional="0" type="symbol" /></arglist>
+			<digest>Build from a file</digest>
+			<description>Reads the parameters from a <i>.json</i> spec, the one <i>send_gen</i> writes for a synth or an fx (<i>gen/&lt;name&gt;.json</i>).</description>
+		</method>
+		<method name="one_line_description">
+			<arglist><arg name="text" optional="1" type="list" /></arglist>
+			<digest>Replace the description</digest>
+			<description>Replaces the algorithm's description drawn under the title. No text removes it.</description>
+		</method>
+		<method name="prompt">
+			<arglist><arg name="stage" optional="0" type="symbol" /><arg name="detail" optional="1" type="list" /></arglist>
+			<digest>Show a prompt's progress</digest>
+			<description>An icon beside the type: <m>received</m>, <m>queued</m>, <m>starting</m>, <m>sent</m>, <m>thinking</m>, <m>writing</m>, <m>calling</m> / <m>running</m> &lt;tool&gt;, <m>done</m> and <m>stopped</m> fade after 4 seconds, <m>error</m> stays; <m>idle</m> removes it. The instance sends these.</description>
+		</method>
+		<method name="bypass">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Show bypass</digest>
+			<description>Sets the bypass toggle without sending it.</description>
+		</method>
+		<method name="mute">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Show mute</digest>
+			<description>A synth or an fx: sets the mute toggle without sending it.</description>
+		</method>
+		<method name="auto_dump">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Show auto dump</digest>
+			<description>Sets the auto dump toggle (the instance's echo).</description>
+		</method>
+		<method name="snap">
+			<arglist><arg name="mode" optional="0" type="int" /></arglist>
+			<digest>Show the pitch snap</digest>
+			<description><m>0</m> semitones, <m>1</m> quarter tones, <m>3</m> free (the instance's echo).</description>
+		</method>
+		<method name="source_mode">
+			<arglist><arg name="mode" optional="0" type="int" /></arglist>
+			<digest>Show the source mode</digest>
+			<description><m>1</m> non-destructive, <m>0</m> destructive (the instance's echo).</description>
+		</method>
+		<method name="process_only_selection">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Show process selection</digest>
+			<description>The instance's echo.</description>
+		</method>
+		<method name="dump_selection_only">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Show whole score or selection</digest>
+			<description>A selector's echo.</description>
+		</method>
+		<method name="involutive">
+			<arglist><arg name="on" optional="0" type="int" /></arglist>
+			<digest>Show involutive</digest>
+			<description>A selector's echo.</description>
+		</method>
+		<method name="spec">
+			<arglist><arg name="json" optional="0" type="symbol" /></arglist>
+			<digest>Parameters from the runner</digest>
+			<description>The loaded algorithm's parameters, as the runner sends them: the panel builds itself from it.</description>
+		</method>
+		<method name="set">
+			<arglist><arg name="name" optional="0" type="symbol" /><arg name="value" optional="0" type="list" /></arglist>
+			<digest>Set a value</digest>
+			<description>Sets one parameter's value without sending it.</description>
+		</method>
+		<method name="status">
+			<arglist><arg name="kind" optional="0" type="symbol" /><arg name="text" optional="1" type="list" /></arglist>
+			<digest>Status line</digest>
+			<description>A line of status from the runner.</description>
+		</method>
+		<method name="type">
+			<arglist><arg name="type" optional="0" type="symbol" /></arglist>
+			<digest>The instance's type</digest>
+			<description>The same as <m>set_type</m>.</description>
 		</method>
 	</methodlist>
 	<seealsolist>
-		<seealso name="bachmcp.algo.generate" />
-		<seealso name="bachmcp.algo.transform" />
-		<seealso name="bachmcp.algo.select" />
+		<seealso name="bachmcp.algorithm" />
+		<seealso name="bachmcp.algorithm~" />
+		<seealso name="bachmcp.bpatcher.algorithm" />
 		<seealso name="bachmcp.generator" />
+		<seealso name="v8ui" />
 	</seealsolist>
 </c74object>

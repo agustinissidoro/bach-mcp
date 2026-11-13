@@ -77,3 +77,35 @@ test("score().marker takes a content too", () => {
   const s = lib.score().marker(0, "A").marker(0, "", "timesig", [2, 4]);
   assert.deepEqual(s.header.markers, [{ onset: 0, name: ["A"], role: "none" }, { onset: 0, name: [], role: "timesig", content: [2, 4] }]);
 });
+
+test("label: a named marker on any score, written once, never a role", () => {
+  const source = { voices: [] };
+  lib.label(source, 2000, "B");
+  lib.label(source, 0, "A");
+  lib.label(source, 0, "A");
+  lib.label(source, 0, ["A", 2]);
+  lib.barline(source, 0);
+  assert.deepEqual(source.header.markers, [
+    { onset: 0, name: [], role: "barline" },
+    { onset: 0, name: ["A"], role: "none" },
+    { onset: 0, name: ["A", 2], role: "none" },
+    { onset: 2000, name: ["B"], role: "none" },
+  ]);
+  lib.clearGrid(source);
+  assert.deepEqual(lib.markersOf(source, "none").map((m) => m.name[0]), ["A", "A", "B"]);
+  assert.throws(() => lib.label(source, 0), /a label has a name/);
+  assert.throws(() => lib.label(source, 0, ""), /a label has a name/);
+  assert.throws(() => lib.label(source, "0", "A"), /onset must be a number/);
+  assert.equal(lib.label(lib.score(), 0, "A").header.markers.length, 1);
+});
+
+test("sections cut at labels, not at barlines or beats", () => {
+  const s = lib.score();
+  const v = s.voice("Flute");
+  for (let i = 0; i < 8; i++) v.note(i * 500, 6000 + i * 100, 400);
+  lib.grid(s, { timesig: [2, 4], bar: 1000, count: 4, beats: true });
+  assert.deepEqual(lib.sections(s).map((p) => p.length), [8], "a grid alone makes no sections");
+  lib.label(s, 0, "A");
+  lib.label(s, 3000, "B");
+  assert.deepEqual(lib.sections(s).map((p) => p.length), [6, 2]);
+});
