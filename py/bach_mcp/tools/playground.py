@@ -8,6 +8,7 @@ patch with `set_playground <path>`. It always has these folders:
     <path>/scores           <name>.json, each roll's score (bachjson-complete)
     <path>/prompts          <name>.jsonl, the conversation of each instance
     <path>/gen
+    <path>/processes        <name>.py and <name>.json, the code of each buffer instance (and .history/)
     <path>/skills           <name>.md, the skill files the model's skill is built from
     <path>/skills/profiles  <name>.json, lists of skills
 
@@ -36,7 +37,7 @@ import shutil
 
 from ..prompt.skill import GEN_SKILL_PATH, QUANTIZER_SKILL_PATH, SKILL_PATH
 
-FOLDERS = ("algorithms", "scores", "prompts", "gen", "skills", os.path.join("skills", "profiles"))
+FOLDERS = ("algorithms", "scores", "prompts", "gen", "processes", "skills", os.path.join("skills", "profiles"))
 CORE = os.path.join("skills", "core-algorithmic.md")
 PROFILE = os.path.join("skills", "profiles", "minimal-algorithmic-composer.json")
 PROFILE_SKILLS = {"skills": ["core-algorithmic"]}

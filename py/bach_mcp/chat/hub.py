@@ -31,7 +31,7 @@ Into the hub:
     <name> get_skills                         ones; none of either: back to the shared ones.
                                               Answers `<name> skills ...`
     clear_instance_names_map                  empty the map
-    add_instance_names_map <name> <type>      generator | transformer | selector | score | synth | fx; an instance
+    add_instance_names_map <name> <type>      generator | transformer | selector | score | synth | fx | buffer; an instance
                                               that changes type starts a new conversation, as with `new`
     set_active_instance <name> [<type>]       with the type, the instance joins the map if new
     instances <name> <type> ...               Max's answer to `server get_instances`: the whole map
@@ -39,9 +39,18 @@ Into the hub:
     <name> stop                               stop its answer (or its turn in the queue)
     <name> new                                a new conversation (the old one stays in prompts/)
     <name> remove                             forget everything the hub holds for it: its answer
-                                              (stopped) and prompts waiting, its conversation, its
-                                              own profile and skills. Files stay: its prompts/<name>.jsonl
-                                              is read again if it is prompted later
+                                              (stopped, not saved) and prompts waiting, its conversation,
+                                              its own profile and skills. Its prompts/<name>.jsonl is set
+                                              aside as with `new`: prompted later, it begins a new conversation
+                                              (and its buffer process worker ends)
+
+A buffer instance (offline audio in Python, audio_processing/runner.py) is run by the hub:
+
+    <name> buffer_process_run                 run processes/<name>.py on its source shmbuffer
+    <name> buffer_process_param <param> <value> ...  a panel change: kept, then a run
+    <name> buffer_process_source <shmbuffer>  the bachmcp.shmbuffer~ it reads (default <name>-in)
+    <name> buffer_process_target <shmbuffer>  the one it writes (default <name>-out)
+    <name> buffer_process_stop                end the run in progress
 
 Out of the hub, to Max and to the page:
 
@@ -53,6 +62,11 @@ Out of the hub, to Max and to the page:
     <name> done <tokens> <ms>
     <name> stopped
     <name> error <message>
+    <name> processing                         a buffer instance's run began
+    <name> processed <ms> <frames> <channels> <sr>   its result is in the target shmbuffer
+    <name> process_note <text>                the result is silent, clips ...
+    <name> process_error <text>
+    <name> process_stopped
     server warning <text>                   something to fix (a bad path, an unknown type)
     server skills <skill> ...               after set_profile, set_skills, get_skills: the files of the
     server skills length <tokens>           skill new conversations read, and its estimated tokens
@@ -127,16 +141,20 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional, Set, Tuple
 
+from ..audio_processing.runner import ProcessRunner
 from ..bridge.protocol import Word, line, words
 from ..prompt.skill import with_gen, with_verbosity
 from ..prompt.skills import SkillError, build, estimate_tokens, remove_compiled
 from ..tools.playground import prepare
+from ..tools.buffer_process_tools import serve_runner
 from ..tools.session import TYPES, NoTarget, Target, direct, serve_instances, serve_targets
 from .engine import Conversation
 
-INSTANCE_COMMANDS = ("prompt", "stop", "new", "remove", "set_profile", "set_skills", "get_skills")
+INSTANCE_COMMANDS = ("prompt", "stop", "new", "remove", "set_profile", "set_skills", "get_skills",
+                     "buffer_process_run", "buffer_process_param", "buffer_process_source", "buffer_process_target",
+                     "buffer_process_stop")
 # First words that are not an instance: the hub's own commands, Max's requests (bridge/max.py),
 # the lines for the server object and the page's state line.
 RESERVED = ("set_playground", "set_profile", "set_skills", "get_skills", "clear_instance_names_map", "add_instance_names_map", "set_active_instance",
@@ -191,13 +209,16 @@ class Hub:
         self._said: List[Word] = []          # the stage of its answer last said to Max
         self._turn: Optional[Target] = None  # its target, while the tools work for it
         self._stopping = threading.Event()
+        self._removed: Set[str] = set()      # removed while answered: that answer is not saved
         self._map_answered = threading.Event()  # Max answered `server get_instances`
         self._running = True
         self._worker = threading.Thread(target=self._work, name="bach-hub", daemon=True)
         self._worker.start()
+        self.processes = ProcessRunner(self._send, lambda: self.playground)
         bridge.on_line(lambda text: self.handle(text, "max"))
         serve_targets(self.target)
         serve_instances(self)
+        serve_runner(self.processes)
         status.on_change(lambda: self._send(*self._state(), web_only=True))
 
     # ── Clients ────────────────────────────────────────────────────────── #
@@ -303,6 +324,22 @@ class Hub:
                 self._report_skills(name)
             elif command == "stop":
                 self._stop(name)
+            elif command == "buffer_process_stop":
+                self.processes.stop(name)
+            elif command == "buffer_process_run":
+                self.processes.run(name)
+            elif command == "buffer_process_param":
+                if len(said) < 4:
+                    self._send(name, "process_error", "buffer_process_param needs a name and a value")
+                else:
+                    self.processes.set_param(name, said[2], said[3:])
+            elif command in ("buffer_process_source", "buffer_process_target"):
+                if len(said) < 3:
+                    self._send(name, "process_error", f"{command} needs a shmbuffer name")
+                elif command == "buffer_process_source":
+                    self.processes.set_source(name, said[2])
+                else:
+                    self.processes.set_target(name, said[2])
             elif command == "remove":
                 self._remove(name, echo)
             else:
@@ -601,13 +638,18 @@ class Hub:
         self._send(name, "new", to_max=echo)
 
     def _remove(self, name: str, echo: bool) -> None:
-        """Forget the instance's conversation and its own choice of skills, in memory only."""
+        """Forget the instance's conversation and its own choice of skills. Its saved conversation
+        is set aside, so a later prompt begins a new one (and a new Claude Code session)."""
         self._stop(name)  # its answer, or its prompts waiting
+        self.processes.forget(name)
         with self._lock:
+            if self._answering == name:
+                self._removed.add(name)  # the stopped answer must not seed a new file
             self._conversations.pop(name, None)
             self._began_with.pop(name, None)
             self.own.pop(name, None)
             self._built.pop(name, None)
+            self._set_aside(name)
         self._send(name, "remove", to_max=echo)
         self._send(name, "history", "[]", web_only=True)
 
@@ -624,8 +666,14 @@ class Hub:
         Call with the lock held."""
         self._conversations.pop(name, None)
         self._began_with.pop(name, None)
+        if not self._busy(name):
+            self._set_aside(name)
+
+    def _set_aside(self, name: str) -> None:
+        """Keep the instance's saved conversation beside it with the time
+        (prompts/<name>-<date>-<time>.jsonl), so it is not read again."""
         path = self._history_file(name)
-        if path and os.path.exists(path) and not self._busy(name):
+        if path and os.path.exists(path):
             os.replace(path, path[:-len(".jsonl")] + time.strftime("-%Y%m%d-%H%M%S.jsonl"))
 
     # ── The tools' instance ────────────────────────────────────────────── #
@@ -655,8 +703,10 @@ class Hub:
             conversation = self._conversations.get(self._answering)
         if conversation is not None:
             conversation.cancel()
+        self.processes.close()
         serve_targets(None)
         serve_instances(None)
+        serve_runner(None)
 
     def _work(self) -> None:
         while True:
@@ -678,6 +728,7 @@ class Hub:
                 with self._lock:
                     self._answering = ""
                     self._turn = None
+                    self._removed.discard(name)
 
     def _answer(self, name: str, text: str) -> None:
         with self._lock:
@@ -737,7 +788,9 @@ class Hub:
                     finish = event["finish"]
         finally:
             events.close()
-            self._save(conversation, target, before, text)
+            with self._lock:  # held, so a remove comes wholly before the save or after it
+                if name not in self._removed:
+                    self._save(conversation, target, before, text)
         if self._stopping.is_set():
             self._send(name, "stopped")
             self._report(name, "stopped")

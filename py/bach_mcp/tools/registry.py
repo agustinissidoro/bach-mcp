@@ -1,7 +1,7 @@
 """
 registry.py
 -----------
-Builds the one MCP app that holds the 16 tools. Both doors use it: the Claude
+Builds the one MCP app that holds the 18 tools. Both doors use it: the Claude
 door serves it over MCP, the local chat calls its tools in-process. A tool is
 defined once, here and in the modules it registers:
 
@@ -9,6 +9,7 @@ defined once, here and in the modules it registers:
     score_tools.py  write_score, write_markers, read_score, clear_score: the JSON score
     algo_tools.py   send_algorithm: a JavaScript algorithm run in Max
     gen_tools.py    send_gen: GenExpr code for the gen~ of a synth or an fx (sound, not score)
+    buffer_process_tools.py  send_buffer_process: Python for a buffer instance (offline audio, run by the hub)
     instance_tools.py  get_instances, set_active_instance: which instance the others serve
 
 They speak bach's hierarchy and units as JSON, never llll. Which instance a
@@ -33,6 +34,7 @@ from .algo_tools import register_algo_tools
 from .gen_tools import register_gen_tools
 from .instance_tools import register_instance_tools
 from .pitch_tools import register_pitch_tools
+from .buffer_process_tools import register_buffer_process_tools
 from .score_tools import register_score_tools
 from .session import calling_directly
 
@@ -129,5 +131,6 @@ def create_tools(bridge: Any, node: str = "node", log_calls: bool = True,
     register_score_tools(tools, bridge)
     register_algo_tools(tools, bridge, node)
     register_gen_tools(tools, bridge, node)
+    register_buffer_process_tools(tools, bridge)
     register_instance_tools(tools)
     return mcp

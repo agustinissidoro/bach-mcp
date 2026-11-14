@@ -1,0 +1,7 @@
+# What a process instance's code may import beyond numpy (py/bach_mcp/tools/process_tools.py ALLOWED).
+# Install into the .venv: .venv/bin/python -m pip install -r requirements-audio.txt
+scipy>=1.14
+soundfile>=0.12
+pedalboard>=0.9
+scikit-learn>=1.5
+librosa>=0.10

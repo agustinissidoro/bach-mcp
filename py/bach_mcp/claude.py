@@ -65,6 +65,8 @@ _MODE_PROMPTS = {
             "parameters exposed. Use only {tools}; do not write the notes with write_score.",
     "gen": "Work in /gen mode: write sound, as GenExpr code for the gen~ of a synth or an fx instance. "
            "Use only {tools}; the tools of the score do not apply.",
+    "buffer": "Work in /buffer mode: write offline audio processing, as a Python file that defines "
+              "process(x, sr, p), for a buffer instance. Use only {tools}.",
 }
 
 

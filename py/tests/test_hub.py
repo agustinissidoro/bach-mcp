@@ -176,7 +176,7 @@ class MapTests(HubTest):
         self.bridge.from_max("set_active_instance nobody")
         self.bridge.from_max("add_instance_names_map lonely")
         self.assertEqual(self.bridge.sent, [
-            'server warning "odd: unknown type mixer (one of generator, transformer, selector, score, synth, fx)"',
+            'server warning "odd: unknown type mixer (one of generator, transformer, selector, score, synth, fx, buffer)"',
             'server warning "set_active_instance: no instance nobody in the map"',
             'server warning "add_instance_names_map needs a name and a type"'])
         self.assertNotIn("odd", self.hub.instances)
@@ -195,7 +195,7 @@ class MapTests(HubTest):
     def test_the_playground_is_made_and_echoed(self):
         self.bridge.from_max(f"set_playground {line('Macintosh HD:' + self.playground)}")
         self.assertEqual(self.hub.playground, self.playground)
-        self.assertEqual(sorted(os.listdir(self.playground)), ["algorithms", "gen", "prompts", "scores", "skills"])
+        self.assertEqual(sorted(os.listdir(self.playground)), ["algorithms", "gen", "processes", "prompts", "scores", "skills"])
         self.assertEqual(sorted(os.listdir(os.path.join(self.playground, "skills"))), ["core-algorithmic.md", "core-electronic.md", "profiles", "quantizer.md"])
         self.assertEqual(self.heard(), [line("set_playground", self.playground)])
         with open(os.path.join(self.folder, "file"), "w") as f:
@@ -350,7 +350,7 @@ class MapTests(HubTest):
         self.assertEqual(len(self.ask("scales1").history), 4)
         self.assertNotIn("scales1 new", self.bridge.sent)
 
-    def test_remove_forgets_the_instance_but_keeps_its_files(self):
+    def test_remove_forgets_the_instance_and_sets_its_conversation_aside(self):
         self.setup_patch()
         self.write_skill("analysis", "ANALYSE FIRST.")
         self.bridge.from_max("set_skills core-algorithmic")
@@ -363,12 +363,15 @@ class MapTests(HubTest):
         self.assertIn("scales1 remove", self.heard())
         self.assertIn("scales1 history []", self.heard())
         self.assertNotIn("scales1 set_skills analysis", self.hub.snapshot())
-        self.assertTrue(os.path.exists(os.path.join(self.playground, "prompts", "scales1.jsonl")))
+        prompts = os.path.join(self.playground, "prompts")
+        self.assertFalse(os.path.exists(os.path.join(prompts, "scales1.jsonl")))
+        self.assertTrue([f for f in os.listdir(prompts) if f.startswith("scales1-")])  # kept beside it
         self.assertTrue(os.path.exists(os.path.join(self.playground, "skills", ".compiled", "scales1.md")))
         self.bridge.from_max("scales1 get_skills")
         self.assertEqual(words(self.bridge.sent[-2]), ["scales1", "skills", "core-algorithmic"])  # the shared ones
-        conversation = self.ask("scales1")  # prompted again: its saved conversation is read again
-        self.assertEqual(len(conversation.history), 4)
+        conversation = self.ask("scales1")  # prompted again: a new conversation, nothing remembered
+        self.assertEqual(len(conversation.history), 2)
+        self.assertEqual(conversation.session, "")
         self.assertNotIn("ANALYSE FIRST.", conversation.system_prompt())
 
     def test_remove_stops_what_is_waiting(self):
@@ -382,6 +385,25 @@ class MapTests(HubTest):
         self.go.set()
         self.answered("notes1")
         self.assertNotIn("scales1", self.hub._conversations)
+
+    def test_remove_while_answered_saves_nothing(self):
+        self.setup_patch()
+        self.go.clear()  # the model holds its answer
+        self.replies = [text_reply("One."), text_reply("Two.")]
+        self.bridge.from_max("scales1 prompt first")
+        deadline = time.time() + 3
+        while "scales1 thinking" not in self.heard() and time.time() < deadline:
+            time.sleep(0.01)
+        self.bridge.from_max("scales1 remove")
+        self.go.set()
+        deadline = time.time() + 3
+        while "scales1 stopped" not in self.heard() and time.time() < deadline:
+            time.sleep(0.01)
+        while self.hub._answering and time.time() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(os.listdir(os.path.join(self.playground, "prompts")) if os.path.isdir(
+            os.path.join(self.playground, "prompts")) else [], [])
+        self.assertEqual(len(self.ask("scales1").history), 2)  # the next prompt: a new conversation
 
     def test_lines_that_are_not_the_hubs_stay_with_the_bridge(self):
         self.setup_patch()

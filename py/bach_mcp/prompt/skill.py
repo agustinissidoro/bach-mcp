@@ -47,7 +47,8 @@ GEN_SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "GEN_S
 QUANTIZER_SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "QUANTIZER_SKILL.md")
 
 # The types of instance (tools/session.py TYPES) that work in each mode.
-MODE_TYPES = {"algo": ("generator", "transformer", "selector"), "score": ("score",), "gen": ("synth", "fx")}
+MODE_TYPES = {"algo": ("generator", "transformer", "selector"), "score": ("score",), "gen": ("synth", "fx"),
+              "buffer": ("buffer",)}
 _TYPES = [instance_type for types in MODE_TYPES.values() for instance_type in types]
 _WORD = "|".join(["both", *MODE_TYPES, *_TYPES])
 _MARKER = re.compile(rf"^<!--\s*(/?)\s*((?:{_WORD})(?:\s+(?:{_WORD}))*)\s*-->[ \t]*\n?", re.M)

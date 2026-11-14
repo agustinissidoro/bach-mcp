@@ -6,6 +6,8 @@ Two modes, chosen by the user with a prefix at the start of a message:
     /score   the model writes the notes, as JSON (write_score)        default
     /algo    the model writes the algorithm that generates them (send_algorithm)
     /gen     the model writes sound: GenExpr code for gen~ (send_gen), for a synth or an fx
+    /buffer  the model writes offline audio processing in Python (send_buffer_process), run by the hub
+             on the samples of a bachmcp.shmbuffer~ (no skill of its own yet: the tool says how)
 
 A mode lasts until the other prefix appears. Each mode gets only its own part
 of the skill (skill.py) and only its own tools (read_score is in both), so the model reads less and
@@ -29,16 +31,18 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..tools.algo_tools import ALGO_TOOLS
 from ..tools.gen_tools import GEN_TOOLS
 from ..tools.pitch_tools import PITCH_TOOLS
+from ..tools.buffer_process_tools import BUFFER_PROCESS_TOOLS
 from ..tools.score_tools import SCORE_TOOLS
 from .skill import MODE_TYPES, skill_for
 
-MODES = ("score", "algo", "gen")
+MODES = ("score", "algo", "gen", "buffer")
 DEFAULT_MODE = "score"
 
 MODE_TOOLS = {
     "score": SCORE_TOOLS + PITCH_TOOLS,  # the notes, with exact pitch arithmetic
     "algo": ALGO_TOOLS + ("read_score",),  # the algorithm, and a look at the score in the roll
     "gen": GEN_TOOLS,  # sound: the gen~ code alone, nothing of the score
+    "buffer": BUFFER_PROCESS_TOOLS,  # offline audio: the Python file alone
 }
 
 TYPE_MODE = {instance_type: mode for mode, types in MODE_TYPES.items() for instance_type in types}  # generator -> algo ...
@@ -55,9 +59,11 @@ TYPE_NOTE = {
              "and send it with send_gen.",
     "fx": "You are writing for an fx: it processes the sound that comes into its inlets. Write the GenExpr "
           "code of its gen~ and send it with send_gen.",
+    "buffer": "You are writing for a buffer instance: it processes, offline, the sound in its memory in Max. "
+               "Write a Python file that defines `process(x, sr, p)` and send it with send_buffer_process.",
 }
 
-_PREFIX = re.compile(r"^\s*/(algo|score|gen)\b[ \t]*\n?", re.I)
+_PREFIX = re.compile(r"^\s*/(algo|score|gen|buffer)\b[ \t]*\n?", re.I)
 
 
 def split_prefix(text: str) -> Tuple[Optional[str], str]:

@@ -10,7 +10,7 @@ being answered says so (use_conversation) before it calls a tool.
 
 Instance. Every product carries the name of the instance it is for, and the
 instance's type decides what the tools accept (a score instance writes notes, a
-generator or a transformer an algorithm, a synth or an fx gen~ code). The tools never get a name from the
+generator or a transformer an algorithm, a synth or an fx gen~ code, a process Python for offline audio). The tools never get a name from the
 model: they ask target(), which the hub (chat/hub.py) answers, with the
 instance of the prompt being answered, else the active one. A Claude written
 to directly chooses the active one itself (instances(): instance_tools.py), and
@@ -18,8 +18,9 @@ its calls are always for the active one, also while another instance's prompt is
 being answered: the app it reaches marks them (calling_directly, registry.py).
 
     Target(name, type, playground)
-      .algorithms .scores .prompts .gen      the playground's folders
-      .algorithm_file .roll_file .gen_file   <name>.js, <name>.json, <name>.genexpr in them
+      .algorithms .scores .prompts .gen .processes      the playground's folders
+      .algorithm_file .roll_file .gen_file .process_file
+                                             <name>.js, <name>.json, <name>.genexpr, <name>.py in them
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ import threading
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterator, Optional, Protocol, Tuple
 
-TYPES = ("generator", "transformer", "selector", "score", "synth", "fx")
+TYPES = ("generator", "transformer", "selector", "score", "synth", "fx", "buffer")
 
 _lock = threading.Lock()
 _number = 0
@@ -104,6 +105,14 @@ class Target:
     @property
     def gen_file(self) -> str:
         return os.path.join(self.gen, f"{self.name}.genexpr")
+
+    @property
+    def processes(self) -> str:
+        return os.path.join(self.playground, "processes")
+
+    @property
+    def process_file(self) -> str:
+        return os.path.join(self.processes, f"{self.name}.py")
 
     @property
     def algorithm_file(self) -> str:
