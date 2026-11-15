@@ -46,6 +46,10 @@ Messages, every type:
   repeat                    the last score sent, again
   param <name> <value...>   set a parameter, e.g. "param times 32", "param register 4800 8400":
                             parameters come in only this way, so any name is free for them
+  preset <n> save|recall|remove   presets 1 to 10, kept in the algorithm's file (its const presets
+                            block, rewritten by save and remove). recall sets every parameter the
+                            preset names (by name: one the algorithm no longer has is skipped) and
+                            runs once (auto_dump 1). The panel is told: presets <current> <stored...>.
   auto_dump 0/1             1 (default): a parameter change outputs a score; 0: only bang does
   snap 0/1/3                the output's pitches: 0 semitones, 1 quarter tones, 3 free (default)
   bypass 0/1                1: runs do nothing; a score at the inlet goes straight out of outlet 0
@@ -156,6 +160,7 @@ function dump() { engine.bang(); }
 function run() { engine.runNow(); }
 function repeat() { engine.repeat(); }
 function auto_dump(on) { engine.autoDump(on); }
+function preset(index, action) { engine.preset(index, action); }
 function snap(n) { engine.setSnap(n); }
 function bypass(on) { engine.setBypass(on); }
 function write_to_playground() { engine.writeScore(); }

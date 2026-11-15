@@ -83,6 +83,7 @@ function need(name) {
 const loader = need("bachmcp.runner.loader.js");
 const paramspec = need("bachmcp.runner.paramspec.js");
 const { makeFiles, basename } = need("bachmcp.runner.files.js");
+const presetFile = need("bachmcp.runner.presets.js");
 const { copy } = need("bachmcp.lib.build.js");
 
 const OUT = { SCORE: 0, BACH: 1, PANEL: 2, DONE: 3, STATUS: 4 };
@@ -118,6 +119,8 @@ function createEngine(max) {
     text: "",
     compiled: null,
     values: {},
+    presets: {},         // the file's presets: {slot: {name: value}} (bachmcp.runner.presets.js)
+    preset: 0,           // the slot last saved or recalled (0: none)
     autorun: true,       // auto_dump 1: a change outputs a score
     syncing: false,      // inside sync: changes are applied, never run (see quietly)
     changed: true,       // something changed since the last run: bang runs instead of sending the last score
@@ -453,6 +456,8 @@ function createEngine(max) {
     state.values = keptValues(next, before);
     state.compiled = next;
     state.changed = true;
+    state.presets = next.presets;
+    if (!state.presets[state.preset]) state.preset = 0;
     sendSpec();
     say(`loaded ${basename(state.path)}: ${paramspec.describe(next.specs, state.values).join("; ")}`);
     status("algo_loaded", basename(state.path));  // a load is not a run: bang for a score
@@ -466,6 +471,7 @@ function createEngine(max) {
       title: basename(state.path).replace(/\.js$/, ""), description: compiled.description || "", path: state.path,
       type: compiled.type, params,
     }, hook("spec") || {})));
+    sendPresets();
   }
 
   /**
@@ -477,6 +483,87 @@ function createEngine(max) {
     if (!state.compiled) return status("specs", 0);
     sendSpec();
     status("specs", 1);
+  }
+
+  // ── Presets ──────────────────────────────────────────────────────────── //
+
+  /** To the panel: presets <current slot, 0 none> <stored slots...>. */
+  function sendPresets() {
+    tellPanel("presets", state.preset, ...presetFile.slots(state.presets));
+  }
+
+  /** preset <index> save | recall | remove: slots 1 to 10, kept in the algorithm's file. */
+  function preset(index, action) {
+    const n = Number(index);
+    const what = String(action === undefined ? "recall" : action);
+    if (!(Number.isInteger(n) && n >= 1 && n <= presetFile.MAX_SLOT)) {
+      return refuse(`preset <index> save|recall|remove: the index is 1 to ${presetFile.MAX_SLOT}, got ${index}`);
+    }
+    if (!state.compiled) return refuse(`no algorithm loaded (received "preset ${index} ${what}")`);
+    if (what === "save") return savePreset(n);
+    if (what === "recall") return recallPreset(n);
+    if (what === "remove") return removePreset(n);
+    refuse(`preset ${index}: save, recall or remove, got ${action}`);
+  }
+
+  function savePreset(n) {
+    const kept = {};
+    for (const spec of state.compiled.specs) kept[spec.name] = copy(state.values[spec.name]);
+    const next = Object.assign({}, state.presets, { [n]: kept });
+    if (!writePresets(next)) return;
+    state.preset = n;
+    sendPresets();
+    say(`preset ${n} saved`);
+  }
+
+  function removePreset(n) {
+    if (!state.presets[n]) return;
+    const next = Object.assign({}, state.presets);
+    delete next[n];
+    if (!writePresets(next)) return;
+    if (state.preset === n) state.preset = 0;
+    sendPresets();
+    say(`preset ${n} removed`);
+  }
+
+  /** The presets into the file (only their block changes); the watcher does not take it for an edit. */
+  function writePresets(next) {
+    const text = presetFile.withPresets(state.text, next);
+    if (!files.write(state.path, text)) {
+      refuse(`cannot write the presets into ${basename(state.path)}`);
+      return false;
+    }
+    state.text = text;
+    state.presets = next;
+    return true;
+  }
+
+  /**
+   * A stored preset back: each value to its parameter by name, as param would set it, and one
+   * run for all of them (auto_dump 1). A name the algorithm no longer has, or a value it cannot
+   * take, is skipped: that parameter keeps its value.
+   */
+  function recallPreset(n) {
+    const stored = state.presets[n];
+    if (!stored) return say(`preset ${n} is empty`);
+    let any = false;
+    for (const spec of state.compiled.specs) {
+      if (!(spec.name in stored)) continue;
+      let value;
+      try {
+        value = paramspec.coerce(spec, paramspec.valueAtoms(spec, stored[spec.name]));
+      } catch (e) {
+        say(`preset ${n}: ${e.message || e}: ${spec.name} keeps its value`);
+        continue;
+      }
+      if (JSON.stringify(value) === JSON.stringify(state.values[spec.name])) continue;
+      state.values[spec.name] = value;
+      tellPanel("set", spec.name, ...paramspec.valueAtoms(spec, value));
+      any = true;
+    }
+    state.preset = n;
+    sendPresets();
+    if (any) changed();
   }
 
   /**
@@ -600,6 +687,7 @@ function createEngine(max) {
     OUT, state, files, max,
     say, fail, refuse, status, tellPanel, flag,
     setType, setname, getSpecs, load, loadAlgo, tryLoadAlgo, reload, autoDump, verbose, watch, setParam,
+    preset,
     changed, quietly, setBypass, setSourceMode, setProcessOnlySelection, setDumpSelectionOnly, setInvolutive, setSnap, passThrough, bang, repeat, runNow, process, schedule, sendScore, writeScore, deleted,
     get type() { return type; },
   };

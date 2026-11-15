@@ -9,18 +9,37 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 92.0, 1231.0, 954.0 ],
+        "rect": [ 216.0, 92.0, 1001.0, 954.0 ],
         "boxes": [
             {
                 "box": {
-                    "id": "obj-13",
-                    "linecount": 4,
+                    "fontface": 1,
+                    "id": "obj-9",
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 193.0, 550.0, 277.0, 60.0 ],
-                    "presentation_linecount": 4,
-                    "text": "if you're planning to use bachmcp also for audio tasks, you might want to download CLAP and AudioSet. Both models are placed by default in /models/audio"
+                    "patching_rect": [ 29.0, 512.0, 213.0, 20.0 ],
+                    "text": "ONNX models for machine listening"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-3",
+                    "maxclass": "live.line",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 27.0, 482.0, 814.0, 12.0 ]
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-13",
+                    "linecount": 5,
+                    "maxclass": "comment",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 190.5, 549.0, 277.0, 87.0 ],
+                    "text": "if you're planning to use bachmcp also for audio tasks, you might want to download CLAP and CED. Both models are placed by default in /models/audio\n\n"
                 }
             },
             {
@@ -30,8 +49,8 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 29.0, 554.0, 129.0, 22.0 ],
-                    "text": "download clap-general"
+                    "patching_rect": [ 29.0, 554.0, 128.0, 22.0 ],
+                    "text": "download laion-clap2-l"
                 }
             },
             {
@@ -41,8 +60,8 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 29.0, 590.0, 147.0, 22.0 ],
-                    "text": "download audioset-tagger"
+                    "patching_rect": [ 29.0, 590.0, 113.0, 22.0 ],
+                    "text": "download ced-base"
                 }
             },
             {

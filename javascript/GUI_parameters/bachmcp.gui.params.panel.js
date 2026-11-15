@@ -6,14 +6,18 @@ sent as "auto_dump 1|0", on by default), under it the algorithm's description wh
 its file has one (the spec's description: the // comment that opens the file),
 wrapped on up to DESCRIPTION_LINES lines, then the sections.
 Left of the type, one animated icon follows the instance's prompt (setPrompt).
-Drags land on each slider's grid; alt lets one through. "Options": reset
-all; pitch cards toggle ½ | ¼ | free ("snap 0|1|3"), time cards 100ms | 10ms | free; a transformer adds its source card:
+Drags land on each slider's grid; alt lets one through. Pitch cards toggle ½ | ¼ | free ("snap 0|1|3"), time cards 100ms | 10ms | free; a transformer adds its source card:
 capture and the source mode as two
 segments, non-destructive (the source is held; every output starts again from
 it) or destructive (every score at the runner's inlet becomes the source), sent
 as "source_mode 1|0". A selector has the same card, and under the mode
 two more segments, whole score | selection only (sent as "dump_selection_only 0|1"). "Parameters": one card each, its name and value above its
 control. A status line closes the panel.
+
+"Presets" (every type but a synth or an fx, once an algorithm is loaded): ten slots,
+as the preset object: click recalls, shift-click saves, option-click removes, sent
+as "preset <n> recall|save|remove". The runner keeps them in the algorithm's file
+and answers "presets <current> <stored...>" (setPresets): the panel only shows that.
 
 A synth or an fx (gen~: it makes sound) has its own look: its sliders are knobs
 (elements' Knob: same messages), in a grid of cards before the toggles and menus;
@@ -30,8 +34,8 @@ Bigger controls are more precise: the elements mark finer steps and show free
 values to the pixel (see bachmcp.gui.params.elements.js).
 
 The Panel turns mouse gestures into "param <name> <value...>" messages for a runner
-(runners/) and gives its state to be saved with the patch and to pattr
-(snapshot, restore, flat values).
+(runners/) and gives its state to be saved with the patch (snapshot, restore).
+The presets are not part of it: they are in the algorithm's file.
 
 Drawn by bachmcp.gui.params.v8ui.js. Kept in ECMAScript 5 with `exports` only,
 so it also loads in the legacy engine and in Node (the tests draw it on a mock).
@@ -109,6 +113,23 @@ Panel.prototype.clear = function () {
   this.withinSelection = false;  // process_only_selection
   this.pitchSnap = 3;  // the output's pitches: 0 semitones, 1 quarter tones, 3 free
   this.timeSnap = 0;   // time sliders: 0 their own grid, 1 100 ms, 2 10 ms
+  this.presets = { current: 0, stored: {} };  // as the runner says (setPresets)
+};
+
+var PRESET_SLOTS = 10;
+
+/** presets <current> <stored...>: what the runner holds (0: no current slot). */
+Panel.prototype.setPresets = function (current, stored) {
+  var next = { current: Number(current) || 0, stored: {} };
+  for (var i = 0; i < (stored || []).length; i++) next.stored[Number(stored[i])] = true;
+  if (JSON.stringify(next) === JSON.stringify(this.presets)) return false;
+  this.presets = next;
+  return true;
+};
+
+/** The presets row: algorithms only (not gen~), once one is loaded. */
+Panel.prototype.hasPresets = function () {
+  return !this.audio() && Boolean(this.title);
 };
 
 /**
@@ -559,7 +580,7 @@ Panel.prototype.place = function (width, compact, s, extra) {
   this.width = width;
   this.rows = [];
   var p = { autoDump: null, within: null, bypass: null, mute: null, capture: null, mode: null, only: null,
-    snap: null, reset: null, sections: [] };
+    snap: null, reset: null, presets: [], sections: [] };
   var audio = this.audio();
   this.places = p;
   var inner = width - 2 * m.pad;
@@ -599,11 +620,17 @@ Panel.prototype.place = function (width, compact, s, extra) {
       y += k.button + (l < lines.length - 1 ? gap : k.gap);
     }
   }
-  // parameters, reset in the header
+  // presets: ten slots on one row
+  if (this.hasPresets()) {
+    p.sections.push({ text: "presets", y: y, h: section });
+    y += section;
+    var pg = v(4), pw = (inner - (PRESET_SLOTS - 1) * pg) / PRESET_SLOTS;
+    for (var ps = 0; ps < PRESET_SLOTS; ps++) p.presets.push({ x: m.pad + ps * (pw + pg), y: y, w: pw, h: k.button, slot: ps + 1 });
+    y += k.button + k.gap;
+  }
+  // parameters (no reset button: the reset message, or a double-click on each control)
   var head = { text: "parameters" + (this.items.length ? " · " + this.items.length : ""), y: y, h: section };
   p.sections.push(head);
-  var by = y + (section - v(16)) / 2 - v(1);
-  p.reset = { x: width - m.pad - v(44), y: by, w: v(44), h: v(16) };
   y += section + v(2);
   // each element at this scale, and the value one pixel of its control moves (free values)
   var tall = 0, i, item;
@@ -752,6 +779,14 @@ Panel.prototype.paint = function (g, width, height) {
   if (p.within) button(g, p.within, "process sel.", this.withinSelection, this.hot(p.within), C);
   if (p.only) button(g, p.only, "dump sel.", this.selectionOnly, this.hot(p.only), C);
   if (p.reset) button(g, p.reset, "reset", false, this.hot(p.reset), C);
+  for (var ps = 0; ps < p.presets.length; ps++) {
+    var slot = p.presets[ps], n = slot.slot;
+    var current = this.presets.current === n, stored = this.presets.stored[n] === true;
+    var fill = current ? THEME.fill : (this.hot(slot) ? THEME.buttonHover : (stored ? THEME.button : THEME.card));
+    rounded(g, slot.x, slot.y, slot.w, slot.h, v(4), fill);
+    if (!stored && !current) outline(g, slot.x, slot.y, slot.w, slot.h, v(4), THEME.line);
+    label(g, String(n), slot, "center", current ? THEME.bg : (stored ? THEME.text : THEME.faint), v(10));
+  }
   if ((this.title || this.type) && !this.items.length) {
     label(g, this.title ? "no parameters" : "No algorithm loaded.", { x: k.pad + v(2), y: (p.sections.length ? p.sections[p.sections.length - 1].y : k.title) + k.section,
       w: width - 2 * k.pad, h: k.row }, "left", THEME.dim, v(THEME.fontSize));
@@ -833,6 +868,15 @@ Panel.prototype.mouseDown = function (x, y, mods) {
     return [];
   }
   if (p.reset && inside(p.reset, x, y)) return this.resetAll();
+  for (var ps = 0; p.presets && ps < p.presets.length; ps++) {
+    if (!inside(p.presets[ps], x, y)) continue;
+    var n = p.presets[ps].slot, held = this.presets.stored[n] === true;
+    mods = mods || {};
+    // as the preset object: shift-click saves, option-click removes, click recalls
+    if (mods.shift) return [["preset", n, "save"]];
+    if (mods.alt) return held ? [["preset", n, "remove"]] : [];
+    return held ? [["preset", n, "recall"]] : [];
+  }
   if (p.bypass && inside(p.bypass, x, y)) {
     this.bypass = !this.bypass;
     return [["bypass", this.bypass ? 1 : 0]];
@@ -897,7 +941,7 @@ Panel.prototype.allMessages = function () {
   return out;
 };
 
-// ── Saving with the patch, presets ──────────────────────────────────────── //
+// ── Saving with the patch ──────────────────────────────────────── //
 
 Panel.prototype.snapshot = function () {
   var params = [];
@@ -925,41 +969,6 @@ Panel.prototype.restore = function (snapshot) {
   this.timeSnap = [0, 1, 2].indexOf(snapshot.timeSnap) < 0 ? 0 : snapshot.timeSnap;
   this.setSpec(snapshot);
   this.snap = snapshot.snap !== false;
-};
-
-/** Every value as one flat list of numbers, for pattr (menus as their index). */
-Panel.prototype.flatValues = function () {
-  var out = [];
-  for (var i = 0; i < this.items.length; i++) {
-    var it = this.items[i];
-    if (it.type === "menu") out.push(it.index());
-    else if (it.type === "curve") out.push(it.value.length);
-    if (it.type !== "menu") out = out.concat(it.atoms());
-  }
-  return out;
-};
-
-Panel.prototype.setFlatValues = function (flat) {
-  var out = [], k = 0;
-  for (var i = 0; i < this.items.length && k < flat.length; i++) {
-    var it = this.items[i], n;
-    if (it.type === "menu") {
-      var option = it.options[clamp(Math.round(flat[k++]), 0, it.options.length - 1)];
-      if (option !== it.value) {
-        it.value = option;
-        out.push(this.message(it));
-      }
-      continue;
-    }
-    if (it.type === "range") n = 2;
-    else if (it.type === "list") n = it.value.length;
-    else if (it.type === "curve") n = 2 * flat[k++];
-    else n = 1;
-    var before = it.atoms();
-    if (it.accept(flat.slice(k, k + n)) && !same(before, it.atoms())) out.push(this.message(it));
-    k += n;
-  }
-  return out;
 };
 
 exports.Panel = Panel;

@@ -34,7 +34,10 @@ any code), shown on its panel as one line:
 
     // A canon whose voices drift apart in tempo.
 
-    compile(code)                  the file -> {specs, type, fn, description, state}; throws AlgoError
+It may end with its presets (const presets = {...}), which the runner writes
+(bachmcp.runner.presets.js); the algorithm does not use them.
+
+    compile(code)                  the file -> {specs, type, fn, description, state, presets}; throws AlgoError
     run(compiled, values, source)  one run -> {score, notes, ms}
 
 Scores are bachjson-complete, as every object passes them: the loader does not
@@ -60,10 +63,12 @@ const { AlgoError, isObject, isNumber } = need("bachmcp.lib.base.js");
 const { makeLibrary, LIBRARY, OCTAVE, copy } = need("bachmcp.lib.index.js");
 const { normalizeParams, prepare, MIDI_RANGE } = need("bachmcp.runner.paramspec.js");
 const { MAX_NOTES } = need("bachmcp.lib.units.js");
+const { normalize: normalizePresets } = need("bachmcp.runner.presets.js");
 
 function wrapSource(code) {
   return '"use strict";\nreturn (function () {\n' + code +
     '\n;return { params: typeof params === "undefined" ? undefined : params,' +
+    ' presets: typeof presets === "undefined" ? undefined : presets,' +
     ' produce: typeof produce === "undefined" ? undefined : produce,' +
     ' transform: typeof transform === "undefined" ? undefined : transform,' +
     ' select: typeof select === "undefined" ? undefined : select,' +
@@ -135,7 +140,7 @@ function compile(code) {
   const type = transform ? "transformer" : (select ? "selector" : "generator");
   const description = describeFile(code);
   return { specs, type, fn: transform || select || produce || generate, description,
-    legacy: !produce && !transform && !select, state };
+    legacy: !produce && !transform && !select, state, presets: normalizePresets(parts.presets) };
 }
 
 /**

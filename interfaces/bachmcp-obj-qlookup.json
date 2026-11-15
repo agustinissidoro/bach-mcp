@@ -153,5 +153,37 @@
       "page",
       "interface"
     ]
+  },
+  "bachmcp.onnx~": {
+    "digest": "Hear a signal live with a sound model",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "audio",
+      "analysis",
+      "live",
+      "CLAP",
+      "tagger",
+      "onnx",
+      "listen"
+    ]
+  },
+  "bachmcp.onnxb~": {
+    "digest": "Hear a buffer~ with a sound model",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "audio",
+      "analysis",
+      "buffer",
+      "CLAP",
+      "tagger",
+      "onnx",
+      "listen"
+    ]
   }
 }

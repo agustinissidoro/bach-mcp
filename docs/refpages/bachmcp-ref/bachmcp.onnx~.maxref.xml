@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.onnx~" module="bachmcp" category="bachmcp">
+	<digest>Hear a signal live with a sound model</digest>
+	<description>Runs a sound model of <i>models/audio/</i> on a signal, live: a tagger (CED) names what it hears with AudioSet labels and scores, a CLAP (LAION CLAP, CLAP2) compares the sound with texts or gives its embedding. The same models the bach-mcp server uses, as ONNX: download them with <i>python py/main.py download &lt;name&gt;</i>. The audio thread only keeps the last 32 seconds of the signal; every <at>hop</at> seconds, while DSP runs, the last <at>window</at> seconds are resampled to the model's rate and heard on a worker thread. The answer comes as <m>dictionary</m> &lt;name&gt; out of the left outlet, then a <m>bang</m> out of the right one. If the model is still busy at the next hop, that hop is skipped: answers come as fast as the model can give them and never pile up. Objects loading the same model share it. Apple Silicon only; ONNX Runtime comes with <i>python py/main.py install</i> (into <i>support/</i>), and this object loads its core from <o>bachmcp.onnxb~</o>, which must sit next to it.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">audio</metadata>
+		<metadata name="tag">analysis</metadata>
+		<metadata name="tag">live</metadata>
+		<metadata name="tag">CLAP</metadata>
+		<metadata name="tag">tagger</metadata>
+		<metadata name="tag">onnx</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="signal">
+			<digest>signal: the sound heard (mono); attributes</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>dictionary: the answer (tags / similarity / embedding), every <at>hop</at> seconds</digest>
+		</outlet>
+		<outlet id="1" type="">
+			<digest>bang after each answer; model &lt;name&gt; &lt;kind&gt; &lt;sr&gt; &lt;window&gt;; error</digest>
+		</outlet>
+	</outletlist>
+	<methodlist>
+		<method name="signal">
+			<arglist />
+			<digest>The sound heard</digest>
+			<description>One channel: mix several before the inlet. Heard at Max's sample rate and resampled to the model's.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="model" get="1" set="1" type="symbol" size="1">
+			<digest>Sound model</digest>
+			<description>A sound model name of <i>models/catalog.toml</i> (in <i>models/audio/</i>), or a model folder's full path. Taggers: <m>ced-base</m>, <m>ced-mini</m> (16 kHz, 10 s). LAION CLAP: <m>laion-clap-music-speech</m>, <m>laion-clap-general</m>, <m>laion-clap-small</m> (48 kHz, 10 s). CLAP2: <m>laion-clap2-m</m>, <m>laion-clap2-l</m> (32 kHz, 30 s). It loads on a worker thread; when it is ready the right outlet says <m>model</m> &lt;name&gt; &lt;kind&gt; &lt;samplerate&gt; &lt;window&gt;. Live, a small model answers faster: <m>ced-mini</m>, <m>laion-clap-small</m>, <m>laion-clap2-m</m>.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Model (catalog name or folder)" />
+			</attributelist>
+		</attribute>
+		<attribute name="window" get="1" set="1" type="float" size="1">
+			<digest>Seconds heard each time</digest>
+			<description>Each answer hears the last this many seconds. <m>0</m> (default): the model's own, at most 10 s. Up to 31 s. A LAION CLAP hears 10 s at most: a longer window is cut, with a warning. Right after DSP starts, the window holds only what was heard so far.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Window (s, 0 = the model's, at most 10)" />
+			</attributelist>
+		</attribute>
+		<attribute name="hop" get="1" set="1" type="float" size="1">
+			<digest>Seconds between answers</digest>
+			<description>How often the last <at>window</at> seconds are sent to the model (0.05 at least). A hop that comes while the model is still busy is skipped, so a slow model answers less often than this. With DSP off, or no new sound, nothing is sent.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Hop (s between answers)" />
+			</attributelist>
+		</attribute>
+		<attribute name="active" get="1" set="1" type="int" size="1">
+			<digest>Answering</digest>
+			<description><m>0</m>: no answers (the signal is still kept, so turning it on again answers at the next hop with the last <at>window</at> seconds). <m>1</m> (default): answer every <at>hop</at> seconds.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Answering" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+		<attribute name="samplerate" get="1" set="1" type="float" size="1">
+			<digest>Sample rate fed to the model (Hz)</digest>
+			<description><m>0</m> (default): the model's own rate (16000 CED, 48000 LAION CLAP, 32000 CLAP2); the signal is resampled to it from Max's rate. Any other rate is used as given, with a warning: the model was trained at its own rate and its answers may be wrong.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Model sample rate (Hz, 0 = the model's)" />
+			</attributelist>
+		</attribute>
+		<attribute name="labels" get="1" set="1" type="int" size="1">
+			<digest>Tagger: how many labels</digest>
+			<description>A tagger's answer has at most this many labels, the highest scores first.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="6" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Tagger: how many labels" />
+			</attributelist>
+		</attribute>
+		<attribute name="threshold" get="1" set="1" type="float" size="1">
+			<digest>Tagger: lowest score</digest>
+			<description>A tagger leaves out labels scoring below this (scores are 0-1). If none reaches it, <i>tags</i> is empty.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="float" size="1" value="0.05" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Tagger: lowest score" />
+			</attributelist>
+		</attribute>
+		<attribute name="text" get="1" set="1" type="atom" size="256">
+			<digest>CLAP: texts to compare with</digest>
+			<description>Each atom is one text (quote texts with spaces: <m>"A drum loop plays." "A man is speaking."</m>). They are embedded once, when set or when the model loads; each answer then says, in this order, the cosine between the sound and each text (about -1 to 1; higher is closer, and only the order between texts means much). LAION's CLAPs were trained on captions: full sentences work better than single words. A tagger ignores it, with a warning.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="CLAP: texts to compare with" />
+			</attributelist>
+		</attribute>
+		<attribute name="embedding" get="1" set="1" type="int" size="1">
+			<digest>CLAP: send the embedding</digest>
+			<description><m>1</m>: a CLAP's answer also holds the sound's embedding, a unit vector (512 numbers for LAION CLAP, 640 CLAP2-M, 960 CLAP2-L), to compare sounds with each other. A CLAP with no <at>text</at> and <at>embedding</at> 0 has nothing to say, and warns so.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="CLAP: send the embedding" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<discussion>
+		The answer is a dictionary the object owns, filled again at each answer: copy it (<o>dict</o>) to keep it past the next hop. Its keys: <i>model</i> and <i>kind</i> (<m>tagger</m>, <m>clap</m>, <m>clap2</m>); <i>samplerate</i>, the Hz the model was fed; <i>duration</i>, the ms heard; a tagger's <i>tags</i>, an array of { <i>label</i>, <i>score</i> }, highest first; a CLAP's <i>similarity</i>, an array of { <i>text</i>, <i>score</i> } in <at>text</at> order, and <i>embedding</i> with <at>embedding</at> 1.
+	</discussion>
+	<seealsolist>
+		<seealso name="bachmcp.onnxb~" />
+		<seealso name="dict" />
+		<seealso name="dict.view" />
+	</seealsolist>
+</c74object>

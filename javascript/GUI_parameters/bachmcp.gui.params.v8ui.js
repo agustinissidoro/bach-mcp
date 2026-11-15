@@ -16,11 +16,14 @@ for a synth or an fx, gen/<name>.json):
   title       bypass ("bypass 0|1"), auto dump ("auto_dump 1|0", on by default; not for a synth or an fx);
               the algorithm's description under it, wrapped on up to four lines;
   options     drags land on round values (alt lets one through; on a card set free, alt snaps it);
-              reset all; a source's process sel. ("process_only_selection 0|1"); a pitch card's snap toggle ½ | ¼ | free ("snap 0|1|3"),
+              a source's process sel. ("process_only_selection 0|1"); a pitch card's snap toggle ½ | ¼ | free ("snap 0|1|3"),
               a time card's 100ms | 10ms | free;
               a transformer's source: capture and its mode,
               non-destructive | destructive (sends "source_mode 1|0");
               a selector's: the same, and whole score | selection only (sends "dump_selection_only 0|1")
+  presets     ten slots (algorithms, not a synth or an fx): click recalls, shift-click saves,
+              option-click removes; sends "preset <n> recall|save|remove". The runner keeps
+              them in the algorithm's file and answers presets <current> <stored...>.
   parameters  one card each. Moving a control sends "param <name> <value...>".
               Double-click a control: back to its declared value. Click a
               pitch's value (highlighted) to show it as a name, midicents or
@@ -28,8 +31,8 @@ for a synth or an fx, gen/<name>.json):
 The panel resizes itself to its content (autosize 0 to stop).
 
 It is saved with the patch (parameters, values and the file path) and shows
-them again on reopening; it sends nothing then (no load to the runner). It also
-works with pattr / pattrstorage: give it a scripting name to store presets.
+them again on reopening; it sends nothing then (no load to the runner). Presets are
+not saved with it: they are in the algorithm's file.
 
 The algorithm's description comes in the spec (the // comment that opens its file)
 and is drawn under the title row, wrapped; one_line_description <text...> replaces
@@ -81,16 +84,8 @@ setoutletassist(0, "to the runner: param <name> <value...>; capture, source_mode
 
 function emit(messages) {
   for (const m of messages) outlet(0, m);
-  if (messages.length) changed();
 }
 emit.local = 1;
-
-// pattr learns of a new value only when told: without this its clients (pattrstorage,
-// its client window) never see one. Called after every change, sent or not.
-function changed() {
-  if (typeof notifyclients === "function") notifyclients();
-}
-changed.local = 1;
 
 function fitHeight() {
   if (!autosizing || !panel) return;
@@ -111,7 +106,6 @@ refresh.local = 1;
 function build(data) {
   const kept = panel.setSpec(data);
   refresh();
-  changed();
   // the values this panel holds, back to the runner: sync, so that they run nothing (a load is not a run).
   // gen~ (synth, fx) has no runner and knows no "sync": it gets them plain, so the user's values
   // survive a new version of the code
@@ -175,6 +169,11 @@ function spec_file(...pieces) {
   build(data);
 }
 
+/** presets <current> <stored...>: the runner's presets (current 0: none). */
+function presets(current, ...stored) {
+  if (panel && panel.setPresets(current, stored)) mgraphics.redraw();
+}
+
 function set_name(name) {
   if (panel && panel.setName(name)) mgraphics.redraw();
 }
@@ -182,7 +181,6 @@ function set_name(name) {
 function set(name, ...atoms) {
   if (panel && panel.setValue(String(name), atoms)) {
     mgraphics.redraw();
-    changed();
   }
 }
 
@@ -278,7 +276,6 @@ function clear() {
   if (!panel) return;
   panel.clear();
   refresh();
-  changed();
 }
 
 function reset() {
@@ -368,17 +365,4 @@ function restore(text) {
   }
   panel.restore(snapshot);
   refresh();
-  changed();
-}
-
-// ── pattr ───────────────────────────────────────────────────────────────── //
-
-function getvalueof() {
-  return panel ? panel.flatValues() : [];
-}
-
-function setvalueof(...flat) {
-  if (!panel) return;
-  emit(panel.setFlatValues(flat));
-  mgraphics.redraw();
 }
