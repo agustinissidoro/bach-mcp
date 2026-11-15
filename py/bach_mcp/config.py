@@ -11,6 +11,7 @@ no other module reads bachmcp.toml or the environment for its settings.
     [server]      Bach's own address: the chat page and /mcp; tool logging
     [max]         the UDP ports of the patch
     [algo]        the Node.js that checks algorithms; the explanation after one
+    [audio]       buffer instances: the models that name a sound (tagger, CLAP), Freesound's key
 
 Where files go is not set here: the patch sends the playground (set_playground).
 
@@ -33,6 +34,7 @@ from typing import Any, List, Optional
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_CONFIG_PATH = os.path.join(REPO_ROOT, "bachmcp.toml")
 MODELS_DIR = os.path.join(REPO_ROOT, "models")
+AUDIO_MODELS_DIR = os.path.join(MODELS_DIR, "audio")  # the sound models (download laion-clap-music-speech ...)
 
 BACKENDS = ("mlx", "gguf")
 REASONING = ("off", "on")
@@ -94,6 +96,25 @@ class AlgoConfig:
     verbose: bool = True               # after send_algorithm the model explains the algorithm and its parameters
 
 
+@dataclass
+class AudioConfig:
+    tagger_model: str = "ced-base"       # a sound model of models/catalog.toml (or a Hugging Face repo): AudioSet labels
+    clap_model: str = "laion-clap-music-speech"  # a CLAP of models/catalog.toml: sound and words compared
+    sound_analysis: bool = True        # describe the source (and result) of a buffer instance to the model
+    freesound_api_key: str = ""        # https://freesound.org/apiv2/apply (not used yet)
+
+    def model_path(self, name: str) -> str:
+        """Where `download <name>` puts a sound model: models/audio/<its repo's name>. A name of
+        models/catalog.toml is read there; anything else is taken for a repo."""
+        name = name.strip()
+        if not name:
+            return ""
+        from .utilities.download import load_catalog
+        entry = load_catalog().get(name.lower())
+        repo = entry.repo if entry is not None else name
+        return os.path.join(AUDIO_MODELS_DIR, repo.split("/")[-1])
+
+
 # Keys that are gone, and what took their place.
 _REMOVED = {
     ("model", "backend"): "Bach reads it from the model",
@@ -113,6 +134,7 @@ class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     max: MaxConfig = field(default_factory=MaxConfig)
     algo: AlgoConfig = field(default_factory=AlgoConfig)
+    audio: AudioConfig = field(default_factory=AudioConfig)
     source: str = ""
 
     # ── Derived values ──────────────────────────────────────────────────── #
@@ -224,6 +246,28 @@ def _from_repo(path: str) -> str:
     return path if os.path.isabs(path) else os.path.join(REPO_ROOT, path)
 
 
+def set_key(path: str, section_name: str, key_name: str, value: str) -> None:
+    """Set one text key of one section of bachmcp.toml, keeping every comment. Raises ConfigError
+    when the file has no such key."""
+    import re
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().split("\n")
+    section, done = "", False
+    for i, line in enumerate(lines):
+        header = re.match(r"\s*\[([^\]]+)\]", line)
+        if header:
+            section = header.group(1).strip()
+            continue
+        key = re.match(rf'(\s*{re.escape(key_name)}\s*=\s*)"[^"]*"', line)
+        if section == section_name and key:
+            lines[i] = f'{key.group(1)}"{value}"{line[key.end():]}'
+            done = True
+    if not done:
+        raise ConfigError(f"could not find [{section_name}] {key_name} in {path}: set it by hand")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+
 def _fill(section: Any, values: Any, name: str) -> None:
     if not isinstance(values, dict):
         raise ConfigError(f"[{name}] must be a table")
@@ -276,4 +320,4 @@ def load_config(path: str = "") -> Config:
     return config
 
 
-__all__ = ["Config", "ConfigError", "load_config", "model_format", "REPO_ROOT", "MODELS_DIR", "BACKENDS"]
+__all__ = ["Config", "ConfigError", "load_config", "set_key", "model_format", "REPO_ROOT", "MODELS_DIR", "AUDIO_MODELS_DIR", "BACKENDS"]

@@ -81,8 +81,16 @@ setoutletassist(0, "to the runner: param <name> <value...>; capture, source_mode
 
 function emit(messages) {
   for (const m of messages) outlet(0, m);
+  if (messages.length) changed();
 }
 emit.local = 1;
+
+// pattr learns of a new value only when told: without this its clients (pattrstorage,
+// its client window) never see one. Called after every change, sent or not.
+function changed() {
+  if (typeof notifyclients === "function") notifyclients();
+}
+changed.local = 1;
 
 function fitHeight() {
   if (!autosizing || !panel) return;
@@ -103,6 +111,7 @@ refresh.local = 1;
 function build(data) {
   const kept = panel.setSpec(data);
   refresh();
+  changed();
   // the values this panel holds, back to the runner: sync, so that they run nothing (a load is not a run).
   // gen~ (synth, fx) has no runner and knows no "sync": it gets them plain, so the user's values
   // survive a new version of the code
@@ -171,7 +180,10 @@ function set_name(name) {
 }
 
 function set(name, ...atoms) {
-  if (panel && panel.setValue(String(name), atoms)) mgraphics.redraw();
+  if (panel && panel.setValue(String(name), atoms)) {
+    mgraphics.redraw();
+    changed();
+  }
 }
 
 // the source's notes: commented out for now (the runner does not send it, the panel does not show it)
@@ -266,6 +278,7 @@ function clear() {
   if (!panel) return;
   panel.clear();
   refresh();
+  changed();
 }
 
 function reset() {
@@ -355,6 +368,7 @@ function restore(text) {
   }
   panel.restore(snapshot);
   refresh();
+  changed();
 }
 
 // ── pattr ───────────────────────────────────────────────────────────────── //

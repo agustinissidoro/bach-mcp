@@ -14,6 +14,9 @@ right after the first typed one (the instance's name), so that it stays #1:
     [v8 bachmcp.bpatcher.replace.js bachmcp.bpatcher.algorithm 288 365 transformer]
     [bachmcp.transformer t1]  ->  [bpatcher @name bachmcp.bpatcher.algorithm @args t1 transformer]
 
+The instance's name is also the bpatcher's scripting name, so that pattr
+(pattrstorage) addresses what is inside it as <name>::...
+
 With fixed arguments a name is needed (without it the first fixed one would be
 taken as the name): a box without one says so in the Max console and stays.
 */
@@ -62,7 +65,11 @@ function replace(args) {
   const given = argsFor(args);
   if (given.length) words.push("@args", ...given);
   const bp = parent.newdefault(left, top, "bpatcher", ...words);
-  if (bp) bp.rect = [left, top, left + width, top + height];
+  if (bp) {
+    bp.rect = [left, top, left + width, top + height];
+    // its scripting name is the instance's: pattr reaches what is inside as t1::...
+    if (args.length) bp.varname = String(args[0]);
+  }
   parent.remove(box);
 }
 replace.local = 1;

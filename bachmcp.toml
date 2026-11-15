@@ -1,6 +1,6 @@
 # Bach configuration. Read by py/main.py: `run`, `serve`, `connect`, `agent`, `eval`, `claude`.
 # [model] and [generation] are for the local model (run), [claude] for the Claude that serve starts;
-# [chat], [server], [max] and [algo] are for both, so both read the same skill, tools and docs.
+# [chat], [server], [max], [algo] and [audio] are for both, so both read the same skill, tools and docs.
 
 [model]
 # The runtime follows from the model: .safetensors weights (MLX) run on mlx_lm.server,
@@ -50,3 +50,17 @@ receive_port = 3001       # Max -> Python: [udpsend 127.0.0.1 3001] in the patch
 node = "/Applications/Max.app/Contents/Resources/C74/packages/Node for Max/source/bin/osx/node/node"             # Node.js, to check each algorithm before it is loaded in Max (name on PATH or absolute path)
 verbose = true              # after sending an algorithm the model explains it and its parameters;
                             # false: at most one sentence (fewer tokens, a faster reply)
+
+[audio]
+# Buffer instances (offline audio in Python). The two models that tell the model what a sound is,
+# by their names in models/catalog.toml; each downloaded into models/audio/ by its name:
+#   python py/main.py download ced-base --use            (0.34 GB)  or ced-mini (0.04 GB)
+#   python py/main.py download laion-clap-music-speech --use   (0.8 GB)
+#   or laion-clap2-m (0.6 GB), laion-clap2-l (1.4 GB), laion-clap-general, laion-clap-small
+tagger_model = "ced-base"         # AudioSet labels (CED): "Speech 0.82, Bird 0.31"
+clap_model = "laion-clap-music-speech"  # CLAP: how close a sound is to the words of the prompt.
+                                  # laion-clap2-m / -l (2026): much better at speech and music;
+                                  # laion-clap-music-speech, laion-clap-general (2023); laion-clap-small: lighter
+sound_analysis = true       # add a description of the source (levels, spectrum, a text spectrogram,
+                            # labels) to each prompt of a buffer instance, and of the result to send_buffer_process
+freesound_api_key = ""      # your own key, from https://freesound.org/apiv2/apply (not used yet)

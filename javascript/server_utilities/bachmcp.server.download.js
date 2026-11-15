@@ -14,11 +14,15 @@ as py/bach_mcp/utilities/download.py does.
     https://huggingface.co/<user>/<repo>[/blob/main/<file>]   a Hugging Face page, or one file in it
     https://<anywhere>/<file>                  a direct link to a file
 
+A sound model (catalog.toml format "clap" or "tagger": laion-clap2-m, laion-clap-music-speech, ced-base ...,
+named by its catalogue name or its repo) goes into <folder>/audio/<repo's name>, with one copy of
+its full-precision ONNX files and their config, labels and tokenizer, as download.py does.
+
 Out of the outlet:
 
     catalog <name> <size>                 one per model in <folder>/catalog.toml (model_catalog)
     downloading <model> <size> <time>     once it has begun (size and time when they can be known)
-    progress <model> <percent> <done> <time left>   every 5 minutes while it downloads
+    progress <model> <percent> <done> <time left>   every minute while it downloads
     done <model> <path>
     interrupted <model> <reason>          stopped, or the connection failed once it had begun
     error <message>                       before anything was downloaded
@@ -40,7 +44,11 @@ try { Max = require("max-api"); } catch (e) { /* outside Max: print instead */ }
 
 const DEFAULT_QUANT = "Q4_K_M";   // what llama-server also picks when a GGUF repo names no quantization
 const MEASURE_MS = 3000;          // how long to watch the speed before saying how long it will take
-const PROGRESS_MS = 5 * 60 * 1000;  // how often to say how far it is
+const PROGRESS_MS = 60 * 1000;    // how often to say how far it is
+const SOUND_FORMATS = ["clap", "tagger"];   // catalog formats of the sound models: into <folder>/audio/
+const SKIPPED = [".h5", ".msgpack", ".onnx", ".ot", ".tflite", ".gitattributes",   // other frameworks' copies of the weights
+                 ".safetensors", ".bin", ".pt", ".pth", ".wav", ".flac", ".mp3"];       // a sound model: its ONNX, not these
+const ONNX_VARIANT = /[._-](?:fp16|int8|uint8|quantized|q4|q4f16|bnb4)\.onnx$/i;    // lighter copies of the weights
 const HF_URL = /^https?:\/\/(?:www\.)?(?:huggingface\.co|hf\.co)\/([^/\s]+\/[^/\s]+?)(?:\/(?:blob|resolve|tree)\/[^/\s]+\/?(\S*))?\/?$/;
 
 let job = null;   // the download running: { spec, controller, stopped, promise }
@@ -85,8 +93,17 @@ function loadCatalog(folder) {
 
 // ── Naming a model, and what its download fetches ───────────────────────── //
 
+// The catalogue's sound model that `text` names (its name or its repo), or null.
+function soundEntry(text, catalog) {
+    const key = text.toLowerCase();
+    const entry = catalog[key] || Object.values(catalog).find(e => e.repo && e.repo.toLowerCase() === key);
+    return entry && SOUND_FORMATS.includes(entry.format) ? entry : null;
+}
+
 function parse(spec, catalog) {
     let text = spec.trim().replace(/^"|"$/g, "");
+    const sound = soundEntry(text, catalog);
+    if (sound) return { repo: sound.repo, sound: true };
     const entry = catalog[text.toLowerCase()];
     if (entry && entry.repo) text = entry.repo;
     const hf = text.match(HF_URL);
@@ -97,6 +114,16 @@ function parse(spec, catalog) {
         throw new Error(`${spec}: not in catalog.toml, not a Hugging Face repo (user/repo[:QUANT]) and not a link`);
     }
     return { repo, quant: quant || null };
+}
+
+// A sound model's files worth fetching: its full-precision ONNX files (not the fp16 or quantized
+// copies, not the whole-model model.onnx when the audio and text halves are there apart) with their
+// config, labels and tokenizer; none when the repo has no ONNX (download.py audio_files).
+function soundFiles(files) {
+    let onnx = files.filter(f => f.rel.endsWith(".onnx") && !ONNX_VARIANT.test(f.rel));
+    if (onnx.some(f => /(^|\/)(audio|text)_model\.onnx$/.test(f.rel))) onnx = onnx.filter(f => path.basename(f.rel) !== "model.onnx");
+    if (!onnx.length) return [];
+    return onnx.concat(files.filter(f => !SKIPPED.some(x => f.rel.endsWith(x)) && f.rel !== "README.md"));
 }
 
 function ggufFiles(files, quant, repo) {
@@ -137,13 +164,16 @@ async function makePlan(spec, folder, signal) {
         const link = (res.headers.get("link") || "").match(/<([^>]+)>;\s*rel="next"/);
         next = link ? link[1] : null;
     }
-    if (where.file) {
+    if (where.sound) {
+        files = soundFiles(files);
+        if (!files.length) throw new Error(`${repo} has no ONNX model: sound models are ONNX, for the MCP and Max alike`);
+    } else if (where.file) {
         files = files.filter(f => f.rel === where.file);
         if (!files.length) throw new Error(`${repo} has no file ${where.file}`);
     } else if (!files.some(f => f.rel.endsWith(".safetensors"))) {
         files = ggufFiles(files, where.quant, repo);   // GGUF: one quantization; MLX: the whole repo
     }
-    return { name: repo.split("/").pop(), size: files.reduce((n, f) => n + f.size, 0), files };
+    return { name: repo.split("/").pop(), size: files.reduce((n, f) => n + f.size, 0), files, sound: !!where.sound };
 }
 
 
@@ -221,7 +251,7 @@ async function download(spec, folder) {
         folder = localPath(folder);
         if (!fs.existsSync(folder)) throw new Error(`no folder ${folder}`);
         const plan = await makePlan(spec, folder, job.controller.signal);
-        const target = path.join(folder, plan.name);
+        const target = plan.sound ? path.join(folder, "audio", plan.name) : path.join(folder, plan.name);
         if (plan.files.every(f => whole(path.join(target, f.rel), f))) {
             return await out("done", spec, one(target));
         }
@@ -327,4 +357,6 @@ const [command, ...args] = process.argv.slice(2);
 if (command === "download") run(args[0], args.slice(1).join(" "));
 else if (command === "model_catalog") listCatalog(args.join(" "));
 else if (command) out("error", `unknown command ${command}: use download <model> <folder> or model_catalog <folder>`);
-else if (!Max) out("error", "use: download <model> <folder> or model_catalog <folder>");
+else if (!Max && require.main === module) out("error", "use: download <model> <folder> or model_catalog <folder>");
+
+module.exports = { loadCatalog, parse, soundFiles };  // for the tests

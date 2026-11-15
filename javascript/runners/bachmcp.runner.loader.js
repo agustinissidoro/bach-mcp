@@ -40,7 +40,7 @@ any code), shown on its panel as one line:
 Scores are bachjson-complete, as every object passes them: the loader does not
 check their syntax. It only makes sure a result is a score (it has voices) of at
 most MAX_NOTES notes (more would flood Max), and
-brings pitches that a parameter pushed out of C0..G9 back in by octaves.
+brings pitches that a parameter pushed out of C1..G10 back in by octaves.
 */
 "use strict";
 
@@ -141,7 +141,7 @@ function compile(code) {
 /**
  * Run a compiled algorithm. A transformer works on `source` (a JSON score), which
  * stays untouched. Returns {score, notes, ms}: the score as the algorithm returned
- * it (pitches folded into C0..G9), its number of notes, and the time it took.
+ * it (pitches folded into C1..G10), its number of notes, and the time it took.
  * A selector returns {selection, markers, notes, ms}: the addresses of the notes it
  * picked, and the markers of its source if it changed them (else null).
  */
@@ -185,7 +185,7 @@ function run(compiled, values, source) {
 }
 
 /**
- * Every pitch of a result brought into C0..G9 by whole octaves, so that a parameter at
+ * Every pitch of a result brought into C1..G10 by whole octaves, so that a parameter at
  * its extreme (a base at the bottom, a step at the top) still makes a playable score.
  * 0..127 is left alone: that is a MIDI number written by mistake, and the check says so.
  */

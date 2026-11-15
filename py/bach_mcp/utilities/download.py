@@ -10,6 +10,10 @@ A model can be named four ways:
     https://huggingface.co/<user>/<repo>[/blob/main/<file>]   a Hugging Face page, or one file in it
     https://<anywhere>/<model>.gguf                a direct link to a .gguf file
 
+A sound model (catalog.toml format "clap" or "tagger": laion-clap2-m, laion-clap-music-speech, ced-base ...,
+or the repo bachmcp.toml [audio] names) goes into models/audio/<repo's name> instead, and --use
+sets it in bachmcp.toml [audio]. Sound models are ONNX (full precision), for the MCP and Max alike.
+
 From the terminal: `python py/main.py download <name> [--use]` and `models`.
 From Max: `bach download_model <name> [use]` (status.py), which runs a
 DownloadJob: the download in its own process, reporting its progress.
@@ -29,8 +33,14 @@ import tomllib
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
-from ..config import DEFAULT_CONFIG_PATH, MODELS_DIR, REPO_ROOT, Config, ConfigError, model_format
+from ..config import (AUDIO_MODELS_DIR, DEFAULT_CONFIG_PATH, MODELS_DIR, REPO_ROOT, Config, ConfigError, load_config,
+                      model_format, set_key)
 
+SOUND_FORMATS = ("clap", "tagger")  # catalog formats of the sound models (audio_processing/listen.py)
+SOUND_KEYS = {"clap": "clap_model", "tagger": "tagger_model"}  # where --use sets them, in [audio]
+_SKIPPED = (".h5", ".msgpack", ".onnx", ".ot", ".tflite", ".gitattributes")  # other frameworks' copies of the weights
+_SOUND_SKIPPED = (".safetensors", ".bin", ".pt", ".pth", ".wav", ".flac", ".mp3")  # a sound model: its ONNX, not these
+_ONNX_VARIANT = re.compile(r"[._-](?:fp16|int8|uint8|quantized|q4|q4f16|bnb4)\.onnx$", re.I)  # lighter copies
 DEFAULT_QUANT = "Q4_K_M"  # what llama-server also picks when a GGUF repo names no quantization
 MAIN_PY = os.path.join(REPO_ROOT, "py", "main.py")
 LOG_PATH = os.path.join(REPO_ROOT, "logs", "download.log")
@@ -67,6 +77,8 @@ def list_models(folder: Optional[str] = None) -> List[ModelInfo]:
         path = os.path.join(folder, name)
         if name.startswith(".") or (os.path.isfile(path) and not name.lower().endswith(".gguf")):
             continue  # README.md, catalog.toml
+        if path == AUDIO_MODELS_DIR:
+            continue  # the sound models: not models to chat with
         out.append(ModelInfo(name, model_format(path), _size(path), path))
     return out
 
@@ -94,8 +106,22 @@ class CatalogEntry:
         """The folder its download goes to, in models/ (the repo's name)."""
         return self.repo.split(":")[0].split("/")[-1]
 
+    @property
+    def sound(self) -> bool:
+        return self.format in SOUND_FORMATS
+
     def downloaded(self, folder: Optional[str] = None) -> bool:
-        return os.path.isdir(os.path.join(folder or MODELS_DIR, self.folder))
+        if self.sound:
+            from ..audio_processing.listen import available
+            return available(os.path.join(folder or AUDIO_MODELS_DIR, self.folder))
+        path = os.path.join(folder or MODELS_DIR, self.folder)
+        return bool(model_format(path)) and not _unfinished(path)
+
+
+def _unfinished(path: str) -> bool:
+    """A download that stopped left a part of a file in the folder (Hugging Face's and _fetch_url's
+    *.incomplete). A stop between two files leaves none: that one still reads as downloaded."""
+    return any(f.endswith(".incomplete") for _, _, files in os.walk(path) for f in files)
 
 
 def load_catalog(path: Optional[str] = None) -> Dict[str, CatalogEntry]:
@@ -121,8 +147,13 @@ class Plan:
     files: Optional[List[str]] = None   # ... and its files to fetch (None: all of them)
     url: str = ""                # or a direct link to one .gguf file
 
+    @property
+    def sound(self) -> bool:
+        """A sound model (format "clap" or "tagger"): it goes into models/audio/."""
+        return self.format in SOUND_FORMATS
+
     def target(self, folder: Optional[str] = None) -> str:
-        return os.path.join(folder or MODELS_DIR, self.name)
+        return os.path.join(folder or (AUDIO_MODELS_DIR if self.sound else MODELS_DIR), self.name)
 
 
 def parse(spec: str, catalog: Optional[Dict[str, CatalogEntry]] = None) -> Dict[str, Optional[str]]:
@@ -163,8 +194,74 @@ def gguf_files(files: List[str], quant: Optional[str] = None) -> List[str]:
     return chosen
 
 
-def make_plan(spec: str, catalog: Optional[Dict[str, CatalogEntry]] = None) -> Plan:
+def audio_files(sizes: Dict[str, int]) -> List[str]:
+    """The files of a sound model's repo worth fetching: its full-precision ONNX files (not the fp16 or
+    quantized copies, not the whole-model model.onnx when the audio and text halves are there apart)
+    with their config, labels and tokenizer. Empty when the repo has no ONNX."""
+    onnx = [n for n in sizes if n.endswith(".onnx") and not _ONNX_VARIANT.search(n)]
+    if any(os.path.basename(n) in ("audio_model.onnx", "text_model.onnx") for n in onnx):
+        onnx = [n for n in onnx if os.path.basename(n) != "model.onnx"]
+    if not onnx:
+        return []
+    rest = [n for n in sizes if not n.endswith(_SKIPPED + _SOUND_SKIPPED) and n != "README.md"]
+    return sorted(onnx + rest)
+
+
+def sound_entry(spec: str, catalog: Dict[str, CatalogEntry], config: Optional[Config] = None) -> Optional[CatalogEntry]:
+    """The sound model `spec` names, or None: a sound model's name in the catalogue, its repo, or a
+    repo that bachmcp.toml [audio] names (config.py: "or a Hugging Face repo"). Such a repo is a
+    sound model because [audio] says so; its key there says which kind."""
+    text = spec.strip().strip('"')
+    entry = catalog.get(text.lower())
+    if entry is not None:
+        return entry if entry.sound else None
+    for known in catalog.values():
+        if known.sound and known.repo.lower() == text.lower():
+            return known
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", text):
+        return None
+    try:
+        named = sound_models(config)
+    except ConfigError:
+        return None
+    return next((CatalogEntry(text, text, kind, 0.0, "") for kind, name in named.items() if name.lower() == text.lower()), None)
+
+
+def sound_plan(entry: CatalogEntry) -> Plan:
+    """A sound model: its repo's files worth fetching, into models/audio/<repo's name>."""
+    from huggingface_hub import HfApi
+    try:
+        info = HfApi().model_info(entry.repo, files_metadata=True)
+    except Exception as exc:  # noqa: BLE001
+        reason = str(exc).splitlines()[0].split(" (Request ID")[0]
+        raise ConfigError(f"cannot read {entry.repo} on Hugging Face: {reason}") from None
+    sizes = {s.rfilename: (s.size or 0) for s in info.siblings or []}
+    files = audio_files(sizes)
+    if not files:
+        raise ConfigError(f"{entry.repo} has no ONNX model: sound models are ONNX, for the MCP and Max alike "
+                          "(a model without one is converted once and uploaded: utilities/export_onnx.py)")
+    return Plan(entry.name, entry.folder, entry.format, sum(sizes[n] for n in files), repo=entry.repo, files=files)
+
+
+def sound_models(config: Optional[Config] = None) -> Dict[str, str]:
+    """The sound models bachmcp.toml [audio] names: {"clap": <name>, "tagger": <name>} (set ones only)."""
+    config = config or load_config()
+    return {kind: getattr(config.audio, key).strip() for kind, key in SOUND_KEYS.items() if getattr(config.audio, key).strip()}
+
+
+def audio_downloaded(config: Optional[Config] = None) -> Dict[str, bool]:
+    """Each sound model [audio] names: whether it is in models/audio/."""
+    from ..audio_processing.listen import available
+    config = config or load_config()
+    return {name: available(config.audio.model_path(name)) for name in sound_models(config).values()}
+
+
+def make_plan(spec: str, catalog: Optional[Dict[str, CatalogEntry]] = None, config: Optional[Config] = None) -> Plan:
     """Ask Hugging Face (or the link) what the download of `spec` would fetch."""
+    catalog = load_catalog() if catalog is None else catalog
+    entry = sound_entry(spec, catalog, config)
+    if entry is not None:
+        return sound_plan(entry)
     where = parse(spec, catalog)
     if where["url"]:
         import httpx
@@ -209,6 +306,13 @@ def fetch(plan: Plan, folder: Optional[str] = None) -> ModelInfo:
             snapshot_download(plan.repo, local_dir=target, allow_patterns=plan.files)
     except Exception as exc:
         raise RuntimeError(f"the download stopped ({str(exc).splitlines()[0]}); start it again to go on") from None
+    return _info(plan, target)
+
+
+def _info(plan: Plan, target: str) -> ModelInfo:
+    """What a download left: a sound model is named as the catalogue names it (what [audio] says)."""
+    if plan.sound:
+        return ModelInfo(plan.spec, plan.format, _size(target), target)
     return ModelInfo(plan.name, model_format(target), _size(target), target)
 
 
@@ -285,8 +389,8 @@ class DownloadJob:
             time.sleep(self.every)
         if self.stopped:
             self.on_error("stopped")
-        elif self.process.returncode == 0 and model_format(self.target):
-            self.on_done(ModelInfo(self.plan.name, model_format(self.target), _size(self.target), self.target))
+        elif self.process.returncode == 0 and (self.plan.sound or model_format(self.target)):
+            self.on_done(_info(self.plan, self.target))
         else:
             self.on_error(_last_line(self.log_path) or f"the download ended with code {self.process.returncode}")
 
@@ -303,24 +407,14 @@ def _last_line(path: str) -> str:
 # ── Setting the model in bachmcp.toml ──────────────────────────────────────── #
 
 def use_in_config(info: ModelInfo, path: str = DEFAULT_CONFIG_PATH) -> None:
-    """Set [model] model in bachmcp.toml to this model, keeping every comment (the runtime follows from it)."""
-    with open(path, encoding="utf-8") as f:
-        lines = f.read().split("\n")
-    section, done = "", set()
-    for i, line in enumerate(lines):
-        header = re.match(r"\s*\[([^\]]+)\]", line)
-        if header:
-            section = header.group(1).strip()
-            continue
-        key = re.match(r'(\s*model\s*=\s*)"[^"]*"', line)
-        if section == "model" and key:
-            lines[i] = f'{key.group(1)}"{info.name}"{line[key.end():]}'
-            done.add("model")
-    if not done:
-        raise ConfigError(f"could not find [model] model in {path}: set it by hand")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    """Set [model] model in bachmcp.toml to this model, keeping every comment (the runtime follows from it);
+    a sound model sets its key of [audio] instead (clap_model, tagger_model)."""
+    if info.format in SOUND_FORMATS:
+        set_key(path, "audio", SOUND_KEYS[info.format], info.name)
+    else:
+        set_key(path, "model", "model", info.name)
 
 
 __all__ = ["ModelInfo", "list_models", "in_use", "CatalogEntry", "load_catalog", "Plan", "parse", "gguf_files",
-           "make_plan", "fetch", "download", "DownloadJob", "use_in_config"]
+           "SOUND_FORMATS", "audio_files", "sound_entry", "sound_plan", "sound_models", "audio_downloaded", "make_plan", "fetch", "download", "DownloadJob", "use_in_config"]
+

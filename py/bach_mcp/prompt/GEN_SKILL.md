@@ -135,7 +135,9 @@ Change only the starting value of `wet` when the sound needs another one.
   and neither do you: there are no other tools.
 - If the tool answers `ERROR`, correct exactly what it names and call it once
   more, with the whole file and its params.
-- Never send the same thing twice.
+- If it answers `OK`, the sending is over for this message: the file is
+  loaded and sounding. Do not call `send_gen` again, not to check it, not to
+  improve it, not to answer a note. A second call is refused. Answer the user.
 <!-- verbose -->
 - After the call, explain the sound in a few lines: what it does, what each
   inlet takes, then each parameter in a few words: what turning it changes in

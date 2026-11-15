@@ -12,9 +12,19 @@ hub. Its file is the playground's processes/<name>.py, its panel processes/<name
     run(name)                  run it now (after the last change, see below)
     set_param(name, key, words) a panel change: kept, then a run
     set_source / set_target    which shmbuffers it reads and writes (default <name>-in, <name>-out)
-    loaded(name)               a new file: the values set before are dropped, then a run
+    loaded(name)               a new file: the values set before are dropped
+    listen(name, file, spec)   the listen test of a file not yet loaded: run on the real source,
+                               kept in the worker (the target and Max get nothing), described
+                               next to the source (send_buffer_process, before it loads the file)
+    commit(name)               what the listen test made, into the target: Max gets it
+    set_goal(name, text)       the prompt being answered: what CLAP measures the sound against
+    prompt_analysis(name)      the description of its source (and of its result, once there is one)
+                               that the hub adds to each prompt
     stop(name)                 the run in progress ends (its worker is killed)
     forget(name)               stop, and drop everything kept for it
+
+The descriptions come from the worker (analysis.py, and listen.py's models when they are
+downloaded: `models` is {"tagger": <path>, "clap": <path>}).
 
 Requests close together become one run: a slider drag runs the code at the last value, not at
 every value it passed. What comes out (send: the hub's _send):
@@ -40,6 +50,16 @@ from typing import Any, Callable, Dict, List, Optional
 WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.py")
 TIMEOUT_SECONDS = 600.0
 SETTLE_SECONDS = 0.05
+
+
+def sound_models(audio: Any) -> Dict[str, str]:
+    """What the worker needs of bachmcp.toml [audio] (config.AudioConfig): each model's folder and name."""
+    out: Dict[str, str] = {}
+    for kind in ("tagger", "clap"):
+        name = getattr(audio, f"{kind}_model", "").strip()
+        if name:
+            out[kind], out[f"{kind}_name"] = audio.model_path(name), name
+    return out
 
 
 def value(words: List[str]) -> Any:
@@ -80,6 +100,10 @@ class _Instance:
     worker: Optional[subprocess.Popen] = None
     answers: "queue.Queue[Optional[str]]" = field(default_factory=queue.Queue)
     stopped: bool = False
+    syncing: bool = False        # a listen test is running it, on a tool's thread
+    has_result: bool = False     # a run wrote its target
+    goal: str = ""
+    asking: threading.Lock = field(default_factory=threading.Lock)  # one request at a time to its worker
 
 
 class ProcessRunner:
@@ -87,9 +111,11 @@ class ProcessRunner:
 
     def __init__(self, send: Callable[..., None], playground: Callable[[], str],
                  python: str = sys.executable, timeout: float = TIMEOUT_SECONDS,
-                 settle: float = SETTLE_SECONDS) -> None:
+                 settle: float = SETTLE_SECONDS, models: Optional[Dict[str, str]] = None,
+                 analysis: bool = True) -> None:
         self.send, self.playground = send, playground
         self.python, self.timeout, self.settle = python, timeout, settle
+        self.models, self.analysis = dict(models or {}), analysis
         self._lock = threading.Lock()
         self._instances: Dict[str, _Instance] = {}
 
@@ -117,7 +143,73 @@ class ProcessRunner:
     def loaded(self, name: str) -> None:
         with self._lock:
             self._get(name).values.clear()
-        self.run(name)
+
+    def set_goal(self, name: str, text: str) -> None:
+        with self._lock:
+            self._get(name).goal = text
+
+    def describe(self, name: str, which: str = "source") -> Optional[Dict[str, Any]]:
+        """The worker's description of the instance's source or target memory (None: the worker ended)."""
+        with self._lock:
+            instance = self._get(name)
+            shm = instance.source if which == "source" else instance.target
+            request = {"shm": shm, "title": "SOURCE" if which == "source" else "RESULT",
+                       "goal": instance.goal, "models": self.models}
+        answer = self._ask(instance, {"describe": request})
+        return answer if answer and answer.get("ok") else None
+
+    def prompt_analysis(self, name: str) -> str:
+        """What the hub adds to a prompt of this instance: its source described, and its result
+        when a run has written one. "" when analysis is off."""
+        if not self.analysis:
+            return ""
+        blocks = []
+        with self._lock:
+            has_result = self._get(name).has_result
+        for which in ("source", "target") if has_result else ("source",):
+            found = self.describe(name, which)
+            if found:
+                blocks.append(found["text"])
+        if not blocks:
+            return ""
+        return ("[Bach's analysis of the sound, made for you: the user did not write it]\n" + "\n\n".join(blocks))
+
+    def listen(self, name: str, file: str, spec: Dict[str, Any]) -> Dict[str, Any]:
+        """The listen test of a file not yet loaded: its process on the real source, in the
+        instance's worker, described next to the source. Nothing reaches the target or Max.
+        {"ok": False, "error", "line"} when it fails; {"ok": True, "skipped": why} with no sound."""
+        with self._lock:
+            instance = self._get(name)
+            instance.stopped, instance.syncing = False, True
+            request = {"file": file, "spec": spec, "values": dict(instance.values), "source": instance.source,
+                       "target": instance.target, "goal": instance.goal, "models": self.models if self.analysis else {}}
+        try:
+            answer = self._ask(instance, {"listen": request})
+        finally:
+            with self._lock:
+                instance.syncing = False
+        if answer is None:
+            return {"ok": False, "error": "stopped before it finished (buffer_process_stop)" if instance.stopped
+                    else "the worker ended"}
+        return answer
+
+    def commit(self, name: str) -> bool:
+        """What the last listen made, into the target: said to Max as a run is. False: it is
+        not there (said to Max as process_error)."""
+        with self._lock:
+            instance = self._get(name)
+            target = instance.target
+        self.send(name, "processing")
+        answer = self._ask(instance, {"commit": {"target": target}})
+        if not answer or not answer.get("ok"):
+            self.send(name, "process_error", (answer or {}).get("error", "the worker ended"))
+            return False
+        with self._lock:
+            instance.has_result = True
+        for note in answer.get("warnings") or []:
+            self.send(name, "process_note", note)
+        self.send(name, "processed", answer["ms"], answer["frames"], answer["channels"], answer["sr"])
+        return True
 
     def run(self, name: str) -> None:
         with self._lock:
@@ -130,15 +222,19 @@ class ProcessRunner:
                 instance.thread.start()
 
     def stop(self, name: str) -> None:
+        """End the run in progress. An idle worker is kept, with what it holds (its loaded
+        models, the result of a listen test not yet committed)."""
         with self._lock:
             instance = self._instances.get(name)
             if instance is None:
                 return
             instance.wanted = False
-            running = instance.thread is not None
+            running = instance.thread is not None or instance.syncing
             instance.stopped = running
-            worker, instance.worker = instance.worker, None
-        if running and worker is not None:
+            worker = instance.worker if running else None
+            if running:
+                instance.worker = None
+        if worker is not None:
             _end(worker)
 
     def forget(self, name: str) -> None:
@@ -167,15 +263,16 @@ class ProcessRunner:
                 request = {"source": instance.source, "target": instance.target, "values": dict(instance.values)}
             self._run_once(name, instance, request)
 
-    def _run_once(self, name: str, instance: _Instance, request: Dict[str, Any]) -> None:
+    def _run_once(self, name: str, instance: _Instance, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """One run, said to Max; returns the worker's answer (None: stopped or ended)."""
         root = self.playground()
         if not root:
             self.send(name, "process_error", "no playground: the patch sends set_playground <folder>")
-            return
+            return {"ok": False, "error": "no playground"}
         file = os.path.join(root, "processes", f"{name}.py")
         if not os.path.exists(file):
             self.send(name, "process_error", f"no processes/{name}.py yet: prompt {name} for one")
-            return
+            return {"ok": False, "error": f"no processes/{name}.py"}
         spec: Dict[str, Any] = {}
         try:
             with open(os.path.join(root, "processes", f"{name}.json"), encoding="utf-8") as f:
@@ -188,18 +285,25 @@ class ProcessRunner:
         if answer is None:
             if instance.stopped:
                 self.send(name, "process_stopped")
-            return
+            return None
         if not answer.get("ok"):
             where = f"line {answer['line']}: " if answer.get("line") else ""
             self.send(name, "process_error", where + answer.get("error", "it failed"))
-            return
+            return answer
+        with self._lock:
+            instance.has_result = True
         for note in answer.get("warnings") or []:
             self.send(name, "process_note", note)
         self.send(name, "processed", answer["ms"], answer["frames"], answer["channels"], answer["sr"])
+        return answer
 
     def _ask(self, instance: _Instance, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Send a request to the instance's worker (started if needed) and wait for its answer.
         None when the worker ended (stopped, crashed or past the timeout): it is started again next time."""
+        with instance.asking:
+            return self._ask_now(instance, request)
+
+    def _ask_now(self, instance: _Instance, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         with self._lock:
             worker = instance.worker
             if worker is None or worker.poll() is not None:
@@ -246,4 +350,4 @@ class ProcessRunner:
             answers.put(None)
 
 
-__all__ = ["ProcessRunner", "value", "WORKER"]
+__all__ = ["ProcessRunner", "sound_models", "value", "WORKER"]

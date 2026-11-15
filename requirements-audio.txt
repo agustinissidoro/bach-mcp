@@ -1,7 +1,20 @@
-# What a process instance's code may import beyond numpy (py/bach_mcp/tools/process_tools.py ALLOWED).
-# Install into the .venv: .venv/bin/python -m pip install -r requirements-audio.txt
+# Buffer instances: offline audio in Python (py/bach_mcp/audio_processing/), for Claude and the local model.
+# Installed by `main.py install` with requirements.txt.
+
+# The memory Max shares (utilities/shmbuffer.py) and every process file
+numpy>=2.0
+
+# What a process file may import (tools/buffer_process_tools.py ALLOWED) and the analysis (analysis.py)
 scipy>=1.14
 soundfile>=0.12
 pedalboard>=0.9
 scikit-learn>=1.5
 librosa>=0.10
+
+# The models that name a sound (listen.py), ONNX from models/audio/ (python py/main.py download ced-base,
+# download laion-clap-music-speech): CED through sherpa-onnx, CLAP through onnxruntime (transformers for its mel
+# spectrogram and tokenizers for its words, numpy only: no torch)
+sherpa-onnx>=1.12
+onnxruntime>=1.20
+transformers>=4.45
+tokenizers>=0.20

@@ -28,6 +28,8 @@ Every line is `server <what it is> <value>`, so the patch routes on the second w
                     server download_start <name> <GB>
                     server download_progress <percent>          every 2 s
                     server download_done <name>                 (with use: bachmcp.toml now names it)
+                    a sound model (laion-clap2-m, laion-clap2-l, laion-clap-music-speech, laion-clap-general, laion-clap-small, ced-base, ced-mini) goes into models/audio/,
+                    and with use: [audio] names it
                     or: server download_error <message>
     bach download_stop
                     server download_stopped <name>  (what was fetched stays: the next start goes on)
@@ -187,7 +189,7 @@ class Status:
             self._say("warning", f"a download is already running: {running} (bach download_stop ends it)")
             return
         try:
-            plan = make_plan(spec)
+            plan = make_plan(spec, config=self.config)
         except ConfigError as exc:
             self._say("download_error", str(exc))
             self._downloading.release()
@@ -309,6 +311,8 @@ def settings(config: Config) -> List[Tuple[str, Word]]:
                 value = " ".join(map(str, value)) or "-"
             elif value == "":
                 value = "-"
+            elif f.name.endswith("api_key"):
+                value = "set"  # never sent over the bridge
             rows.append((f"{section.name}.{f.name}", value))
     rows.append(("model.found", config.model_path if config.model_is_local else "-"))
     rows.append(("model.runtime", config.backend if config.model.model.strip() else "-"))

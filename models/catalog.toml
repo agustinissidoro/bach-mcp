@@ -43,3 +43,58 @@ repo = "unsloth/Qwen3-0.6B-GGUF:Q4_K_M"
 format = "gguf"
 size_gb = 0.4
 
+
+
+# Sound models, for buffer instances: they tell the model what a sound is. Into models/audio/,
+# set in bachmcp.toml [audio] (download <name> --use sets it there). ONNX only, full precision:
+# the same folder serves the MCP (onnxruntime, sherpa-onnx in Python) and Max externals (the same in C++).
+# A model with no ONNX copy (CLAP2) is converted once and uploaded (py/bach_mcp/utilities/export_onnx.py):
+# the laion-clap2 entries are LAION's CLAP2, unchanged, as ONNX in agustinissidoro's repos.
+
+["laion-clap2-l"]
+repo = "agustinissidoro/clap2-large-audioxl-s1B-onnx"
+format = "clap"
+size_gb = 1.4
+note = "LAION CLAP2 large (2026): the best at speech and music, up to 30 s at once"
+
+
+["laion-clap2-m"]
+repo = "agustinissidoro/clap2-medium-audioxl-s1B-onnx"
+format = "clap"
+size_gb = 0.6
+note = "LAION CLAP2 medium (2026): as good as the large one at music, less than half its size"
+
+
+["laion-clap-music-speech"]
+repo = "Xenova/larger_clap_music_and_speech"
+format = "clap"
+size_gb = 0.8
+note = "LAION CLAP (2023) trained on music and speech"
+
+
+["laion-clap-general"]
+repo = "Xenova/larger_clap_general"
+format = "clap"
+size_gb = 0.8
+note = "LAION CLAP (2023) trained on everyday sounds, music and speech"
+
+
+["laion-clap-small"]
+repo = "Xenova/clap-htsat-unfused"
+format = "clap"
+size_gb = 0.6
+note = "the first LAION CLAP (2022): lighter, less precise"
+
+
+["ced-base"]
+repo = "k2-fsa/sherpa-onnx-ced-base-audio-tagging-2024-04-19"
+format = "tagger"
+size_gb = 0.34
+note = "CED: AudioSet labels (527 kinds of sound: Speech, Bird, Rain ...), better than AST"
+
+
+["ced-mini"]
+repo = "k2-fsa/sherpa-onnx-ced-mini-audio-tagging-2024-04-19"
+format = "tagger"
+size_gb = 0.04
+note = "CED, a tenth of the size: a little less precise, much faster"

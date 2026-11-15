@@ -7,10 +7,12 @@ At least one of the two must be true; the one not given is false.
 It starts on whatever Python the shell has, with nothing installed, so it imports only
 the standard library, and only at the top. Two stages:
 
-    outside the .venv   checks Python, makes the .venv, installs the requirements,
+    outside the .venv   checks Python, makes the .venv, installs the requirements (and
+                        requirements-audio.txt, for buffer instances, whichever the mode),
                         then runs this same command again with the .venv's Python
-    inside the .venv    the Node path and Claude. Claude is registered from here so that
-                        its entry names the .venv's Python; Claude Code's login is checked
+    inside the .venv    the Node path, ONNX Runtime for the externals bachmcp.onnx~ and bachmcp.onnxb~
+                        (into support/), the sound models (said to download if missing) and Claude. Claude is
+                        registered from here so that its entry names the .venv's Python; Claude Code's login is checked
 
 Every line goes to the console as `installation: ...`. What the user must still do comes
 at the end. Running it again repairs or adds; it never removes a Claude registration.
@@ -20,13 +22,16 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import os
 import platform
-import re
 import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
+import urllib.request
 from typing import List, Optional, Sequence
 
 MINIMUM_PYTHON = (3, 11)
@@ -37,6 +42,17 @@ MAIN_PY = os.path.join(REPO_ROOT, "py", "main.py")
 CONFIG = os.path.join(REPO_ROOT, "bachmcp.toml")
 MAX_NODE = "/Applications/Max.app/Contents/Resources/C74/packages/Node for Max/source/bin/osx/node/node"
 NODE_PLACES = ("/opt/homebrew/bin/node", "/usr/local/bin/node", MAX_NODE)
+
+# ONNX Runtime, which bachmcp.onnx~ and bachmcp.onnxb~ load from support/ (next to their core,
+# libbachmcp.onnx.dylib, which is in the repository): 47 MB, so fetched here rather than kept in git.
+# Pinned: the same version as sources/bachmcp.onnx/CMakeLists.txt (ORT_VERSION) builds against.
+SUPPORT = os.path.join(REPO_ROOT, "support")
+ORT_VERSION = "1.32.0"
+ORT_URL = (f"https://github.com/microsoft/onnxruntime/releases/download/v{ORT_VERSION}/"
+           f"onnxruntime-osx-arm64-{ORT_VERSION}.tgz")
+ORT_ARCHIVE_SHA256 = "8ddca23f532b9d4fbb279ba9b08dab6c0ac94fdc9aec2eb44a1db7049216c043"
+ORT_DYLIB_SHA256 = "51c5a25a3dfafd74f62f403e6e0dc7881d97c0e627c703a4d9548c5677abc8fd"
+ORT_DYLIB = os.path.join(SUPPORT, "libonnxruntime.1.dylib")  # the name the core asks for (@rpath/...)
 
 
 class InstallError(Exception):
@@ -89,13 +105,17 @@ def make_venv() -> None:
 
 
 def install_requirements(local: bool) -> None:
-    pip = [VENV_PYTHON, "-m", "pip", "install", "--quiet", "--disable-pip-version-check"]
-    run(pip + ["-r", os.path.join(REPO_ROOT, "requirements.txt")], "could not install the requirements")
+    """One pip run for all of them: the pins of requirements.txt and requirements-local.txt and
+    the open versions of requirements-audio.txt are resolved together, so none undoes another."""
+    wanted = ["-r", os.path.join(REPO_ROOT, "requirements.txt"), "-r", os.path.join(REPO_ROOT, "requirements-audio.txt")]
     if local:
         if apple_silicon():
-            run(pip + ["-r", os.path.join(REPO_ROOT, "requirements-local.txt")], "could not install the requirements")
+            wanted += ["-r", os.path.join(REPO_ROOT, "requirements-local.txt")]
         else:  # no MLX here: gguf models only, for llama-server
-            run(pip + ["huggingface-hub>=1.0"], "could not install the requirements")
+            wanted += ["huggingface-hub>=1.0"]
+    say("installing the requirements (librosa and the sound models' runtimes among them: a few minutes the first time)")
+    run([VENV_PYTHON, "-m", "pip", "install", "--quiet", "--disable-pip-version-check"] + wanted,
+        "could not install the requirements")
     say("requirements installed")
 
 
@@ -115,22 +135,11 @@ def find_node(current: str) -> Optional[str]:
 
 def set_node(node: str, path: str = CONFIG) -> None:
     """Set [algo] node in bachmcp.toml, keeping every comment."""
-    with open(path, encoding="utf-8") as f:
-        lines = f.read().split("\n")
-    section, done = "", False
-    for i, line in enumerate(lines):
-        header = re.match(r"\s*\[([^\]]+)\]", line)
-        if header:
-            section = header.group(1).strip()
-            continue
-        key = re.match(r'(\s*node\s*=\s*)"[^"]*"', line)
-        if section == "algo" and key:
-            lines[i] = f'{key.group(1)}"{node}"{line[key.end():]}'
-            done = True
-    if not done:
-        raise InstallError(f"could not find [algo] node in {path}")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    from bach_mcp.config import ConfigError, set_key  # second stage: inside the .venv
+    try:
+        set_key(path, "algo", "node", node)
+    except ConfigError:
+        raise InstallError(f"could not find [algo] node in {path}") from None
 
 
 def bach_found() -> bool:
@@ -198,6 +207,72 @@ def check_login(todo: List[str]) -> None:
     todo.append(f"to prompt Claude from Max, log in to Claude Code, in a terminal: {claude.login_command(command)}")
 
 
+def sha256(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def setup_onnx_runtime(todo: List[str], url: str = ORT_URL, archive_sha256: str = ORT_ARCHIVE_SHA256,
+                       dylib_sha256: str = ORT_DYLIB_SHA256, folder: str = SUPPORT) -> None:
+    """support/: ONNX Runtime's dylib (and its licence) for the externals, the pinned version, checked;
+    nothing fetched when the right one is already there. Apple Silicon only (Microsoft ships macOS for arm64)."""
+    if not apple_silicon():
+        say("onnx runtime skipped (bachmcp.onnx~ and bachmcp.onnxb~ need Apple Silicon)")
+        return
+    dylib = os.path.join(folder, os.path.basename(ORT_DYLIB))
+    if os.path.isfile(dylib) and sha256(dylib) == dylib_sha256:
+        say("onnx runtime found")
+        return
+    os.makedirs(folder, exist_ok=True)
+    say(f"downloading onnx runtime {ORT_VERSION} (47 MB, for bachmcp.onnx~ and bachmcp.onnxb~)")
+    try:
+        with tempfile.TemporaryDirectory(prefix="bachmcp-ort-") as tmp:
+            archive = os.path.join(tmp, "ort.tgz")
+            with urllib.request.urlopen(url, timeout=60) as r, open(archive, "wb") as f:
+                shutil.copyfileobj(r, f)
+            if sha256(archive) != archive_sha256:
+                raise InstallError("the download is not the archive expected (its SHA-256 differs)")
+            with tarfile.open(archive) as tar:
+                root = tar.getnames()[0].split("/")[0]
+                wanted = {f"{root}/lib/libonnxruntime.{ORT_VERSION}.dylib": dylib,
+                          f"{root}/LICENSE": os.path.join(folder, "onnxruntime-LICENSE.txt"),
+                          f"{root}/ThirdPartyNotices.txt": os.path.join(folder, "onnxruntime-ThirdPartyNotices.txt")}
+                for member, target in wanted.items():
+                    source = tar.extractfile(member)
+                    if source is None:
+                        raise InstallError(f"{member} is not in the archive")
+                    with source, open(target + ".part", "wb") as out:
+                        shutil.copyfileobj(source, out)
+                    os.replace(target + ".part", target)
+        if sha256(dylib) != dylib_sha256:
+            raise InstallError("the dylib is not the one expected (its SHA-256 differs)")
+        os.chmod(dylib, 0o755)
+        say("onnx runtime installed")
+    except (OSError, InstallError, tarfile.TarError) as exc:
+        say("onnx runtime not installed")
+        todo.append(f"bachmcp.onnx~ and bachmcp.onnxb~ need ONNX Runtime in support/ ({exc}); run install again")
+
+
+def check_sound_models(config, todo: List[str]) -> None:
+    """The tagger and CLAP of [audio], which describe the sound of buffer instances: downloaded apart, by name."""
+    from bach_mcp.utilities.download import audio_downloaded
+    if not config.audio.sound_analysis:
+        return  # [audio] sound_analysis = false: nothing reads them
+    missing = [name for name, ok in audio_downloaded(config).items() if not ok]
+    if not missing:
+        say("sound models found")
+        return
+    say("sound models not downloaded")
+    for name in missing:
+        todo.append(f"to describe sounds to the model (buffer instances), download {name}: "
+                    f"{command_line(f'download {name}')}")
+    if config.audio.clap_model in missing and config.audio.clap_model != "laion-clap-small":
+        todo.append("  (or the lighter CLAP: download laion-clap-small --use)")
+
+
 def command_line(arguments: str) -> str:
     return f"{shlex.quote(VENV_PYTHON)} {shlex.quote(MAIN_PY)} {arguments}"
 
@@ -209,6 +284,8 @@ def second_stage(args: argparse.Namespace) -> None:
     if not bach_found():
         todo.append("install the bach package from Max's Package Manager")
     setup_node(config, todo)
+    setup_onnx_runtime(todo)
+    check_sound_models(config, todo)
     restart = args.claude and setup_claude(config, todo)
     say("successful")
     for item in todo:

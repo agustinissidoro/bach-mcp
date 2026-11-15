@@ -212,10 +212,17 @@ max/bach-mcp/.buffer.txt.tmp
 max/bach-mcp/externals/build/
 
 sources/*
+
+# The externals' support/: only the folder is kept; `main.py install` creates it if missing and puts
+# the libraries bachmcp.onnx~ and bachmcp.onnxb~ load there
+support/*
+!support/.gitkeep
 !sources/.gitkeep
 playground/*
 !playground/.gitkeep
 /deprecated
+
+py/tests/
 
 # Scores on their way to read_score, rewritten on every read
 /buffer.txt

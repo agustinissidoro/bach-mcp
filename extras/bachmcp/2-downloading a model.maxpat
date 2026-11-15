@@ -9,8 +9,65 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 431.0, 161.0, 937.0, 780.0 ],
+        "rect": [ 34.0, 92.0, 1231.0, 954.0 ],
         "boxes": [
+            {
+                "box": {
+                    "id": "obj-13",
+                    "linecount": 4,
+                    "maxclass": "comment",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 193.0, 550.0, 277.0, 60.0 ],
+                    "presentation_linecount": 4,
+                    "text": "if you're planning to use bachmcp also for audio tasks, you might want to download CLAP and AudioSet. Both models are placed by default in /models/audio"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-12",
+                    "maxclass": "message",
+                    "numinlets": 2,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 29.0, 554.0, 129.0, 22.0 ],
+                    "text": "download clap-general"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-11",
+                    "maxclass": "message",
+                    "numinlets": 2,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 29.0, 590.0, 147.0, 22.0 ],
+                    "text": "download audioset-tagger"
+                }
+            },
+            {
+                "box": {
+                    "hidden": 1,
+                    "id": "obj-8",
+                    "maxclass": "newobj",
+                    "numinlets": 0,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 300.0, 296.0, 63.0, 22.0 ],
+                    "text": "r to.server"
+                }
+            },
+            {
+                "box": {
+                    "hidden": 1,
+                    "id": "obj-5",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 29.0, 649.0, 65.0, 22.0 ],
+                    "text": "s to.server"
+                }
+            },
             {
                 "box": {
                     "id": "obj-23",
@@ -74,7 +131,7 @@
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 18.0, 170.0, 277.0, 141.0 ],
+                    "patching_rect": [ 18.0, 177.0, 277.0, 141.0 ],
                     "text": "model_catalog will print models available in /models/catalog.toml\n\nThese are just illustrative examples, but we recommend getting the 27b model or bigger.\n\nThe catalog.toml is just a utility to download and load models easier. You can add your own entries to the catalog to load your model by name without passing a full path. "
                 }
             },
@@ -115,6 +172,20 @@
             },
             {
                 "patchline": {
+                    "destination": [ "obj-5", 0 ],
+                    "hidden": 1,
+                    "source": [ "obj-11", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-5", 0 ],
+                    "hidden": 1,
+                    "source": [ "obj-12", 0 ]
+                }
+            },
+            {
+                "patchline": {
                     "destination": [ "obj-10", 0 ],
                     "source": [ "obj-20", 0 ]
                 }
@@ -124,6 +195,12 @@
                     "destination": [ "obj-1", 0 ],
                     "midpoints": [ 412.5, 319.0, 309.5, 319.0 ],
                     "source": [ "obj-22", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-1", 0 ],
+                    "source": [ "obj-8", 0 ]
                 }
             }
         ],

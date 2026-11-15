@@ -16,7 +16,10 @@ arguments, names set before they are read, inlets and outlets described, Params
 against the panel's declarations). Then a last check on the gendsp itself, before it is
 written (panel_mismatch): every parameter of the panel is a Param of its codebox and
 sends a number, since gen~ takes no symbols. Only a file that passes replaces the previous
-version (kept in gen/.history) and is loaded, without waiting for an answer:
+version (kept in gen/.history) and is loaded, without waiting for an answer. It loads once
+per turn (session.new_turn: a user message being answered): after an OK, a second call in
+the same turn is refused (ALREADY_LOADED), since nothing new is known until someone listens.
+An ERROR loads nothing and does not count:
 
     <name> load_gen <name>.gendsp                    to Max
 
@@ -47,7 +50,7 @@ from mcp.server.fastmcp import FastMCP
 
 from ..bridge.max import MaxBridge
 from ..bridge.protocol import line
-from .session import NoTarget, target
+from .session import NoTarget, direct, target, turn
 
 GEN_TOOLS = ("send_gen",)
 GEN_TYPES = ("synth", "fx")
@@ -156,13 +159,22 @@ _DOC = """gen~ code (sound, not a score): write the sound as GenExpr, the code o
           {"cutoff": {"type": "slider", "range": [20, 20000], "value": 1000, "unit": "Hz"},
            "drive": {"type": "toggle", "value": false},
            "shape": {"type": "menu", "options": ["sine", "saw"], "value": "sine"}}
-        The result lists the inlets, outlets, parameters and buffers of the file. The code has
-        been checked, not listened to. Do not call it again to check.
+        The result lists the inlets, outlets, parameters and buffers of the file. Call it once
+        per message of the user: after an OK the file is loaded and sounding, and a second call
+        in the same answer is refused (nothing new is known: nobody has listened to it). Call
+        it again only after an ERROR, which loaded nothing.
         """
+
+ALREADY_LOADED = ("NOT SENT: {name} already loaded a gen~ file in this answer (the OK above), and that file "
+                  "is what sounds in Max now. Nothing is known that was not known then: nobody has listened "
+                  "to it, and the checks have passed. Do not call send_gen again: answer the user now. If "
+                  "the user wants it changed, they will say so in their next message.")
 
 
 def register_gen_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> None:
     """Register send_gen on `mcp`. node: the Node.js that checks the files ([algo] node)."""
+
+    loaded: Dict[str, int] = {}  # instance -> the turn (session.turn) its last OK load was in
 
     def send_gen(code: str, params: Union[Dict[str, Any], str, None] = None) -> str:
         try:
@@ -172,6 +184,9 @@ def register_gen_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> N
         if t.type not in GEN_TYPES:
             return (f"ERROR: {t.name} is a {t.type} instance: it works on the score, not on sound. "
                     "send_gen is for a synth or an fx instance. Nothing was loaded.")
+        now = 0 if direct() else turn()  # 0: no turn is marked, nothing is refused
+        if now and loaded.get(t.name) == now:
+            return ALREADY_LOADED.format(name=t.name)
         if not (code or "").strip():
             return "ERROR: code is empty. Send the whole GenExpr file. Nothing was loaded."
         try:
@@ -227,6 +242,8 @@ def register_gen_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> N
         with open(stem + ".json", "w", encoding="utf-8") as f:
             json.dump(about, f, indent=1)
 
+        if now:
+            loaded[name] = now
         bridge.flush()
         file = f"{name}.gendsp"
         if not bridge.send(line(name, "load_gen", file)):
@@ -243,7 +260,7 @@ def register_gen_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> N
             rows = "\n".join(f"  {b['name']}: reads the buffer~ named {b['buffer']}" for b in result["buffers"])
             buffers = (f"Buffers (the user fills each buffer~ with a sound file or a table, and can point a name to "
                        f"another buffer~):\n{rows}\n")
-        notes = "".join(f"Note: {w}.\n" for w in result.get("warnings") or [])
+        notes = "".join(f"For your answer (not an error, nothing to fix): {w}.\n" for w in result.get("warnings") or [])
         return (
             f"OK. {t.type} saved as gen/{name}.genexpr {status}.\n"
             f'Shown above its panel: "{result["description"]}"\n'
@@ -252,7 +269,8 @@ def register_gen_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> N
             f"Parameters (now a panel in Max):\n{described}\n{buffers}{notes}"
             "Checked: the syntax, every operator and its arguments, every name, the parameters, and that every "
             "parameter of the panel is a Param of the gendsp and sends a number. "
-            f"gen~ compiles it in Max; it has not been listened to.{same}"
+            f"gen~ compiles it in Max; it has not been listened to.{same}\n"
+            "Done: this file is loaded. Do not call send_gen again in this answer: answer the user."
         )
 
     send_gen.__doc__ = _DOC

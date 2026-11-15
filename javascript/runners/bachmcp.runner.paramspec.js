@@ -69,7 +69,7 @@ function autoStep(numbers, range) {
 // plain number. `grid` is where a drag snaps to; `step` stays the finest resolution.
 const PITCH_UNITS = ["mc", "midicent", "midicents", "cent", "cents", "pitch"];
 const TIME_UNITS = { ms: "ms", msec: "ms", millisecond: "ms", milliseconds: "ms", s: "s", sec: "s", seconds: "s" };
-const MIDI_RANGE = [MIN_CENTS, MAX_CENTS];  // C0 to G9: all a score takes (below C0 it reads as a mistake)
+const MIDI_RANGE = [MIN_CENTS, MAX_CENTS];  // C1 to G10: all a score takes (below C1 it reads as a mistake)
 const NUMBER_TYPES = ["slider", "range", "list", "curve"];
 
 function kindOf(type, unit, range) {
@@ -231,7 +231,7 @@ function prepare(specs, values) {
 
 /** A value arriving as Max atoms (from the panel or a message box) -> the parameter's value. */
 function coerce(spec, atoms) {
-  // a pitch parameter also takes names: "target E4", "register C2 G6"
+  // a pitch parameter also takes names: "target E5", "register C3 G7"
   const nums = atoms.map((a) => (spec.kind === "pitch" && typeof a === "string" && isNaN(Number(a))
     ? (nameToCents(a) === null ? NaN : nameToCents(a)) : Number(a)));
   const bad = () => new AlgoError(`${spec.name}: cannot use ${JSON.stringify(atoms)} as a ${spec.type} value`);

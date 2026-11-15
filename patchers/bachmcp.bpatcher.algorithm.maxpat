@@ -14,6 +14,31 @@
         "boxes": [
             {
                 "box": {
+                    "id": "obj-18",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 4,
+                    "outlettype": [ "", "", "", "" ],
+                    "patching_rect": [ 678.0, 411.0, 56.0, 22.0 ],
+                    "restore": {                    },
+                    "restore_extra": {                    },
+                    "text": "autopattr",
+                    "varname": "u912011380"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-4",
+                    "maxclass": "newobj",
+                    "numinlets": 2,
+                    "numoutlets": 2,
+                    "outlettype": [ "", "" ],
+                    "patching_rect": [ 352.0, 407.0, 66.0, 22.0 ],
+                    "text": "route bang"
+                }
+            },
+            {
+                "box": {
                     "id": "obj-20",
                     "maxclass": "message",
                     "numinlets": 2,
@@ -237,7 +262,8 @@
                         "flags": 0,
                         "embed": 0,
                         "autowatch": 1
-                    }
+                    },
+                    "varname": "paramtest"
                 }
             }
         ],

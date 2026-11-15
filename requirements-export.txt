@@ -1,0 +1,9 @@
+# For the maintainer only: converting a sound model that has no ONNX copy (CLAP2) into one ready to
+# upload (py/bach_mcp/utilities/export_onnx.py). Not installed by `main.py install`: nothing else needs it.
+#   pip install -r requirements-export.txt
+torch>=2.6
+open_clip_torch>=4.2.1
+onnx>=1.17
+onnxscript>=0.2
+onnxruntime>=1.20
+huggingface_hub>=0.25

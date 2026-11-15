@@ -1,12 +1,12 @@
 """
 pitch.py
 --------
-Exact pitch arithmetic for the model, in midicents (6000 = middle C, 100 = a
+Exact pitch arithmetic for the model, in midicents (6000 = middle C = C5, 100 = a
 semitone). The model reasons about the music; whenever it needs a number it
 calls one of these through the pitch tools (pitch_tools.py) and copies the
 answer into the score.
 
-Every function takes pitches as names ("Db4", "F#4", "E4-14") or midicents,
+Every function takes pitches as names ("Db5", "F#5", "E5-14") or midicents,
 alone or in lists of any depth, and answers in midicents with the same shape.
 The chord and scale library lives here and never enters the model's context:
 it only sees the names it asks for.
@@ -30,7 +30,7 @@ class PitchError(ValueError):
 
 # ── Reading pitches ─────────────────────────────────────────────────────── #
 
-_PITCH_HELP = 'a pitch is a name ("Db4", "F#5", "E4-14") or midicents (6100)'
+_PITCH_HELP = 'a pitch is a name ("Db5", "F#6", "E5-14") or midicents (6100)'
 _NUMBER = re.compile(r"^[+-]?(\d+(\.\d*)?|\.\d+)$")
 
 
@@ -39,9 +39,18 @@ _SYMBOLS = re.compile("[♭♯𝄪𝄫♮]")
 
 # ── Pitch names ──────────────────────────────────────────────────────────── #
 
+# Octave numbers are bach's: middle C is C5 = 6000 midicents, A5 = 440 Hz. Every name in
+# bach-mcp (pitch tools, the algorithm library bachmcp.lib.units.js, the parameter panel
+# bachmcp.gui.params.base.js, the skills) follows these three numbers; tests hold them together.
+MIDDLE_C = 6000
+MIDDLE_C_OCTAVE = 5
+OCTAVE = 1200
+A440 = MIDDLE_C + 900  # A5
+
 _NOTE_NAME = re.compile(r"^([A-G])(##|bb|#|b|x)?(-?\d+)(?:([+-]\d+(?:\.\d+)?)c?)?$")
 _NAME_CLASS = {"C": 0, "D": 200, "E": 400, "F": 500, "G": 700, "A": 900, "B": 1100}
 _NAME_ACCIDENTAL = {None: 0, "#": 100, "b": -100, "##": 200, "x": 200, "bb": -200}
+_CLASS_NAME = re.compile(r"^([A-G])(##|bb|#|b)?([+-]\d+(?:\.\d+)?)?$")  # a name without its octave
 _SHARP_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 
@@ -50,28 +59,30 @@ def _fmt(x: float) -> str:
 
 
 def name_to_cents(text: str) -> Optional[float]:
-    """Midicents of a pitch name such as "Db4", "F#5", "E4-14" or "C4+50" (C4 = middle C = 6000), or None."""
+    """Midicents of a pitch name such as "Db5", "F#6", "E5-14" or "C5+50" (C5 = middle C = 6000), or None."""
     m = _NOTE_NAME.match(str(text).strip())
     if not m:
         return None
     letter, accidental, octave, offset = m.groups()
-    return (int(octave) + 1) * 1200 + _NAME_CLASS[letter] + _NAME_ACCIDENTAL[accidental] + (float(offset) if offset else 0.0)
+    return (MIDDLE_C + (int(octave) - MIDDLE_C_OCTAVE) * OCTAVE + _NAME_CLASS[letter] + _NAME_ACCIDENTAL[accidental]
+            + (float(offset) if offset else 0.0))
 
 
 def cents_to_name(cents: float) -> str:
     """The name of a pitch in midicents: the nearest semitone, spelled with sharps, then the
-    offset in cents (more than -50, up to +50): 6100 -> "C#4", 6050 -> "C4+50", 6933 -> "A4+33"."""
+    offset in cents (more than -50, up to +50): 6100 -> "C#5", 6050 -> "C5+50", 6933 -> "A5+33"."""
     cents = round(float(cents), 3)
     semitone = math.ceil((cents - 50) / 100)
     offset = round(cents - semitone * 100, 3)
-    name = f"{_SHARP_NAMES[semitone % 12]}{semitone // 12 - 1}"
+    octave = MIDDLE_C_OCTAVE + math.floor((semitone * 100 - MIDDLE_C) / OCTAVE)
+    name = f"{_SHARP_NAMES[semitone % 12]}{octave}"
     if offset:
         name += f"{'+' if offset > 0 else '-'}{_fmt(abs(offset))}"
     return name
 
 
 def _clean_name(text: str) -> str:
-    """Flats are written b and sharps # (Db4, F#4): the symbols are refused, because a model that
+    """Flats are written b and sharps # (Db5, F#5): the symbols are refused, because a model that
     writes them drops them as often as not."""
     text = text.strip()
     if _SYMBOLS.search(text):
@@ -93,14 +104,14 @@ def to_cents(value: Any, where: str = "") -> float:
         cents = name_to_cents(_clean_name(text))
         if cents is not None:
             return cents
-        hint = " (add the octave: C4 is middle C)" if re.fullmatch(r"[A-Ga-g](#|b|♭|♯)?", text) else ""
+        hint = " (add the octave: C5 is middle C)" if re.fullmatch(r"[A-Ga-g](#|b|♭|♯)?", text) else ""
         raise PitchError(f"{where}{value!r} is not a pitch{hint}: {_PITCH_HELP}")
     raise PitchError(f"{where}{value!r} is not a pitch: {_PITCH_HELP}")
 
 
 def read_pitches(value: Any) -> Pitches:
     """Pitches in any of the forms the model sends: a value, a list (of lists), a JSON
-    list as text, or names separated by spaces or commas ("D4 F4 A4")."""
+    list as text, or names separated by spaces or commas ("D5 F5 A5")."""
     if isinstance(value, str):
         text = value.strip()
         if text.startswith("["):
@@ -120,11 +131,11 @@ def read_pitches(value: Any) -> Pitches:
 def pitch_class(value: Any) -> float:
     """Pitch class in cents (0-1200) of a pitch; a name may leave out its octave ("D", "Eb")."""
     if isinstance(value, str):
-        text = _clean_name(value)
-        if re.fullmatch(r"[A-G](##|bb|#|b)?([+-]\d+(\.\d+)?)?", text):
-            m = re.match(r"([A-G](?:##|bb|#|b)?)(.*)", text)
-            value = f"{m.group(1)}4{m.group(2)}"
-    return to_cents(value) % 1200
+        m = _CLASS_NAME.match(_clean_name(value))
+        if m:
+            letter, accidental, offset = m.groups()
+            return (_NAME_CLASS[letter] + _NAME_ACCIDENTAL[accidental] + (float(offset) if offset else 0.0)) % OCTAVE
+    return to_cents(value) % OCTAVE
 
 
 def _map(pitches: Pitches, fn) -> Pitches:
@@ -187,20 +198,20 @@ def mc2p(midicents: Any) -> Any:
 _UNITS = ("ratio", "harmonic", "hz")
 
 
-def get_midicents(values: Any, unit: str = "ratio", reference: Any = "C4") -> Pitches:
+def get_midicents(values: Any, unit: str = "ratio", reference: Any = "C5") -> Pitches:
     """Midicents of ratios above `reference` ("5/4", 1.5), of harmonic numbers of the
-    fundamental `reference` (1, 2, 3 ...), or of frequencies in Hz (A4 = 440)."""
+    fundamental `reference` (1, 2, 3 ...), or of frequencies in Hz (A5 = 440)."""
     unit = str(unit).strip().lower()
     if unit not in _UNITS:
         raise PitchError(f'unit must be one of {", ".join(_UNITS)}, got {unit!r}')
-    base = 6900.0 if unit == "hz" else to_cents(reference, "reference: ")
+    base = float(A440) if unit == "hz" else to_cents(reference, "reference: ")
 
     def one(v: Any) -> float:
         r = _ratio(v)
         if r <= 0:
             raise PitchError(f"{v!r} must be greater than 0")
         if unit == "hz":
-            return base + ratio_cents(r / 440)
+            return base + ratio_cents(r / 440)  # base is A440
         return base + ratio_cents(r)
 
     return _map(_numbers(values), one)
@@ -448,7 +459,7 @@ def scale_classes(scale: Any, root: Any = "C") -> Tuple[List[float], float]:
         try:
             name, steps = _lookup(scale, SCALES, SCALE_ALIASES, "scale")
         except PitchError as unknown:
-            try:  # pitches, with or without octave: "C E G", "D4 F4 A4"
+            try:  # pitches, with or without octave: "C E G", "D5 F5 A5"
                 return sorted({pitch_class(p) for p in re.split(r"[\s,\[\]\"']+", scale) if p}), 1200.0
             except PitchError:
                 raise unknown from None

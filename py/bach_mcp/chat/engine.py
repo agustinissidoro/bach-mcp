@@ -16,7 +16,8 @@ message from the user it:
     4. runs the tools the model calls, here in this process (tools/inprocess.py),
        and sends their answers back, until the model answers without a tool
        call: after max_tool_rounds rounds of tools it has one more request to
-       answer, as Claude Code has (--max-turns, chat/headless.py)
+       answer, as Claude Code has (--max-turns, chat/headless.py). After a tool of
+       FINAL_TOOLS answers OK (send_gen) the next request has no tools: it can only answer
 
 and reports each step as an event, as it happens:
 
@@ -51,7 +52,7 @@ from ..model.client import ModelClient, Reply, ToolCall
 from ..prompt.docs import DocLibrary
 from ..prompt.modes import DEFAULT_MODE, TYPE_MODE, instance_skill, split_prefix, tools_for
 from ..tools.inprocess import LocalTools
-from ..tools.session import new_conversation, use_conversation
+from ..tools.session import new_conversation, new_turn, use_conversation
 
 Event = Dict[str, Any]
 
@@ -97,6 +98,7 @@ class Conversation:
     def send(self, text: str, max_tokens: Optional[int] = None) -> Iterator[Event]:
         """Send one user message and follow the model until it answers. Yields events."""
         use_conversation(self.number)
+        new_turn()
         mode, rest = split_prefix(text) if self.instance_type is None else (None, text)
         if mode:
             self.mode = mode
@@ -113,10 +115,11 @@ class Conversation:
 
         seen_calls: Set[str] = set()
         repeated = 0  # replies in a row whose calls all ran nothing: repeats, unknown tools, broken arguments
+        final = False  # a tool that ends the turn (FINAL_TOOLS) answered OK
         for _ in range(self.max_tool_rounds + 1):  # the rounds of tools, then the answer
-            # After a second such reply the model is stuck: it is asked
-            # once more without tools, so it can only answer.
-            reply = yield from self._ask(max_tokens, with_tools=repeated < 2)
+            # After a second such reply the model is stuck, and after a final tool loaded there is
+            # nothing left to call: it is asked without tools, so it can only answer.
+            reply = yield from self._ask(max_tokens, with_tools=repeated < 2 and not final)
             if reply is None:
                 return
             self.history.append(_assistant_message(reply))
@@ -128,6 +131,7 @@ class Conversation:
                 yield {"type": "tool_call", "id": call.id, "name": call.name, "arguments": call.arguments}
                 result, ran = self._run(call, seen_calls)
                 fresh = fresh or ran
+                final = final or (ran and call.name in FINAL_TOOLS and result.startswith("OK"))
                 self.history.append({"role": "tool", "tool_call_id": call.id, "content": result})
                 yield {"type": "tool_result", "id": call.id, "name": call.name, "result": result}
             repeated = 0 if fresh else repeated + 1
@@ -176,6 +180,11 @@ class Conversation:
             return _repeat_text(call.name), False
         seen.add(signature)
         return self.tools.call(call.name, call.arguments), True
+
+
+# Tools whose OK ends the turn's work: the model is then asked without tools. send_gen loads
+# sound that nobody has listened to yet, so nothing is known after it that a second call could use.
+FINAL_TOOLS = ("send_gen",)
 
 
 def _repeat_text(name: str) -> str:

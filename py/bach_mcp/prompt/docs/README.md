@@ -7,7 +7,7 @@ with no tool call. A file is added once per conversation.
 
 Rules for every file:
 
-- Every pitch is **sounding pitch in midicents** (6000 = middle C = C4), every
+- Every pitch is **sounding pitch in midicents** (6000 = middle C = C5), every
   time in milliseconds. Never written pitch, even for transposing instruments.
 - Facts and possibilities, not advice: what the instrument can do, how it
   sounds and how to mark it.

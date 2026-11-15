@@ -118,14 +118,18 @@ function formatNumber(x, step) {
   return s;
 }
 
+// Octave numbers are bach's: middle C is C5 = 6000 midicents, as in bachmcp.lib.units.js.
+var MIDDLE_C = 6000;
+var MIDDLE_C_OCTAVE = 5;
 var SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-/** The name of a pitch in midicents: nearest semitone with sharps, then the cents: 6050 -> "C4+50". */
+/** The name of a pitch in midicents: nearest semitone with sharps, then the cents: 6050 -> "C5+50". */
 function centsToName(cents) {
   cents = tidy(cents);
   var semitone = Math.ceil((cents - 50) / 100);
   var offset = tidy(cents - semitone * 100);
-  var text = SHARP_NAMES[((semitone % 12) + 12) % 12] + (Math.floor(semitone / 12) - 1);
+  var octave = MIDDLE_C_OCTAVE + Math.floor((semitone * 100 - MIDDLE_C) / 1200);
+  var text = SHARP_NAMES[((semitone % 12) + 12) % 12] + octave;
   if (offset) text += (offset > 0 ? "+" : "-") + formatNumber(Math.abs(offset), 0.01);
   return text;
 }

@@ -6,7 +6,8 @@ What the tools are serving: which conversation, and which instance.
 Conversation. read_score remembers its last answer, to say "unchanged" instead
 of repeating 14,000 tokens. A chat that has not seen that answer must not get
 "unchanged": every conversation has a number (new_conversation), and the one
-being answered says so (use_conversation) before it calls a tool.
+being answered says so (use_conversation) before it calls a tool. Each user message
+it answers is a new turn (new_turn): send_gen loads once per turn.
 
 Instance. Every product carries the name of the instance it is for, and the
 instance's type decides what the tools accept (a score instance writes notes, a
@@ -55,6 +56,23 @@ def use_conversation(number: int) -> None:
 
 def conversation() -> int:
     return _current
+
+
+_turn = 0
+
+
+def new_turn() -> int:
+    """A user message is being answered: the tool calls from now on belong to a new turn.
+    send_gen refuses a second load in one turn (gen_tools.py). 0 means no turn was ever marked
+    (a Claude written to directly, or tests): then nothing is refused."""
+    global _turn
+    with _lock:
+        _turn += 1
+        return _turn
+
+
+def turn() -> int:
+    return _turn
 
 
 _caller = threading.local()
@@ -167,4 +185,5 @@ def instances() -> Instances:
 
 
 __all__ = ["TYPES", "Target", "NoTarget", "serve_targets", "target", "Instances", "serve_instances",
-           "instances", "new_conversation", "use_conversation", "conversation", "calling_directly", "direct"]
+           "instances", "new_conversation", "use_conversation", "conversation", "new_turn", "turn",
+           "calling_directly", "direct"]

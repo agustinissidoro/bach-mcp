@@ -11,7 +11,9 @@
     eval     the evaluation suite against the local model (Max is not needed).
     claude   adds Bach to Claude Desktop, and prints the line that adds it to Claude Code.
     download puts a model in models/: a name from models/catalog.toml, a Hugging Face repo,
-             or a link (--use: and sets it in bachmcp.toml).
+             or a link (--use: and sets it in bachmcp.toml). A sound model by its name
+             (laion-clap2-m, laion-clap2-l, laion-clap-music-speech, laion-clap-general, laion-clap-small, ced-base, ced-mini) goes into models/audio/, and
+             --use sets it in [audio].
     models   lists the models in models/, and the ones the catalogue knows by name.
 
 Usage:
@@ -21,6 +23,8 @@ Usage:
     python py/main.py download qwen3.8-27b-4bit --use
     python py/main.py download unsloth/Qwen3.8-27B-GGUF:Q4_K_M
     python py/main.py download https://huggingface.co/mlx-community/Qwen3-8B-4bit
+    python py/main.py download laion-clap-music-speech --use
+    python py/main.py download ced-base --use
     python py/main.py eval --runs 3 --case neapolitan,trio
     python py/main.py run --config other.toml
 """
@@ -73,6 +77,15 @@ def main() -> None:
                 raise ConfigError("download needs a model: a name (python py/main.py models lists them), "
                                   "a Hugging Face repo or a link")
             info = download.download(args.repo)
+            if info.format in download.SOUND_FORMATS:
+                key = download.SOUND_KEYS[info.format]
+                print(f"Done: {info.name} in models/audio ({info.gigabytes}).")
+                if args.use:
+                    download.use_in_config(info, config.source)
+                    print(f"bachmcp.toml now uses it: [audio] {key} = \"{info.name}\" (restart Bach to load it).")
+                else:
+                    print(f"To use it, set in bachmcp.toml: [audio] {key} = \"{info.name}\" (or download again with --use).")
+                return
             print(f"Done: models/{info.name} ({info.format}, {info.gigabytes}).")
             if args.use:
                 download.use_in_config(info, config.source)
@@ -90,7 +103,10 @@ def main() -> None:
             print("\nBy name (python py/main.py download <name> --use):")
             for e in load_catalog().values():
                 mark = "downloaded" if e.downloaded() else f"{e.size_gb:.1f} GB"
-                print(f"  {e.name:18s} {e.format:4s} {mark:>10s}  {e.note}")
+                print(f"  {e.name:18s} {e.format:6s} {mark:>10s}  {e.note}")
+            from bach_mcp.utilities.download import sound_models
+            used = set(sound_models(config).values())
+            print("\nSound models in use, [audio] in bachmcp.toml: " + (", ".join(sorted(used)) or "none"))
         elif args.command == "claude":
             from bach_mcp import claude
             print(claude.register_desktop())

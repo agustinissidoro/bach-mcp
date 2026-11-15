@@ -39,21 +39,21 @@ def _run(fn: Callable[..., Any], *args: Any, names: bool = False) -> str:
 
 def p2mc(pitches: Pitches) -> str:
     """Pitch names to midicents, for every pitch you know by name. One name or a list, nested as you
-    like. Flats b, sharps #; a microtone adds cents: "E4-14". C4 = middle C = 6000.
-    Example: p2mc(["Db4", "F4", "Ab4"]) -> [6100, 6500, 6800]"""
+    like. Flats b, sharps #; a microtone adds cents: "E5-14". C5 = middle C = 6000.
+    Example: p2mc(["Db5", "F5", "Ab5"]) -> [6100, 6500, 6800]"""
     return _run(pitch.p2mc, pitches)
 
 
 def mc2p(midicents: Pitches) -> str:
     """Midicents to names, to say what pitches are.
-    Example: mc2p([6100, 6386.31]) -> ["C#4", "E4-13.69"]"""
+    Example: mc2p([6100, 6386.31]) -> ["C#5", "E5-13.69"]"""
     return _run(pitch.mc2p, midicents, names=True)
 
 
-def get_midicents(values: Pitches, unit: str = "ratio", reference: Any = "C4") -> str:
+def get_midicents(values: Pitches, unit: str = "ratio", reference: Any = "C5") -> str:
     """Exact midicents of tuned pitches. unit "ratio": ratios ("5/4", 1.5) above `reference`;
     "harmonic": harmonic numbers of the fundamental `reference`; "hz": frequencies.
-    Example: get_midicents([1, 2, 3, 4, 5], "harmonic", "C2") -> [3600, 4800, 5501.96, 6000, 6386.31]"""
+    Example: get_midicents([1, 2, 3, 4, 5], "harmonic", "C3") -> [3600, 4800, 5501.96, 6000, 6386.31]"""
     return _run(pitch.get_midicents, values, unit, reference)
 
 
@@ -87,7 +87,7 @@ def get_chord(root: Pitches, chord: str, inversion: int = 0) -> str:
     """A chord in close position from `root` up (a list of roots: the chord on each); `inversion` n
     moves its n lowest notes an octave up. chord: a name ("dominant7", "half_diminished7", "quartal4",
     "harmonic7" ...) or a symbol ("m7", "maj7", "7b9"); "list" gives every name.
-    Example: get_chord("Db4", "major") -> [6100, 6500, 6800]"""
+    Example: get_chord("Db5", "major") -> [6100, 6500, 6800]"""
     if str(chord).strip().lower() == "list":
         return pitch.chord_names()
     return _run(pitch.get_chord, root, chord, inversion)
@@ -97,7 +97,7 @@ def get_scale(root: Any, scale: str, octaves: int = 1, direction: str = "up") ->
     """A scale from `root` up `octaves` octaves to the root above; direction "up", "down" or "updown".
     scale: a mode, "harmonic_minor", "whole_tone", "octatonic_hw", "blues", a maqam ("rast"), a tuning
     ("just_major", "edo19") ...; "list" gives every name.
-    Example: get_scale("D4", "dorian") -> [6200, 6400, 6500, 6700, 6900, 7100, 7200, 7400]"""
+    Example: get_scale("D5", "dorian") -> [6200, 6400, 6500, 6700, 6900, 7100, 7200, 7400]"""
     if str(scale).strip().lower() == "list":
         return pitch.scale_names()
     return _run(pitch.get_scale, root, scale, octaves, direction)

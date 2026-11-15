@@ -231,7 +231,7 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 1092.0, 348.0, 35.0, 22.0 ],
+                    "patching_rect": [ 1092.0, 343.0, 35.0, 22.0 ],
                     "text": "open"
                 }
             },
@@ -241,7 +241,7 @@
                     "maxclass": "newobj",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 1092.0, 384.0, 230.0, 22.0 ],
+                    "patching_rect": [ 1092.0, 395.0, 230.0, 22.0 ],
                     "text": "bachmcp.chat @floating 0 @auto_open 0"
                 }
             },
@@ -345,7 +345,7 @@
                     "mode": 0,
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 1063.0, 140.0, 666.0, 519.0 ],
+                    "patching_rect": [ 1057.0, 140.0, 666.0, 519.0 ],
                     "proportion": 0.5
                 }
             }

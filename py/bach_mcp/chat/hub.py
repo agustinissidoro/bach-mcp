@@ -86,6 +86,7 @@ once, when it changes:
     server prompt <name> queued <n>           <n> prompts are answered before it
     server prompt <name> starting             its turn: the model is being set up (Claude Code starts)
     server prompt <name> sent                 the model has the prompt (and, later, each tool's answer)
+    server prompt <name> analysing            a buffer instance's sound is being described for the model
     server prompt <name> thinking             it reasons
     server prompt <name> writing              it writes the answer
     server prompt <name> calling <tool>       it writes a tool call
@@ -143,7 +144,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable, Deque, Dict, List, Optional, Set, Tuple
 
-from ..audio_processing.runner import ProcessRunner
+from ..audio_processing.runner import ProcessRunner, sound_models
 from ..bridge.protocol import Word, line, words
 from ..prompt.skill import with_gen, with_verbosity
 from ..prompt.skills import SkillError, build, estimate_tokens, remove_compiled
@@ -214,7 +215,9 @@ class Hub:
         self._running = True
         self._worker = threading.Thread(target=self._work, name="bach-hub", daemon=True)
         self._worker.start()
-        self.processes = ProcessRunner(self._send, lambda: self.playground)
+        audio = getattr(getattr(status, "config", None), "audio", None)
+        self.processes = ProcessRunner(self._send, lambda: self.playground, analysis=audio.sound_analysis if audio else False,
+                                       models=sound_models(audio) if audio else {})
         bridge.on_line(lambda text: self.handle(text, "max"))
         serve_targets(self.target)
         serve_instances(self)
@@ -751,7 +754,7 @@ class Hub:
         self._send(name, "thinking", web_only=True)  # the page's busy sign; Max hears the stages
         self._stage(name, "starting")
         self._report(name, "skills_size", estimate_tokens(conversation.skill))
-        events = conversation.send(text)
+        events = conversation.send(self._with_sound(name, target, text))
         try:
             for event in events:
                 if self._stopping.is_set():
@@ -810,6 +813,19 @@ class Hub:
         self.bridge.send(line("server", "answer", "time", ms))
 
     # ── Conversations, kept in the playground ──────────────────────────── #
+
+    def _with_sound(self, name: str, target: Target, text: str) -> str:
+        """A buffer instance's prompt, with its sound described after it (runner.prompt_analysis);
+        the conversation's file keeps the prompt as typed."""
+        if target.type != "buffer":
+            return text
+        self.processes.set_goal(name, text)
+        self._stage(name, "analysing")
+        analysis = self.processes.prompt_analysis(name)
+        if not analysis:
+            return text
+        self._send(name, "note", "sound analysis added", web_only=True)
+        return f"{text}\n\n{analysis}"
 
     def _history_file(self, name: str) -> str:
         return os.path.join(self.playground, "prompts", f"{name}.jsonl") if self.playground else ""

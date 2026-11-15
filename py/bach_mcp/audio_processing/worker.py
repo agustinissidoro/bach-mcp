@@ -14,6 +14,18 @@ A request:  {"run": {"file": ..., "spec": {params}, "values": {...}, "source": <
 An answer:  {"ok": true, "ms": ..., "frames": ..., "channels": ..., "sr": ..., "warnings": [...]}
             {"ok": false, "error": ..., "line": ...}
 
+A request:  {"describe": {"shm": <shm>, "title": ..., "goal": <the prompt>, "models": {"tagger": <path>, "clap": <path>}}}
+An answer:  {"ok": true, "text": <analysis.describe, with the labels and CLAP lines>, "features": {...},
+             "similarity": <CLAP, sound to goal, or null>}       (no such memory: "text" says so)
+
+A request:  {"listen": <as run, with "goal" and "models">}   the listen test: the code on the real
+            source, kept here and NOT written to the target; answers as run, with "text" (the
+            result described), "changes" (source -> result) and "before"/"similarity" (CLAP)
+            {"commit": {"target": <shm>}}                what the last listen made, into the target
+
+A description is kept for each memory and serial: the same sound is analysed once; only its
+CLAP similarity to a new goal is computed again (from the kept embedding).
+
 The worker stays alive between runs, so imports and models loaded at the top of a file are loaded
 once; a file is executed again only when it changed on disk. Whatever the code prints goes to
 stderr: stdout carries the answers only.
@@ -42,6 +54,9 @@ TEST_SR = 48000.0
 TEST_MS = 2000
 
 _loaded: Dict[str, Tuple[Tuple[int, int], Callable[..., Any]]] = {}
+_described: Dict[str, Tuple[int, Dict[str, Any]]] = {}  # shm -> (serial, what describe found)
+_models: Dict[str, Any] = {}                             # path -> a loaded Tagger or Clap, or the error
+DOWNLOAD_HINT = "python py/main.py download {name} --use"
 
 
 class ProcessError(Exception):
@@ -144,10 +159,8 @@ def call(fn: Callable[..., Any], path: str, x: np.ndarray, sr: float, p: Dict[st
         raise _error(exc, path) from None
 
 
-def run(request: Dict[str, Any]) -> Dict[str, Any]:
-    """One run: the source memory through the file's process, into the target memory."""
-    path, source, target = request["file"], request["source"], request["target"]
-    fn = load(path)
+def _source(source: str, target: str) -> Tuple[np.ndarray, float]:
+    """The samples of the source memory and its rate; no memory: no frames, at the target's rate."""
     try:
         src = ShmBuffer(source)
         x, sr = src.read(), src.sr
@@ -156,22 +169,154 @@ def run(request: Dict[str, Any]) -> Dict[str, Any]:
         x, sr = np.zeros((0, 1), dtype=np.float32), 0.0
     if not sr:
         try:
-            sr = ShmBuffer(target).sr
+            dest = ShmBuffer(target)
+            sr = dest.sr
+            dest.close()
         except NoShmBuffer:
             sr = TEST_SR
+    return x, sr
+
+
+def _process(request: Dict[str, Any], x: np.ndarray, sr: float) -> Tuple[np.ndarray, float, List[str], float]:
+    """The file's process on x: (result, its rate, warnings, ms it took)."""
+    path = request["file"]
+    fn = load(path)
     start = time.perf_counter()
     y, out_sr, warnings = output(call(fn, path, x, sr, parameters(request.get("spec"), request.get("values"))), sr)
     millis = (time.perf_counter() - start) * 1000.0
     if len(x) == 0:
-        warnings.insert(0, f"no sound in {source}: the code got 0 frames")
+        warnings.insert(0, f"no sound in {request['source']}: the code got 0 frames")
+    return y, out_sr, warnings, millis
+
+
+def _write(target: str, y: np.ndarray, sr: float) -> None:
     try:
         dest = ShmBuffer(target)
     except NoShmBuffer:
-        dest = ShmBuffer.create(target, y.shape[0], y.shape[1], out_sr)
-    dest.write(y, sr=out_sr)
+        dest = ShmBuffer.create(target, y.shape[0], y.shape[1], sr)
+    dest.write(y, sr=sr)
     dest.close()
+
+
+def _ran(y: np.ndarray, sr: float, warnings: List[str], millis: float) -> Dict[str, Any]:
     return {"ok": True, "ms": round(millis), "frames": int(y.shape[0]), "channels": int(y.shape[1]),
-            "sr": out_sr, "warnings": warnings}
+            "sr": sr, "warnings": warnings}
+
+
+def run(request: Dict[str, Any]) -> Dict[str, Any]:
+    """One run: the source memory through the file's process, into the target memory."""
+    x, sr = _source(request["source"], request["target"])
+    y, out_sr, warnings, millis = _process(request, x, sr)
+    _write(request["target"], y, out_sr)
+    return _ran(y, out_sr, warnings, millis)
+
+
+_pending: Dict[str, Any] = {}  # what the last listen made, until commit writes it
+
+
+def listen(request: Dict[str, Any]) -> Dict[str, Any]:
+    """The listen test: the file's process on the real source, kept here (the target is not
+    touched, Max hears nothing), described and compared with the source."""
+    from bach_mcp.audio_processing import analysis
+    _pending.clear()
+    x, sr = _source(request["source"], request["target"])
+    if len(x) == 0:
+        return {"ok": True, "skipped": f"no sound in {request['source']} yet"}
+    y, out_sr, warnings, millis = _process(request, x, sr)
+    _pending.update(y=y, sr=out_sr, warnings=warnings, ms=millis)
+    models, goal = request.get("models") or {}, request.get("goal") or ""
+    ran = _ran(y, out_sr, warnings, millis)
+    try:  # the code ran: a failure from here on is the analysis's, and never refuses the file
+        before = describe({"shm": request["source"], "title": "SOURCE", "goal": goal, "models": models})
+        after = _with_goal(_analyse(y, out_sr, "RESULT (not yet in Max)", models), goal, models)
+        changes = analysis.compare(before["features"], after["features"]) if before["features"] else []
+    except Exception as exc:  # noqa: BLE001
+        why = f"{type(exc).__name__}: {str(exc).splitlines()[0][:160] if str(exc) else ''}"
+        return {**ran, "text": f"RESULT (not yet in Max): not described, the analysis failed ({why}); "
+                               "the code itself ran", "features": {}, "similarity": None,
+                "before": {"features": {}, "similarity": None}, "changes": []}
+    return {**ran, "text": after["text"], "features": after["features"], "similarity": after["similarity"],
+            "before": {"features": before["features"], "similarity": before["similarity"]}, "changes": changes}
+
+
+def commit(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Write what the last listen made into the target memory: Max gets it."""
+    if "y" not in _pending:
+        return {"ok": False, "error": "nothing was listened to"}
+    _write(request["target"], _pending["y"], _pending["sr"])
+    answer = _ran(_pending["y"], _pending["sr"], _pending["warnings"], _pending["ms"])
+    _pending.clear()
+    return answer
+
+
+def _model(kind: str, path: str, name: str = "") -> Any:
+    """The loaded model at path (kept), or a str saying why there is none (name: as [audio] says it)."""
+    from bach_mcp.audio_processing import listen as models
+    if not models.available(path):
+        return f"{name or kind} not downloaded ({DOWNLOAD_HINT.format(name=name or '<name>')})"
+    if path not in _models:
+        try:
+            _models[path] = (models.Tagger if kind == "tagger" else models.Clap)(path)
+        except Exception as exc:  # noqa: BLE001 — said in the description, never fatal
+            _models[path] = f"could not load ({type(exc).__name__}: {str(exc).splitlines()[0][:160]})"
+    return _models[path]
+
+
+def _analyse(x: np.ndarray, sr: float, title: str, models: Dict[str, str]) -> Dict[str, Any]:
+    """analysis.describe with the tagger's line, the features, and CLAP's embedding (or None)."""
+    from bach_mcp.audio_processing import analysis
+    extra: List[str] = []
+    embedding = None
+    if models.get("tagger") and len(x):
+        tagger = _model("tagger", models["tagger"], models.get("tagger_name", ""))
+        if isinstance(tagger, str):
+            extra.append(f"is (AudioSet) {tagger}")
+        else:
+            tags = tagger.tags(x, sr)
+            extra.append("is (AudioSet) " + (", ".join(f"{label} {score:.2f}" for label, score in tags) or "nothing it knows"))
+    if models.get("clap") and len(x):
+        clap = _model("clap", models["clap"], models.get("clap_name", ""))
+        if isinstance(clap, str):
+            extra.append(f"prompt match (CLAP) {clap}")
+        else:
+            embedding = clap.embed(x, sr)
+    found = analysis.features(x, sr)
+    return {"title": title, "text": analysis.describe(x, sr, title, extra, found), "features": found,
+            "embedding": embedding}
+
+
+def _with_goal(found: Dict[str, Any], goal: str, models: Dict[str, str]) -> Dict[str, Any]:
+    """The description with CLAP's match to the goal added before the spectrogram."""
+    text, similarity = found["text"], None
+    goal = (goal or "").strip()
+    if goal and found["embedding"] is not None:
+        clap = _model("clap", models.get("clap", ""))
+        if not isinstance(clap, str):
+            similarity = float(found["embedding"] @ clap.embed_text(goal[:300]))
+            lines = text.split("\n")
+            at = next((k for k, row in enumerate(lines) if row.startswith("spectrogram:")), len(lines))
+            lines.insert(at, f"prompt match (CLAP) {similarity:.2f}: how close the sound is to the words of the prompt "
+                             "(cosine, -1..1; compare before and after, not with other sounds)")
+            text = "\n".join(lines)
+    return {"ok": True, "text": text, "features": found["features"], "similarity": similarity}
+
+
+def describe(request: Dict[str, Any]) -> Dict[str, Any]:
+    """The description of the sound in a memory (see the module's docstring)."""
+    shm, title = request["shm"], request.get("title", "SOUND")
+    models = request.get("models") or {}
+    try:
+        buf = ShmBuffer(shm)
+        serial = buf.serial
+        x, sr = buf.read(), buf.sr
+        buf.close()
+    except NoShmBuffer:
+        return {"ok": True, "text": f"{title}: no sound (no bachmcp.shmbuffer~ named {shm})", "features": {}, "similarity": None}
+    kept = _described.get(shm)
+    if kept is None or kept[0] != serial or kept[1]["title"] != f"{title} ({shm})":
+        kept = (serial, _analyse(x, sr, f"{title} ({shm})", models))
+        _described[shm] = kept
+    return _with_goal(kept[1], request.get("goal") or "", models)
 
 
 def test_sound(sr: float = TEST_SR, millis: int = TEST_MS) -> np.ndarray:
@@ -240,7 +385,8 @@ def main(argv: List[str]) -> int:
             continue
         try:
             request = json.loads(text)
-            _answer(out, run(request["run"]))
+            kind = next(iter(request))
+            _answer(out, {"run": run, "describe": describe, "listen": listen, "commit": commit}[kind](request[kind]))
         except BaseException as exc:  # noqa: BLE001 — answer, keep serving
             if isinstance(exc, KeyboardInterrupt):
                 raise

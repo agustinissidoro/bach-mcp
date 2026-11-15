@@ -12,11 +12,15 @@ Before a file is kept it is checked here:
     parameters it declares;
   - by running it (worker.py --check, a process of its own, with a timeout) on a two-second
     test sound, at its declared values and at both ends of every slider: it must return
-    finite samples.
+    finite samples;
+  - by the listen test, when there is a hub (it registers its runner: serve_runner): the code on
+    the real source, in the instance's worker, its result described next to the source
+    (runner.listen). The target and Max get nothing yet; a failure here also refuses the file.
 Only a file that passes replaces the previous version (kept in processes/.history). Then:
 
     <name> load_buffer_process <name>.json                  to Max: the panel's file
-    and a first run of the hub's runner, when there is one (the hub registers it: serve_runner)
+    and what the listen test made goes into the target (runner.commit): Max gets it at once,
+    nothing is computed twice
 
 Two files for the instance, in the playground's processes/ folder:
 
@@ -55,6 +59,8 @@ CHECK_TIMEOUT_SECONDS = 120.0
 
 class Runner(Protocol):
     def loaded(self, name: str) -> None: ...
+    def listen(self, name: str, file: str, spec: Dict[str, Any]) -> Dict[str, Any]: ...
+    def commit(self, name: str) -> bool: ...
 
 
 _runner: Optional[Runner] = None
@@ -151,8 +157,8 @@ _DOC = """ONLY for a buffer instance: offline processing of a recorded sound, as
         Never for notes or a score (write_score), an algorithm that makes notes (send_algorithm),
         or real-time sound in gen~ (send_gen); any other instance refuses it.
         The code runs on the sound in the instance's memory in Max and the result goes back
-        there. It is checked, saved and run at once; `params` become a panel in Max, and each
-        change there runs it again.
+        there. It is checked, listened to on that sound, and only then loaded; `params` become
+        a panel in Max, and each change there runs it again.
 
         code: the whole file. It opens with a # comment: what it does, in one line of plain
           words (shown above its panel). It defines `process(x, sr, p)`: x the samples, a numpy
@@ -166,8 +172,9 @@ _DOC = """ONLY for a buffer instance: offline processing of a recorded sound, as
            "size_ms": {"type": "slider", "range": [10, 2000], "value": 400, "unit": "ms"},
            "freeze": {"type": "toggle", "value": false},
            "mode": {"type": "menu", "options": ["up", "down"], "value": "up"}}
-        The result says what the check found. It has been run on a test sound, not listened to.
-        Do not call it again to check.
+        The answer describes the result next to the source (levels, spectrum, a text spectrogram,
+        what it sounds like, how close to the prompt): call again only if that shows the result
+        missed what was asked.
         """
 
 
@@ -215,6 +222,16 @@ def register_buffer_process_tools(mcp: FastMCP, bridge: MaxBridge, python: str =
             where = f"{name}.py" + (f" line {result['line']}" if result.get("line") else "")
             return f"ERROR in {where}: {result['error']}. Nothing was loaded. {again}"
 
+        heard: Dict[str, Any] = {}
+        if _runner is not None:
+            _runner.loaded(name)  # a new file starts at its declared values
+            heard = _runner.listen(name, draft, declared)
+            if not heard.get("ok"):
+                os.remove(draft)
+                where = f"{name}.py" + (f" line {heard['line']}" if heard.get("line") else "")
+                return (f"ERROR in {where}, on the real sound (the listen test): {heard.get('error')}. "
+                        f"Nothing was loaded. {again}")
+
         final = t.process_file
         if os.path.exists(final):
             with open(final, encoding="utf-8") as f:
@@ -229,18 +246,29 @@ def register_buffer_process_tools(mcp: FastMCP, bridge: MaxBridge, python: str =
         bridge.flush()
         status = (f"and sent to Max ({name})" if bridge.send(line(name, "load_buffer_process", f"{name}.json"))
                   else "but Max could not be reached (is the patch open?)")
-        if _runner is not None:
-            _runner.loaded(name)
-            status += "; it is running now on the sound in Max"
+        listened = ""
+        if heard.get("skipped"):
+            listened = f"\nNot listened to: {heard['skipped']}. It runs when Max fills the source."
+        elif heard:
+            in_max = ("now in Max" if _runner.commit(name) is not False
+                      else "but it did NOT reach Max (it runs again at the next change of its panel)")
+            changes = list(heard.get("changes") or [])
+            before = (heard.get("before") or {}).get("similarity")
+            if before is not None and heard.get("similarity") is not None:
+                changes.append(f"prompt match (CLAP) {before:.2f} -> {heard['similarity']:.2f}")
+            notes_heard = "".join(f"\nNote: {w}." for w in heard.get("warnings") or [])
+            listened = (f"\n\nListen test on the real sound: {heard['frames']} frames, {heard['channels']} ch at "
+                        f"{heard['sr']:g} Hz in {heard['ms']} ms; {in_max}.{notes_heard}"
+                        + ("\nSource -> result:\n" + "\n".join(changes) if changes else "")
+                        + f"\n\n{heard['text']}")
         notes = "".join(f"Note: {w}.\n" for w in result.get("warnings") or [])
         names = ", ".join(declared) or "(none)"
         return (f"OK. Saved as processes/{name}.py {status}.\n"
                 f'Shown above its panel: "{found["description"]}"\n'
                 f"Parameters (now a panel in Max): {names}\n"
                 f"Checked: {result['runs']} runs on a two-second stereo test sound at 48000 Hz (declared values and "
-                f"both ends of every slider); the first returned {result['frames']} frames, {result['channels']} "
-                f"channels at {result['sr']:g} Hz in {result['ms']} ms.\n{notes}"
-                "It has not been listened to.")
+                f"both ends of every slider).\n{notes}"
+                f"Measured, not heard: the listen test below describes the result.{listened}")
 
     send_buffer_process.__doc__ = _DOC
     mcp.tool()(send_buffer_process)

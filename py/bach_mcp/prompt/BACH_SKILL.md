@@ -178,7 +178,7 @@ minimum and its maximum, and every score must stay under 20000 notes.
 
 A range of whole numbers gives whole values; add `step: 0.01` for decimals.
 Give every number its `unit`: `"mc"` for a pitch or an interval, `"ms"` for a
-time. A pitch parameter always spans C0 to G9 (1200 to 12700), and a pitch
+time. A pitch parameter always spans C1 to G10 (1200 to 12700), and a pitch
 that leaves it comes back by octaves. A **register** starts at the full range,
 `value: [1200, 12700]`, unless the request asks for a register.
 <!-- transformer -->
@@ -357,12 +357,12 @@ the beginning of the piece; the piece starts at `0`. There are no beats or
 tempo.
 <!-- algo -->
 
-**Pitch** is in **midicents**: `6000` is middle C (C4), `100` a semitone,
-`1200` an octave, `50` a quarter-tone. C of each octave: C1 2400, C2 3600,
-C3 4800, C4 6000, C5 7200, C6 8400, C7 9600. Add the pitch class: C 0, C# 100,
+**Pitch** is in **midicents**: `6000` is middle C (C5), `100` a semitone,
+`1200` an octave, `50` a quarter-tone. C of each octave: C2 2400, C3 3600,
+C4 4800, C5 6000, C6 7200, C7 8400, C8 9600. Add the pitch class: C 0, C# 100,
 D 200, D# 300, E 400, F 500, F# 600, G 700, G# 800, A 900, A# 1000, B 1100. So
-A4 = 6900. For a pitch you know by name, let the code convert it:
-`pitch("Db4")` is 6100, `name(6100)` is `"C#4"`. Never MIDI note numbers or
+A5 = 6900. For a pitch you know by name, let the code convert it:
+`pitch("Db5")` is 6100, `name(6100)` is `"C#5"`. Never MIDI note numbers or
 frequencies.
 
 ## Marks
@@ -396,7 +396,7 @@ is `23: ["cross"]`, dynamics `p` is `20: ["p"]`, a glissando of 700 is
 <!-- /algo -->
 <!-- score -->
 
-**Pitch** is in **midicents**: `6000` is middle C (C4), `100` a semitone,
+**Pitch** is in **midicents**: `6000` is middle C (C5), `100` a semitone,
 `1200` an octave, `50` a quarter-tone.
 
 ## Pitch tools: never work out a pitch yourself
@@ -407,10 +407,10 @@ exact midicents: `p2mc` (names), `get_chord`, `get_scale`, `transpose`,
 `mc2p` (numbers to names). Every pitch in the score comes from one of them.
 
 - **Flats are `b`, sharps `#`, everywhere**: in your plan, your reply and the
-  tool calls. `Db4`, `Bb3`, `F#4`, never the symbols ♭ and ♯. C4 is middle C;
-  the octave number changes at C (`B3` is just below `C4`).
+  tool calls. `Db5`, `Bb4`, `F#5`, never the symbols ♭ and ♯. C5 is middle C;
+  the octave number changes at C (`B4` is just below `C5`).
 - Every tool answers one JSON list in midicents, in the shape you sent:
-  `p2mc(["Db4", "F4", "Ab4"])` → `[6100, 6500, 6800]`. **Copy the numbers into
+  `p2mc(["Db5", "F5", "Ab5"])` → `[6100, 6500, 6800]`. **Copy the numbers into
   the score exactly as they come, in the same order**: do not round, respell or
   recompute them.
 - Never add cents yourself. A compound interval goes to `transpose` as its
@@ -548,7 +548,7 @@ commas.
 
 Request: *"something that spirals upward"*
 
-Principle: a three-note cell, D4 F4 A4. Each repetition starts one note later
+Principle: a three-note cell, D5 F5 A5. Each repetition starts one note later
 in the cell (rotation) and is raised by a whole tone. Three repetitions, one
 note every 250 ms; the last note is held.
 
@@ -556,9 +556,9 @@ Working it out. Note number n (from 0) has its onset at n × 250. The pitches
 come from the tools, called together:
 
 ```
-p2mc(["D4", "F4", "A4"])            → [6200, 6500, 6900]   pass 1, as written
-transpose(["F4", "A4", "D4"], 200)  → [6700, 7100, 6400]   pass 2, rotate 1, a tone up
-transpose(["A4", "D4", "F4"], 400)  → [7300, 6600, 6900]   pass 3, rotate 2, a major third up
+p2mc(["D5", "F5", "A5"])            → [6200, 6500, 6900]   pass 1, as written
+transpose(["F5", "A5", "D5"], 200)  → [6700, 7100, 6400]   pass 2, rotate 1, a tone up
+transpose(["A5", "D5", "F5"], 400)  → [7300, 6600, 6900]   pass 3, rotate 2, a major third up
 ```
 
 Onsets: pass 1 at 0 250 500, pass 2 at 750 1000 1250, pass 3 at 1500 1750 2000.

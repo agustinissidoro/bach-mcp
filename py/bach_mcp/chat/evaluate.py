@@ -34,7 +34,7 @@ from ..bridge.max import OfflineBridge
 from ..config import REPO_ROOT, Config
 from ..model.backends import running_model
 from ..model.client import ModelClient
-from ..music.pitch import name_to_cents
+from ..music.pitch import name_to_cents, pitch_class
 from ..tools.algo_tools import check_algorithm
 from ..tools.pitch_tools import FUNCTIONS as PITCH_FUNCTIONS
 from ..tools.registry import create_tools
@@ -169,7 +169,7 @@ def shown(pitches: List[float]) -> str:
     return " ".join(f"{p:g}" for p in pitches)
 
 
-MELODY = ("D4", "F4", "A4", "G4", "E4", "C#4", "D4")
+MELODY = ("D5", "F5", "A5", "G5", "E5", "C#5", "D5")
 
 
 def check_transposition(score: Dict[str, Any], raw: Any) -> List[Check]:
@@ -188,7 +188,7 @@ ROW = ("G", "Bb", "D", "F#", "A", "C", "E", "G#", "B", "C#", "Eb", "F")  # Berg,
 
 def check_row(score: Dict[str, Any], raw: Any) -> List[Check]:
     pcs = [int(round(p / 100)) % 12 for p in line(score)]
-    prime = [int(name_to_cents(f"{n}4") / 100) % 12 for n in ROW]
+    prime = [int(pitch_class(n) / 100) for n in ROW]
     inversion = [(2 * prime[0] - x) % 12 for x in prime]
     forms = {"prime": prime, "retrograde": prime[::-1], "inversion": inversion, "retrograde inversion": inversion[::-1]}
     detail = " ".join(map(str, pcs))
@@ -217,7 +217,7 @@ def check_scale(score: Dict[str, Any], raw: Any) -> List[Check]:
     steps = [0, 200, 300, 500, 700, 800, 1100]
     up = [5200 + o * 1200 + s for o in range(2) for s in steps] + [7600]
     got = line(score)
-    return [("E harmonic minor, E3 up two octaves and back", got == up + up[-2::-1], shown(got))]
+    return [("E harmonic minor, E4 up two octaves and back", got == up + up[-2::-1], shown(got))]
 
 
 def check_harmonics(score: Dict[str, Any], raw: Any) -> List[Check]:
@@ -226,7 +226,7 @@ def check_harmonics(score: Dict[str, Any], raw: Any) -> List[Check]:
     got = sorted(p for _, ps in chords for p in ps)
     return [
         ("one chord", len(chords) == 1, f"{len(chords)} onsets"),
-        ("harmonics 1-8 of C2 to the cent", len(got) == 8 and all(abs(a - b) <= 0.5 for a, b in zip(got, exact)),
+        ("harmonics 1-8 of C3 to the cent", len(got) == 8 and all(abs(a - b) <= 0.5 for a, b in zip(got, exact)),
          shown(got)),
     ]
 
@@ -249,16 +249,16 @@ CASES = [
          check_spiral),
     Case("microtonal", "score", "One sustained chord for strings in just intonation: C, a pure major third, a pure "
          "fifth and the natural seventh above C.", check_microtonal),
-    Case("transposition", "score", "A violin plays D4 F4 A4 G4 E4 C#4 D4, 400 ms per note. When it ends, the viola "
+    Case("transposition", "score", "A violin plays D5 F5 A5 G5 E5 C#5 D5, 400 ms per note. When it ends, the viola "
          "plays the same melody a minor sixth lower; when the viola ends, the cello plays it an octave and a "
          "fourth lower than the violin.", check_transposition),
     Case("row", "score", "Piano, one line, 250 ms per note: the row G Bb D F# A C E G# B C# Eb F (octaves as you like), "
          "then its retrograde, then its inversion starting on G, then the retrograde of that inversion.", check_row),
     Case("jazz", "score", "Piano: four chords of one second each, complete and in root position: Bbm7b5, Eb7b9, "
          "Abmaj9, Db13.", check_jazz_chords),
-    Case("scale", "score", "Clarinet: the E harmonic minor scale from E3 up two octaves and back down to E3, "
+    Case("scale", "score", "Clarinet: the E harmonic minor scale from E4 up two octaves and back down to E4, "
          "200 ms per note.", check_scale),
-    Case("harmonics", "score", "One sustained chord for eight instruments: the first eight harmonics of C2, each "
+    Case("harmonics", "score", "One sustained chord for eight instruments: the first eight harmonics of C3, each "
          "tuned exactly.", check_harmonics),
     Case("algo", "algo", "A pulse for marimba that gets faster and faster. Parameters for its length and for how "
          "fast it starts and ends.", lambda *a: [], max_tokens=6000, tool="send_algorithm"),

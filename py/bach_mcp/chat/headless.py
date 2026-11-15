@@ -42,7 +42,7 @@ from ..claude import login_command
 from ..config import Config
 from ..prompt.docs import DocLibrary
 from ..prompt.modes import TYPE_MODE, MODE_TOOLS, instance_skill
-from ..tools.session import new_conversation, use_conversation
+from ..tools.session import new_conversation, new_turn, use_conversation
 from .engine import Event
 
 SERVER = "bach"  # its name in the MCP configuration given to Claude Code: mcp__bach__<tool>
@@ -102,6 +102,7 @@ class ClaudeConversation:
     def send(self, text: str, max_tokens: Optional[int] = None) -> Iterator[Event]:
         """Send one user message and follow Claude until it answers. Yields events."""
         use_conversation(self.number)
+        new_turn()
         if self.docs is not None:
             text, added = self.docs.augment_text(text, self.seen_docs)
             if added:
