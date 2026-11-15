@@ -220,6 +220,9 @@ support/*
 !sources/.gitkeep
 playground/*
 !playground/.gitkeep
+# Sound databases (bachmcp.database): only the folder is kept
+databases/*
+!databases/.gitkeep
 /deprecated
 
 py/tests/

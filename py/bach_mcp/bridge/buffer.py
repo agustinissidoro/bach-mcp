@@ -18,10 +18,10 @@ name in scores/:
                                   then Max answers <name> roll_written <file>
     <name> tonedivision <n>       before a load whose pitches need it (microtones)
 
-read_score asks the server patch instead (ServerBuffer):
+read_score asks the instance instead (ServerBuffer):
 
-    server write_buffer           the patch dumps the roll as bachjson-complete into
-                                  <repo>/buffer.json, then Max answers server buffer_done
+    <name> write_buffer           the instance dumps its roll as bachjson-complete into
+                                  <repo>/buffer.json, then Max answers <name> buffer_done
 """
 
 from __future__ import annotations
@@ -122,16 +122,17 @@ def _await_file(path: str, seconds: float = 2.0) -> Optional[Dict[str, Any]]:
 
 
 class ServerBuffer:
-    """The score as the server patch dumps it: server write_buffer -> server buffer_done -> buffer.json."""
+    """The score of one instance's roll: <name> write_buffer -> <name> buffer_done -> buffer.json."""
 
-    def __init__(self, bridge: Any, path: Optional[str] = None) -> None:
+    def __init__(self, bridge: Any, name: str, path: Optional[str] = None) -> None:
         self.bridge = bridge
+        self.name = name  # the instance whose roll is read
         self.path = path or BUFFER_FILE
 
     def fetch(self, timeout_seconds: float = 5.0) -> Optional[Dict[str, Any]]:
         """The complete score, or None if Max does not answer in time."""
         self.bridge.flush()
-        if not self.bridge.send(line("server", "write_buffer")):
+        if not self.bridge.send(line(self.name, "write_buffer")):
             return None
         deadline = time.time() + timeout_seconds
         while True:
@@ -141,7 +142,7 @@ class ServerBuffer:
             answer = self.bridge.receive(timeout_seconds=remaining)
             if answer is None:
                 return None
-            if words(answer)[:2] == ["server", "buffer_done"]:
+            if words(answer)[:2] == [self.name, "buffer_done"]:
                 return _await_file(self.path)
 
 

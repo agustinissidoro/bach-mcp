@@ -12,3 +12,4 @@ max oblist "bachmcp" bachmcp.algorithm~;
 max oblist "bachmcp" bachmcp.chat;
 max oblist "bachmcp" bachmcp.onnx~;
 max oblist "bachmcp" bachmcp.onnxb~;
+max oblist "bachmcp" bachmcp.database;

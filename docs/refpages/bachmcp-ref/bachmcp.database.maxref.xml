@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.database" module="bachmcp" category="bachmcp">
+	<digest>Analyse folders of sounds into a database, and query it</digest>
+	<description>Builds a sound corpus: every sound in the folders and files given is analysed (librosa's and pyloudnorm's descriptors, ported to C++ with their defaults) and cut into units at five levels: the whole <i>file</i>; <i>section</i>s, where the material changes character; <i>event</i>s, from one onset to the next; the attack, sustain and release <i>phase</i>s of each event; and a fixed <i>grid</i> of slices. Each unit gets its own descriptors (loudness, spectral shape, MFCC, chroma, envelope, curves); each file gets CED's AudioSet tags (what it is: <m>Drum</m>, <m>Speech</m>, <m>Bowed string instrument</m>...), and a CLAP embedding, to find sounds like another one or like words. It all goes into one SQLite file, <i>&lt;package&gt;/databases/&lt;name&gt;.db</i> by default, which the algorithms query through this object (answered at once, as a dictionary) and the bach-mcp server and Python can read too. Analyses run on worker threads, never Max's; what they do is said in the Max console and out of the right outlet. Every sound is analysed at 48 kHz (its file is left as it is). The database remembers each file's size, date and content (a hash), so <m>update</m> analyses only what is new or has changed. Apple Silicon only. The models run through the core of <o>bachmcp.onnxb~</o>, which must sit next to this object (a model loads once, whichever object uses it), with ONNX Runtime in <i>support/</i> (<i>python py/main.py install</i>) and the models downloaded (<i>python py/main.py download ced-base</i>, <i>... laion-clap-music-speech</i>). Without a model the analysis goes on without its descriptors, says so, and leaves the sounds stale until <m>reanalyse</m>.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">audio</metadata>
+		<metadata name="tag">analysis</metadata>
+		<metadata name="tag">corpus</metadata>
+		<metadata name="tag">database</metadata>
+		<metadata name="tag">descriptors</metadata>
+	</metadatalist>
+	<objarglist>
+		<objarg name="database" optional="1" type="symbol">
+			<digest>The database</digest>
+			<description>A name, for <i>&lt;package&gt;/databases/&lt;name&gt;.db</i>, or a path to a <i>.db</i> file. If it exists it is opened (<m>read</m>); otherwise <m>build</m> writes there.</description>
+		</objarg>
+	</objarglist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>build, add, update, remove, read, write, query, sql, analysis...</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>dictionary: answers (query, sql, info, files, analysis)</digest>
+		</outlet>
+		<outlet id="1" type="">
+			<digest>progress, done, open, written, closed, stale, error</digest>
+		</outlet>
+	</outletlist>
+	<methodlist>
+		<method name="build">
+			<arglist>
+				<arg name="paths" optional="0" type="list" />
+			</arglist>
+			<digest>Make a new database from folders and files</digest>
+			<description>Makes a new database and analyses every sound in these folders (their subfolders too with <at>recursive</at> 1) and files, with the object's <m>analysis</m> settings. Paths: full (<m>/Users/me/sounds</m>), <m>~/sounds</m>, or as Max says them (<m>"Macintosh HD:/Users/me/sounds"</m>); quote a path with spaces. It writes to the box's database, or to <m>@path</m> &lt;file&gt; at the end of the message (<m>build ~/sounds/drums @path ~/drums.db</m>), or else to <i>databases/&lt;first folder's name&gt;.db</i>. A database already there is replaced. The folders and files become the database's sources, which <m>update</m> looks at again.</description>
+		</method>
+		<method name="add">
+			<arglist>
+				<arg name="paths" optional="0" type="list" />
+			</arglist>
+			<digest>Add folders and files</digest>
+			<description>Adds these folders (with <at>recursive</at> as it is now) and files to the open database's sources, and analyses their sounds not in it yet. Brings back a path taken out with <m>remove</m>.</description>
+		</method>
+		<method name="update">
+			<arglist>
+				<arg name="paths" optional="1" type="list" />
+			</arglist>
+			<digest>Look at the sources again</digest>
+			<description>Looks at every source again (or those at or under the paths given), each searched as it was when added. A new sound is analysed (version 1). A sound whose size and date are the same is left alone, without being read. One whose size or date changed is hashed: if its content is the same, only its date is updated (<i>touched</i>); otherwise it is analysed again and its version goes up (<i>changed</i>). A sound that has gone, whose content turns up under a new path, was <i>moved</i>: its path is updated and its analysis kept. Otherwise it is marked <i>missing</i> and kept, or removed with <at>prune</at> 1. A file that can't be read as sound is kept as <i>failed</i>, with why, and tried again only once it changes.</description>
+		</method>
+		<method name="remove">
+			<arglist>
+				<arg name="paths" optional="0" type="list" />
+			</arglist>
+			<digest>Take sounds and folders out</digest>
+			<description>Takes the sounds at or under these paths out of the database, with their units, and the sources at or under them. A path inside a source that stays is remembered, so <m>update</m> doesn't bring it back; <m>add</m> it to bring it back.</description>
+		</method>
+		<method name="reanalyse">
+			<arglist>
+				<arg name="which" optional="1" type="symbol" />
+				<arg name="paths" optional="1" type="list" />
+			</arglist>
+			<digest>Analyse again</digest>
+			<description><m>reanalyse</m> or <m>reanalyse stale</m>: analyses again the sounds made with other settings (see <m>analysis</m>) or an older version of the object. <m>reanalyse all</m>: every sound. Paths after it limit it to the sounds at or under them. Their units are replaced, so their ids change and their versions go up.</description>
+		</method>
+		<method name="analysis">
+			<arglist>
+				<arg name="settings" optional="1" type="list" />
+			</arglist>
+			<digest>Set or show the analysis settings</digest>
+			<description>Alone: sends the settings out of the left outlet, as a dictionary (<i>of</i> says whose: <m>database</m> when one is open, else <m>object</m>). With keys and values (<m>analysis grid_ms 200 hpss 0</m>; <m>analysis levels section event</m>): changes them. They are the object's, which <m>build</m> uses, and an open database's too: a database keeps its settings, and <m>add</m>, <m>update</m> and <m>reanalyse</m> always use them. When an open database's settings change, its sounds become stale (the right outlet says <m>stale</m> &lt;n&gt;) until <m>reanalyse</m>. The keys are in the discussion below.</description>
+		</method>
+		<method name="read">
+			<arglist>
+				<arg name="database" optional="1" type="symbol" />
+			</arglist>
+			<digest>Open a database</digest>
+			<description>Opens a database: a name in <i>databases/</i>, or a path. Alone: the box's. Its settings become the object's. The right outlet says <m>open</m> &lt;path&gt;.</description>
+		</method>
+		<method name="write">
+			<arglist>
+				<arg name="file" optional="0" type="symbol" />
+			</arglist>
+			<digest>Save a copy</digest>
+			<description>Writes a copy of the open database (a name in <i>databases/</i>, or a path), safely while it is open. The object goes on with the one it has open: a database is saved as it changes, so <m>write</m> is only for a copy.</description>
+		</method>
+		<method name="close">
+			<arglist />
+			<digest>Close the database</digest>
+			<description>Closes the open database. The right outlet says <m>closed</m>.</description>
+		</method>
+		<method name="cancel">
+			<arglist />
+			<digest>Stop a running job</digest>
+			<description>Stops the <m>build</m>, <m>add</m>, <m>update</m> or <m>reanalyse</m> running, after the sounds being analysed now (they are kept), and drops the jobs waiting after it. What was done stays done; <m>update</m> later finishes the rest.</description>
+		</method>
+		<method name="query">
+			<arglist>
+				<arg name="query" optional="1" type="list" />
+			</arglist>
+			<digest>Find units</digest>
+			<description>Answers at once, out of the left outlet, with the units that match (see the discussion). The query: the name of a dictionary (<m>query mydict</m>), words in dictionary syntax (<m>query level: event where: { envelope: impulse } order: -peak_db limit: 5</m>) or JSON. It reads beside a running job, so an algorithm can query while the database grows. <m>near: { text: "a bowed string" }</m> searches by words; the first such query loads the CLAP if no job has (a second or two).</description>
+		</method>
+		<method name="dictionary">
+			<arglist>
+				<arg name="name" optional="0" type="symbol" />
+			</arglist>
+			<digest>A query, as a dictionary</digest>
+			<description>The same as <m>query</m> &lt;name&gt;: a dictionary sent to the object is a query.</description>
+		</method>
+		<method name="sql">
+			<arglist>
+				<arg name="statement" optional="0" type="list" />
+			</arglist>
+			<digest>Read with SQL</digest>
+			<description>Runs one SQL statement that only reads (<m>SELECT</m> ...) and answers at once, out of the left outlet: <i>columns</i>, the column names; <i>rows</i>, one dictionary per row; <i>count</i>; <i>truncated</i> when more than 10000 rows. Quote the statement in a message box, where a comma would end the message: <m>sql "SELECT level, count(*) AS n FROM units GROUP BY level"</m>. The tables are in the discussion.</description>
+		</method>
+		<method name="info">
+			<arglist />
+			<digest>Describe the database</digest>
+			<description>Sends a dictionary out of the left outlet: <i>path</i>, <i>files</i> and their <i>states</i>, <i>stale</i>, <i>duration_ms</i> (of the sounds), <i>units</i> and their <i>levels</i>, <i>sources</i>, <i>excluded</i>, <i>settings</i>, <i>core</i> (the version that analysed them), <i>created</i>.</description>
+		</method>
+		<method name="files">
+			<arglist />
+			<digest>List the sounds</digest>
+			<description>Sends a dictionary out of the left outlet whose <i>items</i> are the database's sounds: <i>id</i>, <i>path</i>, <i>state</i> (<m>ok</m>, <m>missing</m>, <m>failed</m>), <i>version</i>, <i>stale</i>, <i>units</i>, <i>duration_ms</i>, <i>rate</i> and <i>channels</i> (the file's own), <i>analysed</i> (date), <i>error</i>.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="recursive" get="1" set="1" type="int" size="1">
+			<digest>Search folders' subfolders</digest>
+			<description><m>1</m> (default): <m>build</m> and <m>add</m> search a folder's subfolders too. <m>0</m>: only the sounds directly in it. Each source keeps the way it was added: changing this later changes only the next <m>build</m> or <m>add</m>. Hidden files and folders (starting with a dot) are always left out.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Search folders' subfolders (build, add)" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+		<attribute name="threads" get="1" set="1" type="int" size="1">
+			<digest>Analyses at once</digest>
+			<description>How many sounds are analysed at the same time. Each analysis holds about 100 MB per minute of sound: with long sounds (an hour is about 6 GB), lower it.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="4" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Analyses at once" />
+			</attributelist>
+		</attribute>
+		<attribute name="prune" get="1" set="1" type="int" size="1">
+			<digest>update removes sounds gone from disk</digest>
+			<description><m>0</m> (default): a sound gone from disk is marked <i>missing</i> and kept, with its analysis (it comes back if the file does). <m>1</m>: <m>update</m> removes it.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="update removes sounds gone from disk" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+		<attribute name="verbose" get="1" set="1" type="int" size="1">
+			<digest>What the console says</digest>
+			<description>What a job says in the Max console. <m>0</m>: when it starts and its summary at the end. <m>1</m> (default): also one line per sound that was analysed, changed, moved, missing or removed (its version, duration, units and the seconds it took). <m>2</m>: every sound, unchanged ones too. A sound that fails is always said, as an error.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Console: 0 start and end, 1 changes, 2 every file" />
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<discussion>
+		<h4>The right outlet</h4>
+		<m>progress</m> &lt;index&gt; &lt;total&gt; &lt;status&gt; &lt;path&gt;, for each sound a job looks at (status: analysed, changed, reanalysed, unchanged, touched, moved, missing, removed, failed); <m>done</m> &lt;analysed&gt; &lt;changed&gt; &lt;moved&gt; &lt;missing&gt; &lt;removed&gt; &lt;failed&gt; &lt;seconds&gt; at the end of a job; <m>open</m> &lt;path&gt;; <m>written</m> &lt;path&gt;; <m>closed</m>; <m>stale</m> &lt;n&gt; after new settings; <m>error</m> &lt;words&gt; (also in the console).
+
+		<h4>Queries</h4>
+		Every key is optional. <i>level</i>: <m>file</m>, <m>section</m>, <m>event</m>, <m>phase</m>, <m>grid</m>, or a list of them (default: all). <i>where</i>: a dictionary of conditions, all of which must hold: a number or a word, equal (<m>envelope: impulse</m>); <m>[ min max ]</m>, a range, <m>null</m> for no bound (<m>centroid_mean: [ 2000 null ]</m>); a list of words, one of them (<m>phase: [ attack release ]</m>); also <i>path</i> (the file's path contains it), <i>name</i> (the file's name), and <i>tags</i>, a label or a list of them, any of a file's best labels (<m>tags: Speech</m>; <i>tag</i> is only the best one). <i>near</i>: <m>{ unit: 412 by: [ mfcc_mean centroid_mean ] }</m> finds the units most like unit 412 by these descriptors (default <m>mfcc_mean</m>), or <m>{ centroid_mean: 1500 lufs: -20 }</m> the units nearest these values, or <m>{ text: "a drum loop" }</m> the units whose CLAP embedding is nearest these words (<m>by: [ clap ]</m> compares units by their embeddings); each descriptor is standardized over the candidates (each dimension of a list), so descriptors in different units weigh the same, and each unit gets its <i>distance</i>; <i>clap</i> is compared by angle (1 - cosine), and each unit also gets its <i>similarity</i>, the cosine (with <i>text</i> alone, <i>distance</i> is 1 - <i>similarity</i>). <i>order</i>: a descriptor, rising, <m>-descriptor</m> falling, or <m>random</m>; with <i>near</i>, by distance. <i>limit</i>: how many (default 20). <i>fields</i>: the keys each unit comes with, or <m>all</m>; default: <i>id</i>, <i>file</i>, <i>path</i>, <i>level</i>, <i>parent</i>, <i>start_ms</i>, <i>end_ms</i>, <i>duration_ms</i>, the labels, and the descriptors the query names. The answer: <i>count</i>, <i>matched</i> (before <i>limit</i>), <i>units</i>.
+
+		<h4>A unit</h4>
+		<i>id</i>; <i>file</i>; <i>level</i>; <i>parent</i> (the unit it is part of: a section's file, an event's section, a phase's event; a grid slice's file); <i>start_ms</i>, <i>end_ms</i> in its file. Descriptors, each unit over its own span: <i>duration_ms</i>, <i>peak_db</i>, <i>rms_db</i>, <i>lufs</i> and <i>lra</i> (from 400 ms on), <i>temporal_centroid_ms</i>, <i>harmonic_share</i>, <i>onset_count</i>, <i>onset_density</i>, <i>ioi_mean_ms</i>, <i>ioi_cv</i>; for level, centroid, bandwidth, rolloff, flatness, zcr and flux: <i>_mean</i>, <i>_std</i>, <i>_p10</i>, <i>_p90</i>, <i>_slope</i> (<i>centroid_mean</i>...). Lists: <i>mfcc_mean</i>, <i>mfcc_std</i>, <i>mfcc_delta_mean</i>, <i>mfcc_delta_std</i>, <i>mfcc_delta2_mean</i>, <i>mfcc_delta2_std</i> (13 each), <i>chroma_mean</i> (12, C to B), <i>level_curve</i>, <i>centroid_curve</i>, <i>flux_curve</i> (20 points). A file: <i>tuning</i> (semitones); <i>tag</i>, its best AudioSet label, and <i>tag_score</i> (0-1); <i>tags</i>, its <at>tag_count</at> best labels, a list of { <i>label</i>, <i>score</i> }; <i>tag_scores</i>, the score of every one of the 527 labels, in CED's order. A file (and the units of the other levels in <i>clap_levels</i>, at least <i>clap_min_ms</i> long): <i>clap</i>, the unit embedding (512 numbers for LAION CLAP). A section: <i>form</i> (A, B, ... the same letter for similar sections), <i>novelty</i>, <i>repeats</i>, <i>repeat_similarity</i>. An event: <i>envelope</i> (<m>impulse</m>, <m>sustained</m>, <m>iterative</m>), <i>has_attack</i>, <i>attack_ms</i>, <i>log_attack</i>, <i>sustain_ms</i>, <i>release_ms</i>, <i>reattacks</i>. A phase: <i>phase</i> (<m>attack</m>, <m>sustain</m>, <m>release</m>).
+
+		<h4>Analysis settings</h4>
+		<i>rate</i> (48000; 0: each file's own), <i>n_fft</i> (2048), <i>hop</i> (512), <i>n_mels</i> (128), <i>n_mfcc</i> (20), <i>roll_percent</i> (0.85), <i>hpss</i> (1; 0 is faster, without <i>harmonic_share</i>), <i>hpss_kernel</i> (31), <i>chroma</i> (1), <i>levels</i> (file section event phase grid), <i>novelty_ms</i> (4000: the scale of the sections), <i>novelty_threshold</i> (0.1), <i>snap_ms</i> (500), <i>repeat_similarity</i> (0.8), <i>silence_db</i> (-60), <i>min_event_ms</i> (50), <i>sustain_db</i> (6), <i>decay_db_per_s</i> (24), <i>min_sustain_ms</i> (100), <i>grid_ms</i> (100), <i>grid_hop_ms</i> (50), <i>curve_points</i> (20), <i>extensions</i> (wav wave aif aiff aifc flac mp3 m4a caf). The models, by their names in <i>models/catalog.toml</i>, or <m>none</m>: <i>tagger</i> (<m>ced-base</m>; <m>ced-mini</m> is faster), <i>tag_count</i> (10), <i>tag_threshold</i> (0.05), <i>clap</i> (<m>laion-clap-music-speech</m>, as the MCP; <m>laion-clap2-m</m> and <m>laion-clap2-l</m> are much better at speech and music), <i>clap_levels</i> (file; add section, event... for embeddings of their units, at a cost in time), <i>clap_min_ms</i> (250), <i>windows</i> (3: a sound longer than the model hears at once is heard in up to this many windows, as the MCP hears it). The models are most of the time a build takes: <m>analysis tagger none clap none</m> for a quick one.
+
+		<h4>The tables (for sql)</h4>
+		<i>units</i>: one row per unit, one column per descriptor (lists are stored as 32-bit floats and come back as lists). <i>files</i>: id, path, name, size, mtime, hash, version, settings_id, core, state, rate, channels, duration_ms, analysed, error. <i>sources</i>: path, folder, recursive. <i>excluded</i>: path. <i>meta</i>: key, value (the settings, as JSON). Join a unit to its file with <m>units.file = files.id</m>.
+	</discussion>
+	<seealsolist>
+		<seealso name="bachmcp.onnxb~" />
+		<seealso name="bachmcp.onnx~" />
+		<seealso name="dict" />
+		<seealso name="dict.view" />
+		<seealso name="buffer~" />
+	</seealsolist>
+</c74object>

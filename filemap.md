@@ -180,7 +180,7 @@ flowchart TB
 
 **An algorithm:** `send_algorithm` → checked in Node (`algo_check.js`) with the same library Max uses → saved as `playground/algorithms/<name>.js` → UDP `<name> load_algo <name>.js` → the instance's runner loads and runs it → its score leaves as a dictionary → `bachmcp.translate` → `bach.roll`. Its parameters become the panel, and moving one runs the algorithm again.
 
-**Reading the roll:** `read_score` → UDP `server write_buffer` → `bachmcp.server` tells the roll to `writetxt` `buffer.txt`, converts it to `buffer.json` → `server buffer_done` → `music/reader.py` shows it to the model in the compressed form.
+**Reading the roll:** `read_score` → UDP `<name> write_buffer` → the instance has its roll written to `buffer.txt`, converted to `buffer.json` → `<name> buffer_done` → `music/reader.py` shows it to the model in the compressed form.
 
 ## Files
 
@@ -381,7 +381,7 @@ Everything here is in scope in an algorithm file, without imports, in Max and in
 | `max.py` | Python | ④ | `MaxBridge`: sends and receives lines, routes them. Says when another Bach holds the port. `OfflineBridge` for eval and `connect`. |
 | `udp.py` | Python | ④ | Lines of text ↔ the UDP packets `[udpreceive]` reads. |
 | `protocol.py` | Python | ④ | The one form of every message: a line of words. |
-| `buffer.py` | Python | ④ | Scores through files: `RollBuffer` for an instance's roll (a writer's), `ServerBuffer` for `buffer.json`. It reads `REPO_ROOT` from `config.py`, the one import that goes up a level. |
+| `buffer.py` | Python | ④ | Scores through files: `RollBuffer` for an instance's roll (a writer's), `ServerBuffer` for `buffer.json`, which any instance writes on `<name> write_buffer`. It reads `REPO_ROOT` from `config.py`, the one import that goes up a level. |
 
 ### Python: music logic (`bach_mcp/music/`)
 

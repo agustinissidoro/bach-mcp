@@ -5,8 +5,8 @@ The score tools: write_score, write_markers, read_score, clear_score.
 
 The model reads and writes scores in bachjson-complete, the syntax every other
 part uses (bachjson-syntax-specification.md): voices > chords > notes as
-objects, slots by number, markers in the header. read_score asks the server
-patch for buffer.json and shows it through music/reader.py, which only leaves
+objects, slots by number, markers in the header. read_score asks the
+instance for buffer.json and shows it through music/reader.py, which only leaves
 out what says nothing (most of the header, "flag": 0, empty keys). write_score
 puts what the model wrote onto the roll's score: a header element the model
 gives replaces the roll's, and every one it does not give (slotinfo, clefs,
@@ -317,7 +317,7 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
         problem = check_score(raw)
         if problem:
             return f"ERROR: {problem}. Nothing was written. Fix this and call the tool again."
-        current = ServerBuffer(bridge).fetch(timeout_seconds=3.0)  # read like read_score; its header is kept (and, with add, its notes)
+        current = ServerBuffer(bridge, t.name).fetch(timeout_seconds=3.0)  # read like read_score; its header is kept (and, with add, its notes)
         if add and current is None:
             return "ERROR: Max did not hand over the current score (is the patch open?). Nothing was added."
         written = complete(raw)
@@ -392,7 +392,7 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
         problem = check_markers(markers)
         if problem:
             return f"ERROR: {problem}. Nothing was written. Fix this and call the tool again."
-        current = ServerBuffer(bridge).fetch(timeout_seconds=3.0)
+        current = ServerBuffer(bridge, t.name).fetch(timeout_seconds=3.0)
         if current is None:
             return "ERROR: Max did not hand over the current score (is the patch open?). Nothing was written."
         score = json.loads(json.dumps(current))
@@ -426,7 +426,7 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
             t = target()
         except NoTarget as exc:
             return f"ERROR: {exc}."
-        current = ServerBuffer(bridge).fetch(timeout_seconds=5.0)
+        current = ServerBuffer(bridge, t.name).fetch(timeout_seconds=5.0)
         if current is None:
             return "ERROR: Max did not answer. Is the patch open? Do not retry more than once."
         text = read_view(current, voice, from_ms, to_ms)

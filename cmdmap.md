@@ -154,7 +154,7 @@ Max sends these to `[udpsend 127.0.0.1 3001]`. The page and the terminal send th
 
 | Line | When | Sent by |
 |---|---|---|
-| `server buffer_done` | the score is in `buffer.json`, after `server write_buffer` | `bachmcp.server` |
+| `<name> buffer_done` | its roll is in `buffer.json`, after `<name> write_buffer` | the instance |
 | `<name> roll_written <file>` | its roll wrote `scores/<file>`, after `write_roll` | no object yet (writer) |
 
 ### Requests about Bach (Max → Python)
@@ -198,6 +198,7 @@ File names are bare: they are in the playground.
 |---|---|---|---|
 | `<name> load_algo <name>.js` | loads `algorithms/<name>.js` | `send_algorithm` | generator, transformer, selector |
 | `<name> load_roll <name>.json` | its roll takes `scores/<name>.json` | `write_score` | no object yet (writer) |
+| `<name> write_buffer` | dumps its roll as bachjson-complete into `buffer.json` and answers `buffer_done` | `read_score`, `write_score`, `write_markers`, `send_algorithm` for a transformer or selector | any |
 | `<name> write_roll <name>.json` | its roll writes itself there and answers `roll_written` | no tool calls it now (`RollBuffer.fetch`) | no object yet (writer) |
 | `<name> tonedivision <n>` | sets the microtonal grid before a load | `write_score` | no object yet (writer) |
 | `<name> clear` | erases its roll | `clear_score` | no object yet (writer) |
@@ -247,7 +248,6 @@ Every one starts with `server`, so `bachmcp.server` routes on the second word an
 | `server status 1` | Bach started (sent unasked), and in answer to `bach status` |
 | `server status 0` | Bach's last message before it goes off (sent unasked) |
 | `server warning <text>` | anything to fix (bad path, unknown type, unknown instance …). The hub's warnings also reach the page |
-| `server write_buffer` | a tool wants the score: `read_score`, `write_score`, or `send_algorithm` for a transformer or selector |
 | `server get_instances` | the tools `get_instances` and `set_active_instance` ask for the map; Max answers `instances <name> <type> ...` within 1.5 s, else the last map is used |
 | `server answer <name> <text>` · `server answer tokens <n>` · `server answer time <ms>` | after each answer; they make the dictionary at outlet 1 |
 | `server model <model>` | `bach status`, only when a model is loaded and answers |
@@ -290,9 +290,9 @@ No tool runs on the server's event loop: each call has its own thread, so the pa
 
 | Tool | Arguments | For types | Sends to Max |
 |---|---|---|---|
-| `send_algorithm` | `code` | generator (`produce`), transformer (`transform`), selector (`select`) | (`server write_buffer` for a transformer or selector, to check on the score in the roll), then `<name> load_algo <name>.js` |
-| `write_score` | `score`, `add` | writer | `server write_buffer`, (`<name> tonedivision`), `<name> load_roll <name>.json` |
-| `read_score` | `voice`, `from_ms`, `to_ms` | any | `server write_buffer` |
+| `send_algorithm` | `code` | generator (`produce`), transformer (`transform`), selector (`select`) | (`<name> write_buffer` for a transformer or selector, to check on the score in the roll), then `<name> load_algo <name>.js` |
+| `write_score` | `score`, `add` | writer | `<name> write_buffer`, (`<name> tonedivision`), `<name> load_roll <name>.json` |
+| `read_score` | `voice`, `from_ms`, `to_ms` | any | `<name> write_buffer` |
 | `clear_score` | — | writer | `<name> clear` |
 | `p2mc` `mc2p` `get_midicents` `transpose` `reverse` `mirror` `force_scale` `get_chord` `get_scale` | pitch arguments | any | nothing (computed in Python) |
 | `get_instances` | — | any (not in an instance's own conversation) | `server get_instances` |
@@ -325,7 +325,7 @@ Not a separate part on the wire. With `bachmcp.server local`, the hub hands each
 
 | File | Written by | Read by |
 |---|---|---|
-| `<package>/buffer.txt` | `bach.roll` (`writetxt`, after `server write_buffer`) | `bachmcp.server`, which converts it |
+| `<package>/buffer.txt` | `bach.roll` (`writetxt`, after `<name> write_buffer`) | `bachmcp.server`, which converts it |
 | `<package>/buffer.json` | `bachmcp.server`, as bachjson-complete | `read_score`, `write_score`, `send_algorithm`'s check |
 | `<playground>/algorithms/<name>.js` | `send_algorithm` (after the check passes), or you | the instance (`load_algo`; it reloads when the file changes) |
 | `<playground>/algorithms/.history/<name>-<date>.js` | `send_algorithm`, the version it replaced | you |

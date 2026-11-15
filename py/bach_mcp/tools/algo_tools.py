@@ -24,7 +24,7 @@ The comment that opens the file (one line on what it does) is its description: t
 runner sends it to the panel on load. The tool asks for it and refuses a file without it.
 
 A transformer or a selector is checked on the music it will work on: the score now in the
-roll, read like read_score (server write_buffer -> buffer.json, see buffer.py),
+roll, read like read_score (<name> write_buffer -> buffer.json, see buffer.py),
 else, when the roll is empty or Max does not answer, a small built-in score.
 """
 
@@ -152,7 +152,7 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
 
     def _source_for(t: Target) -> Tuple[Optional[str], str]:
         """The score a transformer is checked on: (file, where it comes from)."""
-        buffer = ServerBuffer(bridge)  # read like read_score
+        buffer = ServerBuffer(bridge, t.name)  # read like read_score
         score = buffer.fetch(timeout_seconds=3.0)
         if not score or not count_notes(score):
             return None, "a built-in test score: the roll is empty or Max did not hand it over"

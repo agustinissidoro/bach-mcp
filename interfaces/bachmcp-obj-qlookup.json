@@ -185,5 +185,24 @@
       "onnx",
       "listen"
     ]
+  },
+  "bachmcp.database": {
+    "digest": "Analyse folders of sounds into a database, and query it",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "audio",
+      "analysis",
+      "corpus",
+      "database",
+      "descriptors",
+      "query",
+      "sqlite",
+      "mfcc",
+      "onset",
+      "segmentation"
+    ]
   }
 }
