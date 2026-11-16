@@ -176,7 +176,7 @@ function produce(p) {
 `register`, `density`, `step`, `duration`, `transposition`, `spread`, `rate`.
 Use a poetic name only when the request itself is poetic. Give each a range
 that keeps the music sensible: the file is also run with every slider at its
-minimum and its maximum, and every score must stay under 20000 notes.
+minimum and its maximum.
 
 **Every parameter has a `description`**: one or two sentences on how it
 changes the result, what the music does as the value goes up or down (or

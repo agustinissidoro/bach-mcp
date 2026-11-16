@@ -41,11 +41,10 @@ from ..bridge.buffer import RollBuffer, ServerBuffer
 from ..bridge.max import MaxBridge
 from ..bridge.protocol import line
 from ..music import markers as grid
-from ..music.reader import count_notes, describe, read_view
+from ..music.reader import describe, read_view
 from .session import RECEIVER, NoTarget, Target, conversation, instances, target
 
 SCORE_TOOLS = ("write_score", "write_markers", "read_score", "clear_score")
-MAX_NOTES = 20000
 
 
 def close_brackets(text: str) -> Optional[Any]:
@@ -333,8 +332,6 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
             names = score["header"].get("voicenames")
             if names is not None:  # one entry per voice written: the roll may have had more voices, or fewer
                 score["header"]["voicenames"] = (names + [[] for _ in score["voices"]])[:len(score["voices"])]
-        if count_notes(score) > MAX_NOTES:
-            return f"ERROR: more than {MAX_NOTES} notes. Nothing was written."
         markers = score["header"].get("markers") or []
         if add and written["header"].get("markers"):  # together with the roll's own
             problem = check_markers(markers)

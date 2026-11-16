@@ -31,7 +31,6 @@ const SECOND = 1000;
 // Not in an algorithm's scope (see bachmcp.lib.index.js): for the loader and the parameters.
 const MIN_CENTS = 1200;   // C1: anything lower is a mistake, usually pitch and duration swapped
 const MAX_CENTS = 12700;  // G10
-const MAX_NOTES = 20000;  // the most notes a run may make: more would flood Max
 
 /** A number without a trailing ".0", at most three decimals: 6000, 0.5, 33.333. */
 function fmt(x) {
@@ -85,5 +84,5 @@ function name(cents) {
 
 module.exports = {
   SEMITONE, QUARTERTONE, OCTAVE, MIDDLE_C, SECOND, pitch, name,
-  MIN_CENTS, MAX_CENTS, MAX_NOTES, fmt, nameToCents, centsToName,
+  MIN_CENTS, MAX_CENTS, fmt, nameToCents, centsToName,
 };

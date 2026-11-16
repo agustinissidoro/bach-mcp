@@ -41,8 +41,7 @@ It may end with its presets (const presets = {...}), which the runner writes
     run(compiled, values, source)  one run -> {score, notes, ms}
 
 Scores are bachjson-complete, as every object passes them: the loader does not
-check their syntax. It only makes sure a result is a score (it has voices) of at
-most MAX_NOTES notes (more would flood Max), and
+check their syntax. It only makes sure a result is a score (it has voices), and
 brings pitches that a parameter pushed out of C1..G10 back in by octaves.
 */
 "use strict";
@@ -62,7 +61,6 @@ function need(name) {
 const { AlgoError, isObject, isNumber } = need("bachmcp.lib.base.js");
 const { makeLibrary, LIBRARY, OCTAVE, copy } = need("bachmcp.lib.index.js");
 const { normalizeParams, prepare, MIDI_RANGE } = need("bachmcp.runner.paramspec.js");
-const { MAX_NOTES } = need("bachmcp.lib.units.js");
 const { normalize: normalizePresets } = need("bachmcp.runner.presets.js");
 
 function wrapSource(code) {
@@ -184,7 +182,6 @@ function run(compiled, values, source) {
     throw new AlgoError(`${name}() must return a score: an object with "voices"`);
   }
   const notes = countNotes(result);
-  if (notes > MAX_NOTES) throw new AlgoError(`${name}() made more than ${MAX_NOTES} notes (${notes})`);
   foldPitches(result);
   return { score: copy(result), notes, ms: Date.now() - start };
 }

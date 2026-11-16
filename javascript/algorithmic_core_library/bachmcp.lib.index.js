@@ -4,7 +4,7 @@ bachmcp.lib.index.js
 The algorithmic core library: everything an algorithm file has in scope, without
 imports. This file is the one list of it. Each topic is a file of its own:
 
-    bachmcp.lib.units.js       SEMITONE ... SECOND, pitch(), name() (and the pitch range, the note limit)
+    bachmcp.lib.units.js       SEMITONE ... SECOND, pitch(), name() (and the pitch range)
     bachmcp.lib.build.js       score(), voices, notes and chords; copy, eachNote
     bachmcp.lib.markers.js     label, timesig, barline, division, subdivision, tempo, grid, markersOf, clearGrid
     bachmcp.lib.random.js      rng(name), seeded Math.random
@@ -49,7 +49,7 @@ const TOPICS = [
 
 const NOT_IN_SCOPE = [
   "Score", "Voice", "MEASURES", "ROLES",
-  "MIN_CENTS", "MAX_CENTS", "MAX_NOTES", "fmt", "nameToCents", "centsToName",  // for the loader and the parameters
+  "MIN_CENTS", "MAX_CENTS", "fmt", "nameToCents", "centsToName",  // for the loader and the parameters
 ];
 
 /** The names in scope in an algorithm file, for one run: the topics, plus its seeded rng and Math. */
