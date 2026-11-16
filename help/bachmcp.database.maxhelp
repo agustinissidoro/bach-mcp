@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 95.0, 810.0, 853.0 ],
+        "rect": [ 478.0, 123.0, 810.0, 853.0 ],
         "showrootpatcherontab": 0,
         "boxes": [
             {
@@ -58,9 +58,42 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 34.0, 121.0, 810.0, 827.0 ],
+                        "rect": [ 478.0, 149.0, 810.0, 827.0 ],
                         "showontab": 1,
                         "boxes": [
+                            {
+                                "box": {
+                                    "id": "obj-24",
+                                    "maxclass": "message",
+                                    "numinlets": 2,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 247.5, 325.5, 145.0, 22.0 ],
+                                    "text": "analysis clap laion-clap2-l"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "id": "obj-22",
+                                    "maxclass": "message",
+                                    "numinlets": 2,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 403.5, 325.5, 43.0, 22.0 ],
+                                    "text": "cancel"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "id": "obj-4",
+                                    "maxclass": "message",
+                                    "numinlets": 2,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 532.0, 260.5, 89.0, 22.0 ],
+                                    "text": "reanalyse stale"
+                                }
+                            },
                             {
                                 "box": {
                                     "border": 0,
@@ -240,13 +273,12 @@
                                 "box": {
                                     "fontsize": 13.0,
                                     "id": "obj-18",
-                                    "linecount": 4,
                                     "maxclass": "message",
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 490.0, 500.0, 420.0, 67.0 ],
-                                    "text": "progress 142. 18574. analysed \"/Users/agustin/Documents/Sounds/Cinetools - Otherworld (WAV)/Atmospheres & Backgrounds/Space Noises/OW_Exhale_CT.wav\""
+                                    "patching_rect": [ 490.0, 500.0, 420.0, 23.0 ],
+                                    "text": "stale 18574."
                                 }
                             },
                             {
@@ -327,6 +359,25 @@
                                 "patchline": {
                                     "destination": [ "obj-18", 0 ],
                                     "source": [ "obj-17", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-14", 0 ],
+                                    "source": [ "obj-22", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-14", 0 ],
+                                    "source": [ "obj-24", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-14", 0 ],
+                                    "midpoints": [ 541.5, 312.0, 39.5, 312.0 ],
+                                    "source": [ "obj-4", 0 ]
                                 }
                             },
                             {

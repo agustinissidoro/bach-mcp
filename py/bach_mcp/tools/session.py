@@ -32,7 +32,11 @@ import threading
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterator, Optional, Protocol, Tuple
 
-TYPES = ("generator", "transformer", "selector", "score", "synth", "fx", "buffer")
+TYPES = ("generator", "transformer", "selector", "score", "synth", "fx", "buffer", "receiver")
+# A receiver (a bachmcp.value wired to another bach.roll) is only read: read_score(source=<name>)
+# asks it `<name> write_buffer` and it answers `<name> buffer_done`, like any instance. It has no
+# conversation and is never the active instance; it is in the map so the model can name it.
+RECEIVER = "receiver"
 
 _lock = threading.Lock()
 _number = 0
@@ -184,6 +188,6 @@ def instances() -> Instances:
     return _instances
 
 
-__all__ = ["TYPES", "Target", "NoTarget", "serve_targets", "target", "Instances", "serve_instances",
+__all__ = ["TYPES", "RECEIVER", "Target", "NoTarget", "serve_targets", "target", "Instances", "serve_instances",
            "instances", "new_conversation", "use_conversation", "conversation", "new_turn", "turn",
            "calling_directly", "direct"]

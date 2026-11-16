@@ -23,7 +23,7 @@ Usage:
     python py/main.py download qwen3.8-27b-4bit --use
     python py/main.py download unsloth/Qwen3.8-27B-GGUF:Q4_K_M
     python py/main.py download https://huggingface.co/mlx-community/Qwen3-8B-4bit
-    python py/main.py download laion-clap-music-speech --use
+    python py/main.py download laion-clap2-l --use
     python py/main.py download ced-base --use
     python py/main.py eval --runs 3 --case neapolitan,trio
     python py/main.py run --config other.toml

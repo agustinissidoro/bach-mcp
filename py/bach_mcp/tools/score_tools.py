@@ -23,6 +23,11 @@ answered, else the active one). Scores travel through files (buffer.py), never
 as messages: write_score writes the complete score to the instance's own file
 in the playground, scores/<name>.json, and sends `<name> score_done`. Only a
 score instance writes notes; any instance can have its roll read.
+
+read_score(source=<name>) reads a receiver instead (session.RECEIVER: a
+bachmcp.value wired to another roll), with the same `<name> write_buffer`; the
+answer comes from the receiver. Only read: everything written still goes to the
+instance served.
 """
 
 from __future__ import annotations
@@ -37,7 +42,7 @@ from ..bridge.max import MaxBridge
 from ..bridge.protocol import line
 from ..music import markers as grid
 from ..music.reader import count_notes, describe, read_view
-from .session import NoTarget, Target, conversation, target
+from .session import RECEIVER, NoTarget, Target, conversation, instances, target
 
 SCORE_TOOLS = ("write_score", "write_markers", "read_score", "clear_score")
 MAX_NOTES = 20000
@@ -409,8 +414,24 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
         status = f"Added {len(new)} markers ({len(header['markers'])} now)" if add else f"{len(new)} markers written"
         return f"OK. {status}; the notes are as they were.{measures_note(header['markers'])}"
 
+    def _receiver(name: str) -> str:
+        """Why name cannot be read as a receiver, or "". Asks Max for the map once if it is not known."""
+        try:
+            hub = instances()
+        except NoTarget as exc:
+            return str(exc)
+        names, _ = hub.instance_map()
+        if names.get(name) != RECEIVER and hub.ask_instances():  # maybe new in the patch
+            names, _ = hub.instance_map()
+        if names.get(name) == RECEIVER:
+            return ""
+        receivers = [n for n, instance_type in names.items() if instance_type == RECEIVER]
+        known = f"the receivers are: {', '.join(receivers)}" if receivers else "the patch has no receivers"
+        what = f"{name} is a {names[name]} instance, not a receiver" if name in names else f"no receiver {name}"
+        return f"{what}; {known}"
+
     @mcp.tool()
-    def read_score(voice: int = 0, from_ms: float = -1.0, to_ms: float = -1.0) -> str:
+    def read_score(voice: int = 0, from_ms: float = -1.0, to_ms: float = -1.0, source: str = "") -> str:
         """Read the current score from Max. Use ONLY when you need content you did not write yourself, e.g. the
         user edited the score or asks about it. Never use it to check your own write.
 
@@ -421,16 +442,24 @@ def register_score_tools(mcp: FastMCP, bridge: MaxBridge) -> None:
         says the from_ms to read on from.
 
         voice: 0 = all voices, or a voice number. from_ms / to_ms: optional window on the onsets, in milliseconds.
+        source: empty = your own instance's roll. The name of a receiver (another roll the user names)
+        reads that one instead; it is only read: what you write still goes to your own instance.
         """
-        try:
-            t = target()
-        except NoTarget as exc:
-            return f"ERROR: {exc}."
-        current = ServerBuffer(bridge, t.name).fetch(timeout_seconds=5.0)
+        if source:
+            problem = _receiver(source)
+            if problem:
+                return f"ERROR: {problem}."
+            name = source
+        else:
+            try:
+                name = target().name
+            except NoTarget as exc:
+                return f"ERROR: {exc}."
+        current = ServerBuffer(bridge, name).fetch(timeout_seconds=5.0)
         if current is None:
             return "ERROR: Max did not answer. Is the patch open? Do not retry more than once."
         text = read_view(current, voice, from_ms, to_ms)
-        key = (conversation(), t.name, voice, from_ms, to_ms, text)  # a new chat has not seen the last answer
+        key = (conversation(), name, voice, from_ms, to_ms, text)  # a new chat has not seen the last answer
         if state["last_read"] == key:
             return "Unchanged since your previous read_score. Use that result; do not read again."
         state["last_read"] = key

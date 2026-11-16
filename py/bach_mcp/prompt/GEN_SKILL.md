@@ -81,7 +81,8 @@ out2 = right * g;
 ```
 
 ```json
-"out_gain": {"type": "slider", "range": [-60, 0], "value": -12, "unit": "dB"}
+"out_gain": {"type": "slider", "range": [-60, 0], "value": -12, "unit": "dB",
+             "description": "The synth's level, the last thing before the outputs."}
 ```
 <!-- /synth -->
 <!-- fx -->
@@ -113,9 +114,12 @@ out2 = mix(dry, wet_r, w) * g;
 ```
 
 ```json
-"wet":      {"type": "slider", "range": [0, 1], "value": 0.5, "step": 0.01},
-"in_gain":  {"type": "slider", "range": [-24, 12], "value": 0, "unit": "dB"},
-"out_gain": {"type": "slider", "range": [-60, 0], "value": 0, "unit": "dB"}
+"wet":      {"type": "slider", "range": [0, 1], "value": 0.5, "step": 0.01,
+             "description": "The balance of dry and effect: 0 the dry sound alone, 1 the effect alone."},
+"in_gain":  {"type": "slider", "range": [-24, 12], "value": 0, "unit": "dB",
+             "description": "The level of the sound coming in, before the effect: raise it to drive the effect harder."},
+"out_gain": {"type": "slider", "range": [-60, 0], "value": 0, "unit": "dB",
+             "description": "The level of everything that comes out, dry and effect together."}
 ```
 
 Change only the starting value of `wet` when the sound needs another one.
@@ -180,12 +184,18 @@ out2 = right * g;
 ```
 
 ```json
-{"ratio":    {"type": "slider", "range": [0.5, 8], "value": 2, "step": 0.01},
- "index":    {"type": "slider", "range": [0, 12], "value": 3, "step": 0.01},
- "attack":   {"type": "slider", "range": [1, 2000], "value": 10, "unit": "ms"},
- "release":  {"type": "slider", "range": [5, 8000], "value": 400, "unit": "ms"},
- "detune":   {"type": "slider", "range": [0, 50], "value": 6, "unit": "cents"},
- "out_gain": {"type": "slider", "range": [-60, 0], "value": -12, "unit": "dB"}}
+{"ratio":    {"type": "slider", "range": [0.5, 8], "value": 2, "step": 0.01,
+              "description": "The modulator's frequency against the note's: whole numbers sound harmonic, others bell-like."},
+ "index":    {"type": "slider", "range": [0, 12], "value": 3, "step": 0.01,
+              "description": "How much the modulator bends the carrier: higher is brighter, and on loud notes brighter still."},
+ "attack":   {"type": "slider", "range": [1, 2000], "value": 10, "unit": "ms",
+              "description": "How fast a note reaches its level: short is percussive, long swells in."},
+ "release":  {"type": "slider", "range": [5, 8000], "value": 400, "unit": "ms",
+              "description": "How long a note takes to fade once released."},
+ "detune":   {"type": "slider", "range": [0, 50], "value": 6, "unit": "cents",
+              "description": "How far the right channel is tuned from the left: a wider, slowly beating stereo image."},
+ "out_gain": {"type": "slider", "range": [-60, 0], "value": -12, "unit": "dB",
+              "description": "The synth's level, the last thing before the outputs."}}
 ```
 <!-- /synth -->
 <!-- fx -->
@@ -221,13 +231,20 @@ out2 = mix(dry, dark_r, w) * g;
 ```
 
 ```json
-{"time":     {"type": "slider", "range": [1, 1900], "value": 350, "unit": "ms"},
- "feedback": {"type": "slider", "range": [0, 0.95], "value": 0.5, "step": 0.01},
- "damping":  {"type": "slider", "range": [0, 0.95], "value": 0.4, "step": 0.01},
- "bend":     {"type": "slider", "range": [0, 50], "value": 5, "unit": "%"},
- "wet":      {"type": "slider", "range": [0, 1], "value": 0.35, "step": 0.01},
- "in_gain":  {"type": "slider", "range": [-24, 12], "value": 0, "unit": "dB"},
- "out_gain": {"type": "slider", "range": [-60, 0], "value": 0, "unit": "dB"}}
+{"time":     {"type": "slider", "range": [1, 1900], "value": 350, "unit": "ms",
+              "description": "The time between echoes; the control inlet bends it."},
+ "feedback": {"type": "slider", "range": [0, 0.95], "value": 0.5, "step": 0.01,
+              "description": "How much of each echo comes back: higher, more and longer echoes."},
+ "damping":  {"type": "slider", "range": [0, 0.95], "value": 0.4, "step": 0.01,
+              "description": "How much darker each echo gets on its way round: higher, the echoes dull faster."},
+ "bend":     {"type": "slider", "range": [0, 50], "value": 5, "unit": "%",
+              "description": "How far the control inlet bends the delay time: the depth of the pitch wobble."},
+ "wet":      {"type": "slider", "range": [0, 1], "value": 0.35, "step": 0.01,
+              "description": "The balance of dry and echoes: 0 the dry sound alone, 1 the echoes alone."},
+ "in_gain":  {"type": "slider", "range": [-24, 12], "value": 0, "unit": "dB",
+              "description": "The level of the sound coming in, before the delay."},
+ "out_gain": {"type": "slider", "range": [-60, 0], "value": 0, "unit": "dB",
+              "description": "The level of everything that comes out, dry and echoes together."}}
 ```
 <!-- /fx -->
 
@@ -421,7 +438,14 @@ nothing connected gives 0, and the user can also send it a plain number.
 Each parameter is a `Param` in the code and an entry in `params`, with the
 **same name** and the **same starting value**:
 
-`Param cutoff(1000);` and `"cutoff": {"type": "slider", "range": [20, 20000], "value": 1000, "unit": "Hz"}`
+`Param cutoff(1000);` and `"cutoff": {"type": "slider", "range": [20, 20000], "value": 1000, "unit": "Hz", "description": "Where the filter starts to cut: lower is darker."}`
+
+**Every parameter has a `"description"`**: one or two sentences on how it
+changes the sound, what is heard as the value goes up or down (or what each
+option does), in the user's words. The panel shows it when the user rests
+the pointer on the parameter's name. Not its type or range: the panel
+already shows them. The standard format's parameters keep the descriptions
+given there.
 
 | type | in `params` | the Param is |
 |---|---|---|

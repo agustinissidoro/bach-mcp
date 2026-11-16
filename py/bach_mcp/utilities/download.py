@@ -10,7 +10,7 @@ A model can be named four ways:
     https://huggingface.co/<user>/<repo>[/blob/main/<file>]   a Hugging Face page, or one file in it
     https://<anywhere>/<model>.gguf                a direct link to a .gguf file
 
-A sound model (catalog.toml format "clap" or "tagger": laion-clap2-m, laion-clap-music-speech, ced-base ...,
+A sound model (catalog.toml format "clap", "tagger" or "pitch": laion-clap2-m, laion-clap-music-speech, ced-base, penn ...,
 or the repo bachmcp.toml [audio] names) goes into models/audio/<repo's name> instead, and --use
 sets it in bachmcp.toml [audio]. Sound models are ONNX (full precision), for the MCP and Max alike.
 
@@ -36,8 +36,8 @@ from typing import Callable, Dict, List, Optional
 from ..config import (AUDIO_MODELS_DIR, DEFAULT_CONFIG_PATH, MODELS_DIR, REPO_ROOT, Config, ConfigError, load_config,
                       model_format, set_key)
 
-SOUND_FORMATS = ("clap", "tagger")  # catalog formats of the sound models (audio_processing/listen.py)
-SOUND_KEYS = {"clap": "clap_model", "tagger": "tagger_model"}  # where --use sets them, in [audio]
+SOUND_FORMATS = ("clap", "tagger", "pitch")  # catalog formats of the sound models (audio_processing/listen.py)
+SOUND_KEYS = {"clap": "clap_model", "tagger": "tagger_model", "pitch": "pitch_model"}  # where --use sets them, in [audio]
 _SKIPPED = (".h5", ".msgpack", ".onnx", ".ot", ".tflite", ".gitattributes")  # other frameworks' copies of the weights
 _SOUND_SKIPPED = (".safetensors", ".bin", ".pt", ".pth", ".wav", ".flac", ".mp3")  # a sound model: its ONNX, not these
 _ONNX_VARIANT = re.compile(r"[._-](?:fp16|int8|uint8|quantized|q4|q4f16|bnb4)\.onnx$", re.I)  # lighter copies
@@ -244,7 +244,7 @@ def sound_plan(entry: CatalogEntry) -> Plan:
 
 
 def sound_models(config: Optional[Config] = None) -> Dict[str, str]:
-    """The sound models bachmcp.toml [audio] names: {"clap": <name>, "tagger": <name>} (set ones only)."""
+    """The sound models bachmcp.toml [audio] names: {"clap": <name>, "tagger": <name>, "pitch": <name>} (set ones only)."""
     config = config or load_config()
     return {kind: getattr(config.audio, key).strip() for kind, key in SOUND_KEYS.items() if getattr(config.audio, key).strip()}
 
@@ -408,7 +408,7 @@ def _last_line(path: str) -> str:
 
 def use_in_config(info: ModelInfo, path: str = DEFAULT_CONFIG_PATH) -> None:
     """Set [model] model in bachmcp.toml to this model, keeping every comment (the runtime follows from it);
-    a sound model sets its key of [audio] instead (clap_model, tagger_model)."""
+    a sound model sets its key of [audio] instead (clap_model, tagger_model, pitch_model)."""
     if info.format in SOUND_FORMATS:
         set_key(path, "audio", SOUND_KEYS[info.format], info.name)
     else:

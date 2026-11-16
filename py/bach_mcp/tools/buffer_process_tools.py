@@ -11,8 +11,8 @@ Before a file is kept it is checked here:
     process(x, sr, p), imports only from ALLOWED, calls none of FORBIDDEN, and reads only
     parameters it declares;
   - by running it (worker.py --check, a process of its own, with a timeout) on a two-second
-    test sound, at its declared values and at both ends of every slider: it must return
-    finite samples;
+    test sound, at its declared values and at both ends of every slider (a file that reads the
+    sound database: every slider low, then every slider high): it must return finite samples;
   - by the listen test, when there is a hub (it registers its runner: serve_runner): the code on
     the real source, in the instance's worker, its result described next to the source
     (runner.listen). The target and Max get nothing yet; a failure here also refuses the file.
@@ -50,7 +50,8 @@ BUFFER_PROCESS_TOOLS = ("send_buffer_process",)
 BUFFER_PROCESS_TYPES = ("buffer",)
 
 ALLOWED = ("numpy", "scipy", "math", "cmath", "random", "itertools", "functools", "collections", "statistics",
-           "dataclasses", "typing", "audio_core", "pedalboard", "sklearn", "librosa", "soundfile")
+           "dataclasses", "typing", "audio_core", "audio_treat", "audio_corpus", "audio_compose",
+           "pedalboard", "sklearn", "librosa", "soundfile")
 FORBIDDEN = ("open", "exec", "eval", "compile", "__import__", "input", "breakpoint", "globals", "locals", "vars")
 CHECK_TIMEOUT_SECONDS = 120.0
 
@@ -167,6 +168,11 @@ _DOC = """ONLY for a buffer instance: offline processing of a recorded sound, as
           It may import numpy, scipy, pedalboard, sklearn, librosa, soundfile, math, random,
           and `audio_core` (ac.ms, ac.mono, ac.stft/istft, ac.normalize, ac.fade, ac.pad, ac.mix).
           Load heavy things (models, impulse responses) at the top of the file: it stays loaded.
+          It may also make sound from the user's sound database, with or without x: `audio_corpus`
+          (find sounds by words, by descriptors, by likeness), `audio_treat` (stretch, pitch,
+          formants, cross-synthesis, layers, freeze, grains ...) and `audio_compose` (Sounds
+          that keep their sources, a Canvas to place them on; return the Canvas or a Sound).
+          Then x may be empty: the file runs all the same.
         params: the panel, one entry for each parameter the code reads, with its starting value:
           {"mix": {"type": "slider", "range": [0, 1], "value": 0.3},
            "size_ms": {"type": "slider", "range": [10, 2000], "value": 400, "unit": "ms"},
@@ -257,8 +263,11 @@ def register_buffer_process_tools(mcp: FastMCP, bridge: MaxBridge, python: str =
             if before is not None and heard.get("similarity") is not None:
                 changes.append(f"prompt match (CLAP) {before:.2f} -> {heard['similarity']:.2f}")
             notes_heard = "".join(f"\nNote: {w}." for w in heard.get("warnings") or [])
+            made = heard.get("made_of")
+            made_of = (f"\nMade of {made['sounds']} sounds placed, from {made['units']} units of {made['files']} files "
+                       f"of the database (processes/{name}.manifest.json lists them)." if made else "")
             listened = (f"\n\nListen test on the real sound: {heard['frames']} frames, {heard['channels']} ch at "
-                        f"{heard['sr']:g} Hz in {heard['ms']} ms; {in_max}.{notes_heard}"
+                        f"{heard['sr']:g} Hz in {heard['ms']} ms; {in_max}.{notes_heard}{made_of}"
                         + ("\nSource -> result:\n" + "\n".join(changes) if changes else "")
                         + f"\n\n{heard['text']}")
         notes = "".join(f"Note: {w}.\n" for w in result.get("warnings") or [])

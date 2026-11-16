@@ -57,6 +57,7 @@ function Element(spec) {
   this.range = spec.range ? spec.range.slice() : null;
   this.step = spec.step || 0;
   this.unit = spec.unit || "";
+  this.description = spec.description ? String(spec.description) : "";  // the tooltip on its name
   this.options = spec.options ? spec.options.slice() : null;
   this.value = copy(spec.value);
   this.def = copy(spec["default"] !== undefined ? spec["default"] : spec.value);

@@ -35,10 +35,15 @@ const TYPE_ALIASES = {
   multislider: "list", array: "list", values: "list",
   minmax: "range", span: "range",
 };
-const SPEC_KEYS = ["type", "range", "value", "step", "unit", "options"];
-const SPEC_ALIASES = { default: "value", values: "options", choices: "options", units: "unit" };
-const SPEC_IGNORED = ["label", "doc", "info", "description", "help"];
+const SPEC_KEYS = ["type", "range", "value", "step", "unit", "options", "description"];
+const SPEC_ALIASES = {
+  default: "value", values: "options", choices: "options", units: "unit",
+  doc: "description", info: "description", help: "description", about: "description",
+};
+const SPEC_IGNORED = ["label"];
 const MAX_LIST = 256;
+// a parameter's description: what it does to the result, shown when the pointer rests on its name
+const MAX_DESCRIPTION = 400;
 
 function decimals(x) {
   return Number(Number(x).toFixed(6));
@@ -133,6 +138,11 @@ function normalizeSpec(name, raw) {
   }
   const spec = { name, type };
   if (s.unit !== undefined) spec.unit = String(s.unit).slice(0, 12);
+  if (s.description !== undefined && s.description !== null) {
+    if (typeof s.description !== "string") throw new AlgoError(`params.${name}: "description" must be text`);
+    const text = s.description.replace(/\s+/g, " ").trim().slice(0, MAX_DESCRIPTION);
+    if (text) spec.description = text;
+  }
   if (s.step !== undefined && !(isNumber(s.step) && s.step >= 0)) {
     throw new AlgoError(`params.${name}: "step" must be a number >= 0`);
   }
@@ -280,26 +290,36 @@ function sameMeaning(a, b) {
   return a.name === b.name && a.type === b.type && (a.kind || "") === (b.kind || "") && (a.unit || "") === (b.unit || "");
 }
 
-/** One line per parameter: what the model and the Max console are told. */
-function describe(specs, values) {
+/**
+ * One line per parameter: what the model and the Max console are told. With `about`,
+ * each line ends with the parameter's description (the model's view; the console
+ * stays short).
+ */
+function describe(specs, values, about) {
   return specs.map((s) => {
     const v = values ? values[s.name] : s.value;
     const unit = s.unit ? ` ${s.unit}` : "";
     const span = s.range ? ` ${fmt(s.range[0])}..${fmt(s.range[1])}` : "";
+    const tail = about && s.description ? ` \u2014 ${s.description}` : "";
     switch (s.type) {
       case "menu":
-        return `${s.name}: menu [${s.options.join(", ")}] = ${v}`;
+        return `${s.name}: menu [${s.options.join(", ")}] = ${v}${tail}`;
       case "toggle":
-        return `${s.name}: toggle = ${v}`;
+        return `${s.name}: toggle = ${v}${tail}`;
       case "curve":
-        return `${s.name}: curve${span}${unit} = ${JSON.stringify(v)}`;
+        return `${s.name}: curve${span}${unit} = ${JSON.stringify(v)}${tail}`;
       default:
-        return `${s.name}: ${s.type}${span}${unit} = ${JSON.stringify(v)}`;
+        return `${s.name}: ${s.type}${span}${unit} = ${JSON.stringify(v)}${tail}`;
     }
   });
 }
 
+/** The names of the parameters that have no description (no tooltip on the panel). */
+function undescribed(specs) {
+  return specs.filter((s) => !s.description).map((s) => s.name);
+}
+
 module.exports = {
   TYPES, MIDI_RANGE,
-  normalizeParams, defaults, prepare, coerce, valueAtoms, describe, sameMeaning,
+  normalizeParams, defaults, prepare, coerce, valueAtoms, describe, undescribed, sameMeaning,
 };

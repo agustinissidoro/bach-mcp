@@ -1833,8 +1833,22 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 406.0, 168.0, 799.0, 780.0 ],
+                        "rect": [ 509.0, 210.0, 799.0, 780.0 ],
                         "boxes": [
+                            {
+                                "box": {
+                                    "id": "obj-2",
+                                    "maxclass": "newobj",
+                                    "numinlets": 1,
+                                    "numoutlets": 5,
+                                    "outlettype": [ "", "", "", "", "" ],
+                                    "patching_rect": [ 517.0, 300.0, 275.0, 22.0 ],
+                                    "saved_object_attributes": {
+                                        "legacyoutputorder": 0
+                                    },
+                                    "text": "regexp @re playground @substitute @tosymbol 1"
+                                }
+                            },
                             {
                                 "box": {
                                     "color": [ 0.113725490196078, 1.0, 0.0, 1.0 ],
@@ -1842,7 +1856,7 @@
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 358.0, 520.0, 61.0, 22.0 ],
+                                    "patching_rect": [ 358.0, 520.0, 75.0, 22.0 ],
                                     "text": "s #0folder"
                                 }
                             },
@@ -1863,8 +1877,8 @@
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 380.0, 710.0, 137.0, 22.0 ],
-                                    "text": "print bachmcp.algorithm"
+                                    "patching_rect": [ 380.0, 710.0, 117.0, 22.0 ],
+                                    "text": "print bachmcp.score"
                                 }
                             },
                             {
@@ -1897,7 +1911,7 @@
                                     "numinlets": 0,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 233.0, 182.0, 102.0, 22.0 ],
+                                    "patching_rect": [ 517.0, 244.0, 102.0, 22.0 ],
                                     "text": "r #0playground"
                                 }
                             },
@@ -2096,6 +2110,12 @@
                             },
                             {
                                 "patchline": {
+                                    "destination": [ "obj-30", 0 ],
+                                    "source": [ "obj-2", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
                                     "destination": [ "obj-21", 0 ],
                                     "source": [ "obj-20", 0 ]
                                 }
@@ -2114,7 +2134,15 @@
                             },
                             {
                                 "patchline": {
+                                    "destination": [ "obj-2", 0 ],
+                                    "order": 0,
+                                    "source": [ "obj-23", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
                                     "destination": [ "obj-25", 1 ],
+                                    "order": 1,
                                     "source": [ "obj-23", 0 ]
                                 }
                             },
@@ -2675,7 +2703,7 @@
                     "numoutlets": 1,
                     "outlettype": [ "" ],
                     "patching_rect": [ 784.2, 304.0, 197.0, 22.0 ],
-                    "text": "i-will-win-so-many-contests-like-this"
+                    "text": "reader"
                 }
             },
             {
@@ -3148,7 +3176,7 @@
                 "box": {
                     "comment": "bang on processed",
                     "id": "obj-55",
-                    "index": 0,
+                    "index": 2,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -3213,7 +3241,7 @@
                 "box": {
                     "comment": "score (dict)",
                     "id": "obj-35",
-                    "index": 0,
+                    "index": 1,
                     "maxclass": "outlet",
                     "numinlets": 1,
                     "numoutlets": 0,
@@ -3710,7 +3738,7 @@
                 "box": {
                     "comment": "",
                     "id": "obj-15",
-                    "index": 0,
+                    "index": 1,
                     "maxclass": "inlet",
                     "numinlets": 0,
                     "numoutlets": 1,
@@ -4057,7 +4085,6 @@
                     "source": [ "obj-9", 1 ]
                 }
             }
-        ],
-        "autosave": 0
+        ]
     }
 }

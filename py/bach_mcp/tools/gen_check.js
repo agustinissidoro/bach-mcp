@@ -21,7 +21,7 @@ a file that passes should compile; what gen~ would refuse is named with its line
 
 Prints one JSON line:
     {"ok": true, "type": "synth", "description": "...", "inlets": [{"index": 1, "about": "..."}],
-     "outlets": [...], "params": [...specs], "describe": [...], "buffers": [{"name", "buffer"}],
+     "outlets": [...], "params": [...specs], "describe": [...], "undescribed": [names], "buffers": [{"name", "buffer"}],
      "data": [...], "warnings": [...]}
     {"ok": false, "error": "...", "line": n}
 */
@@ -984,7 +984,7 @@ function check(text, type, rawParams) {
   if (outlets.length === 1) warnings.push("one outlet: the sound is mono");
   return {
     ok: true, type, description, inlets, outlets,
-    params: specs, describe: paramspec.describe(specs),
+    params: specs, describe: paramspec.describe(specs, null, true), undescribed: paramspec.undescribed(specs),
     buffers: parser.buffers, data: parser.data, warnings,
   };
 }

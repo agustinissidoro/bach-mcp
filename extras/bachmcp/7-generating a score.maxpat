@@ -41,7 +41,7 @@
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 422.0, 250.0, 39.0, 22.0 ],
+                    "patching_rect": [ 385.0, 252.0, 39.0, 22.0 ],
                     "text": "dump"
                 }
             },
@@ -255,7 +255,7 @@
                     "numinlets": 0,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 69.0, 252.0, 45.0, 22.0 ],
+                    "patching_rect": [ 79.0, 252.0, 45.0, 22.0 ],
                     "text": "r to.roll"
                 }
             },
@@ -438,6 +438,7 @@
             {
                 "patchline": {
                     "destination": [ "obj-2", 0 ],
+                    "midpoints": [ 394.5, 291.0, 88.5, 291.0 ],
                     "source": [ "obj-38", 0 ]
                 }
             },

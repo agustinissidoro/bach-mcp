@@ -14,7 +14,7 @@ as py/bach_mcp/utilities/download.py does.
     https://huggingface.co/<user>/<repo>[/blob/main/<file>]   a Hugging Face page, or one file in it
     https://<anywhere>/<file>                  a direct link to a file
 
-A sound model (catalog.toml format "clap" or "tagger": laion-clap2-m, laion-clap-music-speech, ced-base ...,
+A sound model (catalog.toml format "clap", "tagger" or "pitch": laion-clap2-m, laion-clap-music-speech, ced-base, penn ...,
 named by its catalogue name or its repo) goes into <folder>/audio/<repo's name>, with one copy of
 its full-precision ONNX files and their config, labels and tokenizer, as download.py does.
 
@@ -45,7 +45,7 @@ try { Max = require("max-api"); } catch (e) { /* outside Max: print instead */ }
 const DEFAULT_QUANT = "Q4_K_M";   // what llama-server also picks when a GGUF repo names no quantization
 const MEASURE_MS = 3000;          // how long to watch the speed before saying how long it will take
 const PROGRESS_MS = 60 * 1000;    // how often to say how far it is
-const SOUND_FORMATS = ["clap", "tagger"];   // catalog formats of the sound models: into <folder>/audio/
+const SOUND_FORMATS = ["clap", "tagger", "pitch"];   // catalog formats of the sound models: into <folder>/audio/
 const SKIPPED = [".h5", ".msgpack", ".onnx", ".ot", ".tflite", ".gitattributes",   // other frameworks' copies of the weights
                  ".safetensors", ".bin", ".pt", ".pth", ".wav", ".flac", ".mp3"];       // a sound model: its ONNX, not these
 const ONNX_VARIANT = /[._-](?:fp16|int8|uint8|quantized|q4|q4f16|bnb4)\.onnx$/i;    // lighter copies of the weights

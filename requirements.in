@@ -1,8 +1,0 @@
-# What every Bach needs, Claude or local (from the imports under py/)
-# Python version target: 3.11, the oldest that runs Bach (tomllib)
-
-# The MCP app and its HTTP transport (tools/registry.py, claude.py, chat/web.py)
-mcp~=1.26.0
-
-# The client that talks to the model server (model/client.py), and connect (claude.py)
-httpx~=0.28.0

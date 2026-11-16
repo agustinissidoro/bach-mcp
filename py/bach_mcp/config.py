@@ -34,7 +34,7 @@ from typing import Any, List, Optional
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_CONFIG_PATH = os.path.join(REPO_ROOT, "bachmcp.toml")
 MODELS_DIR = os.path.join(REPO_ROOT, "models")
-AUDIO_MODELS_DIR = os.path.join(MODELS_DIR, "audio")  # the sound models (download laion-clap-music-speech ...)
+AUDIO_MODELS_DIR = os.path.join(MODELS_DIR, "audio")  # the sound models (download laion-clap2-l ...)
 
 BACKENDS = ("mlx", "gguf")
 REASONING = ("off", "on")
@@ -99,7 +99,10 @@ class AlgoConfig:
 @dataclass
 class AudioConfig:
     tagger_model: str = "ced-base"       # a sound model of models/catalog.toml (or a Hugging Face repo): AudioSet labels
-    clap_model: str = "laion-clap-music-speech"  # a CLAP of models/catalog.toml: sound and words compared
+    clap_model: str = "laion-clap2-l"     # a CLAP of models/catalog.toml: sound and words compared
+    pitch_model: str = "penn"            # a pitch model of models/catalog.toml: the pitch of a sound, if it has one
+    database: str = ""                   # the sound database a buffer instance's code may read (audio_corpus):
+                                         # a bachmcp.database file; empty: the one .db in databases/
     sound_analysis: bool = True        # describe the source (and result) of a buffer instance to the model
     freesound_api_key: str = ""        # https://freesound.org/apiv2/apply (not used yet)
 
@@ -191,12 +194,12 @@ class Config:
     def skill_source(self) -> str:
         """The skill file with its mode markers: [chat] skill_file, else the built-in one,
         with the wording [algo] verbose chooses (see prompt/skill.py)."""
-        from .prompt.skill import read_skill, with_gen, with_verbosity
+        from .prompt.skill import read_skill, with_built_in, with_verbosity
         if not self.chat.skill_file:
-            return with_gen(with_verbosity(read_skill(), self.algo.verbose), self.algo.verbose)
+            return with_built_in(with_verbosity(read_skill(), self.algo.verbose), self.algo.verbose)
         path = _from_repo(self.chat.skill_file)
         try:
-            return with_gen(with_verbosity(read_skill(path), self.algo.verbose), self.algo.verbose)
+            return with_built_in(with_verbosity(read_skill(path), self.algo.verbose), self.algo.verbose)
         except OSError as exc:
             raise ConfigError(f"[chat] skill_file: cannot read {path} ({exc.strerror})") from None
 

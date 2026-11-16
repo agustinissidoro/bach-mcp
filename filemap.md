@@ -196,9 +196,10 @@ Level: ① start · ② doors · ③ tools · ④ bridge · ⑤ Max · base: mus
 | `bachjson-syntax-specification.md` | Markdown | — | bachjson-complete, the lossless JSON of bach's syntax used between objects. |
 | `bachmcp.toml` | TOML | ① | The only settings file: model, generation, chat, server, Max ports, Node. `bachmcp.server` writes its attributes here. |
 | `package-info.json` | JSON | ⑤ | The Max package: name, version, minimum Max version. |
-| `requirements.txt` | text | ① | Pinned packages every installation gets. Read by `install.py`. |
-| `requirements-local.txt` | text | ① | Pinned packages the local model adds (MLX, Hugging Face). Read by `install.py`. |
-| `requirements.in`, `requirements-local.in` | text | — | The direct dependencies and why. Not read at runtime: `pip-compile` makes the `.txt` files from them (the command is at the top of each `.txt`). |
+| `requirements/base.txt` | text | ① | Pinned packages every installation gets, the buffer instances' audio packages among them. Read by `install.py`. |
+| `requirements/local.txt` | text | ① | Pinned packages the local model adds (MLX, Hugging Face). Read by `install.py`. |
+| `requirements/base.in`, `requirements/local.in` | text | — | The direct dependencies and why. Not read at runtime: `pip-compile`, run inside `requirements/`, makes the `.txt` files from them (the command is at the top of each `.txt`). |
+| `requirements/export.txt` | text | — | For the maintainer only: what `utilities/export_onnx.py` needs (torch, open_clip). Not installed by `main.py install`. |
 | `buffer.txt`, `buffer.json` | bach text, JSON | ④ | The score of the roll, on its way to `read_score`. Rewritten on every read; not in git. |
 | `.gitignore`, `.gitattributes` | git | — | What git ignores (models, caches, logs, buffers), line-ending normalisation. |
 

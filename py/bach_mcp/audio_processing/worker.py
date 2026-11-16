@@ -8,7 +8,11 @@
 
 The code is a Python file that defines `process(x, sr, p)`: x the samples, float32 of shape
 (frames, channels); sr the sampling rate; p the parameters by name. It returns the samples,
-any length and any number of channels, or (samples, sr) to change the rate.
+any length and any number of channels, or (samples, sr) to change the rate; or an
+audio_compose Canvas or Sound, which also say what they are made of: the database units
+and what was done to them. That manifest is written next to the file (<name>.manifest.json).
+A file that reads the sound database (audio_corpus) makes sound from nothing: it runs with
+an empty source too.
 
 A request:  {"run": {"file": ..., "spec": {params}, "values": {...}, "source": <shm>, "target": <shm>}}
 An answer:  {"ok": true, "ms": ..., "frames": ..., "channels": ..., "sr": ..., "warnings": [...]}
@@ -115,9 +119,29 @@ def parameters(spec: Dict[str, Any], values: Optional[Dict[str, Any]] = None) ->
     return p
 
 
+_made: Dict[str, Any] = {}   # the manifest of the last result that had one
+
+
+def uses_corpus(path: str) -> bool:
+    """Whether the file reads the sound database: it then makes sound with no source at all."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return "audio_corpus" in f.read()
+    except OSError:
+        return False
+
+
 def output(result: Any, sr: float) -> Tuple[np.ndarray, float, List[str]]:
     """What process returned as (frames, channels) float32 and its rate, with warnings.
     Raises ProcessError when it is not samples."""
+    _made.clear()
+    if type(result).__name__ in ("Canvas", "Sound") and type(result).__module__ == "audio_compose":
+        import audio_compose
+        samples = result.render() if isinstance(result, audio_compose.Canvas) else result.samples
+        if isinstance(result, audio_compose.Canvas) and not result.placed:
+            raise ProcessError("process returned a canvas with nothing placed on it")
+        _made.update(audio_compose.manifest_of(result) or {})
+        result = (samples, result.sr)
     if isinstance(result, tuple) and len(result) == 2 and np.isscalar(result[1]):
         result, sr = result
         sr = float(sr)
@@ -182,11 +206,42 @@ def _process(request: Dict[str, Any], x: np.ndarray, sr: float) -> Tuple[np.ndar
     path = request["file"]
     fn = load(path)
     start = time.perf_counter()
-    y, out_sr, warnings = output(call(fn, path, x, sr, parameters(request.get("spec"), request.get("values"))), sr)
+    p = parameters(request.get("spec"), request.get("values"))
+    y, out_sr, warnings = output(call(fn, path, x, sr, p), sr)
     millis = (time.perf_counter() - start) * 1000.0
-    if len(x) == 0:
+    if len(x) == 0 and not uses_corpus(path):
         warnings.insert(0, f"no sound in {request['source']}: the code got 0 frames")
+    if _made:
+        _made["values"] = p
     return y, out_sr, warnings, millis
+
+
+def _manifest_path(file: str) -> str:
+    """<processes>/<name>.manifest.json for <name>.py, or for its draft in .history."""
+    folder, base = os.path.split(os.path.abspath(file))
+    if base.startswith(".") and base.endswith(".draft.py"):
+        folder, base = os.path.dirname(folder), base[1:-len(".draft.py")] + ".py"
+    return os.path.join(folder, os.path.splitext(base)[0] + ".manifest.json")
+
+
+def _keep_manifest(file: str, manifest: Dict[str, Any]) -> None:
+    """What the result now in the target is made of, next to the file (none: the old one goes)."""
+    path = _manifest_path(file)
+    try:
+        if manifest:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=1, default=str)
+        elif os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
+def _made_of(manifest: Dict[str, Any]) -> Optional[Dict[str, int]]:
+    if not manifest:
+        return None
+    units = {s.get("unit") for p in manifest.get("placed", []) for s in p.get("sources", []) if s.get("unit") is not None}
+    return {"sounds": len(manifest.get("placed", [])), "units": len(units), "files": len(manifest.get("files", []))}
 
 
 def _write(target: str, y: np.ndarray, sr: float) -> None:
@@ -198,9 +253,9 @@ def _write(target: str, y: np.ndarray, sr: float) -> None:
     dest.close()
 
 
-def _ran(y: np.ndarray, sr: float, warnings: List[str], millis: float) -> Dict[str, Any]:
+def _ran(y: np.ndarray, sr: float, warnings: List[str], millis: float, manifest: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return {"ok": True, "ms": round(millis), "frames": int(y.shape[0]), "channels": int(y.shape[1]),
-            "sr": sr, "warnings": warnings}
+            "sr": sr, "warnings": warnings, **({"made_of": _made_of(manifest)} if manifest else {})}
 
 
 def run(request: Dict[str, Any]) -> Dict[str, Any]:
@@ -208,7 +263,8 @@ def run(request: Dict[str, Any]) -> Dict[str, Any]:
     x, sr = _source(request["source"], request["target"])
     y, out_sr, warnings, millis = _process(request, x, sr)
     _write(request["target"], y, out_sr)
-    return _ran(y, out_sr, warnings, millis)
+    _keep_manifest(request["file"], dict(_made))
+    return _ran(y, out_sr, warnings, millis, dict(_made))
 
 
 _pending: Dict[str, Any] = {}  # what the last listen made, until commit writes it
@@ -220,14 +276,15 @@ def listen(request: Dict[str, Any]) -> Dict[str, Any]:
     from bach_mcp.audio_processing import analysis
     _pending.clear()
     x, sr = _source(request["source"], request["target"])
-    if len(x) == 0:
+    if len(x) == 0 and not uses_corpus(request["file"]):
         return {"ok": True, "skipped": f"no sound in {request['source']} yet"}
     y, out_sr, warnings, millis = _process(request, x, sr)
-    _pending.update(y=y, sr=out_sr, warnings=warnings, ms=millis)
+    _pending.update(y=y, sr=out_sr, warnings=warnings, ms=millis, manifest=dict(_made), file=request["file"])
     models, goal = request.get("models") or {}, request.get("goal") or ""
-    ran = _ran(y, out_sr, warnings, millis)
+    ran = _ran(y, out_sr, warnings, millis, dict(_made))
     try:  # the code ran: a failure from here on is the analysis's, and never refuses the file
-        before = describe({"shm": request["source"], "title": "SOURCE", "goal": goal, "models": models})
+        before = ({"features": {}, "similarity": None} if len(x) == 0 else
+                  describe({"shm": request["source"], "title": "SOURCE", "goal": goal, "models": models}))
         after = _with_goal(_analyse(y, out_sr, "RESULT (not yet in Max)", models), goal, models)
         changes = analysis.compare(before["features"], after["features"]) if before["features"] else []
     except Exception as exc:  # noqa: BLE001
@@ -244,7 +301,8 @@ def commit(request: Dict[str, Any]) -> Dict[str, Any]:
     if "y" not in _pending:
         return {"ok": False, "error": "nothing was listened to"}
     _write(request["target"], _pending["y"], _pending["sr"])
-    answer = _ran(_pending["y"], _pending["sr"], _pending["warnings"], _pending["ms"])
+    _keep_manifest(_pending["file"], _pending.get("manifest") or {})
+    answer = _ran(_pending["y"], _pending["sr"], _pending["warnings"], _pending["ms"], _pending.get("manifest"))
     _pending.clear()
     return answer
 
@@ -256,7 +314,7 @@ def _model(kind: str, path: str, name: str = "") -> Any:
         return f"{name or kind} not downloaded ({DOWNLOAD_HINT.format(name=name or '<name>')})"
     if path not in _models:
         try:
-            _models[path] = (models.Tagger if kind == "tagger" else models.Clap)(path)
+            _models[path] = {"tagger": models.Tagger, "clap": models.Clap, "pitch": models.Pitch}[kind](path)
         except Exception as exc:  # noqa: BLE001 — said in the description, never fatal
             _models[path] = f"could not load ({type(exc).__name__}: {str(exc).splitlines()[0][:160]})"
     return _models[path]
@@ -280,6 +338,15 @@ def _analyse(x: np.ndarray, sr: float, title: str, models: Dict[str, str]) -> Di
             extra.append(f"prompt match (CLAP) {clap}")
         else:
             embedding = clap.embed(x, sr)
+    if models.get("pitch") and len(x):
+        pitch = _model("pitch", models["pitch"], models.get("pitch_name", ""))
+        if isinstance(pitch, str):
+            extra.append(f"pitch (PENN) {pitch}")
+        else:
+            heard = pitch.describe(x, sr)
+            where = "none: no step of it has a clear pitch" if heard["pitch"] is None else (
+                f"{heard['pitch']:.0f} midicents (the median; C5 = 6000), {heard['pitched']:.2f} of it pitched")
+            extra.append(f"pitch (PENN) {where}; periodicity {heard['periodicity']:.2f} (a clean tone 0.58, noise 0)")
     found = analysis.features(x, sr)
     return {"title": title, "text": analysis.describe(x, sr, title, extra, found), "features": found,
             "embedding": embedding}
@@ -335,9 +402,14 @@ def check(path: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     fn = load(path)
     x = test_sound()
     runs: List[Tuple[str, Dict[str, Any]]] = [("at its declared values", {})]
-    for name, decl in (spec or {}).items():
-        if isinstance(decl, dict) and decl.get("type") == "slider" and isinstance(decl.get("range"), list) and len(decl["range"]) == 2:
-            low, high = decl["range"]
+    sliders = {name: decl["range"] for name, decl in (spec or {}).items()
+               if isinstance(decl, dict) and decl.get("type") == "slider" and isinstance(decl.get("range"), list) and len(decl["range"]) == 2}
+    if uses_corpus(path):   # it searches a database at each run: every slider low, then every slider high
+        if sliders:
+            runs += [("with every slider at its lowest", {n: r[0] for n, r in sliders.items()}),
+                     ("with every slider at its highest", {n: r[1] for n, r in sliders.items()})]
+    else:
+        for name, (low, high) in sliders.items():
             runs += [(f"with {name} = {low}", {name: low}), (f"with {name} = {high}", {name: high})]
     first: Dict[str, Any] = {}
     warnings: List[str] = []

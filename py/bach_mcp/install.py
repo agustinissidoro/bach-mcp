@@ -7,9 +7,9 @@ At least one of the two must be true; the one not given is false.
 It starts on whatever Python the shell has, with nothing installed, so it imports only
 the standard library, and only at the top. Two stages:
 
-    outside the .venv   checks Python, makes the .venv, installs the requirements (and
-                        requirements-audio.txt, for buffer instances, whichever the mode),
-                        then runs this same command again with the .venv's Python
+    outside the .venv   checks Python, makes the .venv, installs the requirements
+                        (requirements/base.txt, buffer instances' audio packages among them,
+                        whichever the mode), then runs this same command again with the .venv's Python
     inside the .venv    the Node path, ONNX Runtime for the externals bachmcp.onnx~ and bachmcp.onnxb~
                         (into support/), the sound models (said to download if missing) and Claude. Claude is
                         registered from here so that its entry names the .venv's Python; Claude Code's login is checked
@@ -36,6 +36,7 @@ from typing import List, Optional, Sequence
 
 MINIMUM_PYTHON = (3, 11)
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+REQUIREMENTS = os.path.join(REPO_ROOT, "requirements")
 VENV = os.path.join(REPO_ROOT, ".venv")
 VENV_PYTHON = os.path.join(VENV, "bin", "python")
 MAIN_PY = os.path.join(REPO_ROOT, "py", "main.py")
@@ -105,12 +106,12 @@ def make_venv() -> None:
 
 
 def install_requirements(local: bool) -> None:
-    """One pip run for all of them: the pins of requirements.txt and requirements-local.txt and
-    the open versions of requirements-audio.txt are resolved together, so none undoes another."""
-    wanted = ["-r", os.path.join(REPO_ROOT, "requirements.txt"), "-r", os.path.join(REPO_ROOT, "requirements-audio.txt")]
+    """One pip run for both: the pins of requirements/base.txt and requirements/local.txt are
+    resolved together, so neither undoes the other (local.txt is compiled against base.txt)."""
+    wanted = ["-r", os.path.join(REQUIREMENTS, "base.txt")]
     if local:
         if apple_silicon():
-            wanted += ["-r", os.path.join(REPO_ROOT, "requirements-local.txt")]
+            wanted += ["-r", os.path.join(REQUIREMENTS, "local.txt")]
         else:  # no MLX here: gguf models only, for llama-server
             wanted += ["huggingface-hub>=1.0"]
     say("installing the requirements (librosa and the sound models' runtimes among them: a few minutes the first time)")
@@ -269,8 +270,8 @@ def check_sound_models(config, todo: List[str]) -> None:
     for name in missing:
         todo.append(f"to describe sounds to the model (buffer instances), download {name}: "
                     f"{command_line(f'download {name}')}")
-    if config.audio.clap_model in missing and config.audio.clap_model != "laion-clap-small":
-        todo.append("  (or the lighter CLAP: download laion-clap-small --use)")
+    if config.audio.clap_model in missing and config.audio.clap_model == "laion-clap2-l":
+        todo.append("  (or the lighter CLAP2: download laion-clap2-m --use)")
 
 
 def command_line(arguments: str) -> str:

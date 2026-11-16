@@ -1,5 +1,5 @@
-# What the local model adds to requirements.in (main.py install --local true)
--c requirements.txt
+# What the local model adds to base.in (main.py install --local true)
+-c base.txt
 
 # The mlx backend: Apple's MLX and its model server (model/backends.py). Apple Silicon only.
 mlx-lm~=0.32.0; sys_platform == "darwin" and platform_machine == "arm64"

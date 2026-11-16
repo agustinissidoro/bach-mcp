@@ -98,3 +98,14 @@ repo = "k2-fsa/sherpa-onnx-ced-mini-audio-tagging-2024-04-19"
 format = "tagger"
 size_gb = 0.04
 note = "CED, a tenth of the size: a little less precise, much faster"
+
+
+# Pitch: the pitch of a sound and how clearly it has one, for buffer instances ([audio] pitch_model),
+# bachmcp.onnx~ / onnxb~ (@model penn) and bachmcp.database (analysis pitch penn: every unit's).
+# PENN's FCNF0++, unchanged, as ONNX in agustinissidoro's repo (converted by export_onnx.py).
+
+["penn"]
+repo = "agustinissidoro/fcnf0-plus-plus-onnx"
+format = "pitch"
+size_gb = 0.04
+note = "PENN FCNF0++ (2023): pitch (31 Hz to 2 kHz) and how clearly a sound has one"

@@ -1,0 +1,27 @@
+# What every Bach needs, Claude or local (from the imports under py/)
+# Python version target: 3.11, the oldest that runs Bach (tomllib)
+
+# The MCP app and its HTTP transport (tools/registry.py, claude.py, chat/web.py)
+mcp~=1.26.0
+
+# The client that talks to the model server (model/client.py), and connect (claude.py)
+httpx~=0.28.0
+
+# Buffer instances: offline audio in Python (py/bach_mcp/audio_processing/), for Claude and the local model
+
+# The memory Max shares (utilities/shmbuffer.py) and every process file
+numpy>=2.0
+
+# What a process file may import (tools/buffer_process_tools.py ALLOWED) and the analysis (analysis.py)
+scipy>=1.14
+soundfile>=0.12
+pedalboard>=0.9
+scikit-learn>=1.5
+librosa>=0.10
+
+# The models that name a sound (listen.py), ONNX from models/audio/ (python py/main.py download ced-base,
+# download laion-clap2-l): CED through sherpa-onnx, CLAP through onnxruntime (tokenizers for its words;
+# LAION CLAP's mel spectrogram is librosa's, in listen.py: no transformers, no torch)
+sherpa-onnx>=1.12
+onnxruntime>=1.20
+tokenizers>=0.20

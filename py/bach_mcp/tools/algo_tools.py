@@ -19,6 +19,7 @@ replaces the previous version (kept in algorithms/.history) and is loaded,
 without waiting for an answer:
 
     <name> load_algo <name>.js                       to Max
+    <name> bang                                      then, to run it once
 
 The comment that opens the file (one line on what it does) is its description: the
 runner sends it to the panel on load. The tool asks for it and refuses a file without it.
@@ -36,7 +37,7 @@ import re
 import shutil
 import subprocess
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from mcp.server.fastmcp import FastMCP
 
@@ -142,6 +143,8 @@ _DOC = """Write the music as an algorithm: a JavaScript file that generates the 
           Open the file with a // comment: what the algorithm does, in one line of plain
           words (at most about 12), shown above its panel.
           E.g. // A canon whose voices drift apart in tempo.
+          Every parameter has a description: how it changes the result, shown when
+          the user rests the pointer on its name.
         The result lists the parameters and the score at the declared values; the file
         has also been run at every slider's minimum and maximum. Do not call it again to check.
         """
@@ -209,9 +212,13 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
         if not bridge.send(line(name, "load_algo", file)):
             status = "but Max could not be reached (is the patch open?)"
         else:
+            # Run it once. Sent from here, not by the runner on load: a patch reopening
+            # loads the file again (try_load_algo) and must not run it by itself.
+            bridge.send(line(name, "bang"))
             status = f"and sent to Max ({name})"
 
         params = "\n".join(f"  {p}" for p in result["describe"]) or "  (none)"
+        params += _undescribed_note(result.get("undescribed"))
         shown = f'Shown above its panel: "{result["description"]}"\n' if result.get("description") else ""
         about = ""
         if result.get("type") == "selector":
@@ -236,6 +243,14 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
             f"Score at the declared values ({result['notes']} notes, {result['ms']} ms):\n{describe(result['score'])}"
             f"{_markers_note((result['score'].get('header') or {}).get('markers'))}{same}"
         )
+
+
+def _undescribed_note(names: Optional[List[str]]) -> str:
+    """A line on the parameters with no description: no tooltip on their name in Max."""
+    if not names:
+        return ""
+    return ("\n  (no description, so no tooltip on the panel: " + ", ".join(names) +
+            '. Give each a description: "...", one or two sentences on how it changes the result.)')
 
 
 __all__ = ["register_algo_tools", "check_algorithm", "ALGO_TOOLS"]

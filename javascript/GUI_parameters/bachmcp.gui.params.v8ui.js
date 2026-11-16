@@ -25,6 +25,7 @@ for a synth or an fx, gen/<name>.json):
               option-click removes; sends "preset <n> recall|save|remove". The runner keeps
               them in the algorithm's file and answers presets <current> <stored...>.
   parameters  one card each. Moving a control sends "param <name> <value...>".
+              Rest the pointer on a name (750 ms): its description, if it has one.
               Double-click a control: back to its declared value. Click a
               pitch's value (highlighted) to show it as a name, midicents or
               MIDI (an interval: cents or semitones).
@@ -338,12 +339,20 @@ function ondblclick(x, y) {
 }
 ondblclick.local = 1;
 
+// the tooltip: one redraw once the pointer has rested on a name long enough
+const tipTimer = new Task(() => mgraphics.redraw());
+
 function onidle(x, y) {
-  if (panel && panel.mouseMove(x, y)) mgraphics.redraw();
+  if (!panel) return;
+  if (panel.mouseMove(x, y)) mgraphics.redraw();
+  tipTimer.cancel();
+  const wait = panel.tipWait();
+  if (wait > 0) tipTimer.schedule(wait + 10);
 }
 onidle.local = 1;
 
 function onidleout() {
+  tipTimer.cancel();
   if (panel && panel.mouseMove(null)) mgraphics.redraw();
 }
 onidleout.local = 1;

@@ -24,7 +24,23 @@ A converted CLAP2 folder (LAION CLAP2, open_clip 4.2+):
 
 The conversion is checked: the ONNX must answer as the original (a tone, noise, a 0.2 s grain and
 words, cosine >= 0.9999), or nothing is written. Needs torch, open_clip_torch, onnx and onnxscript
-(requirements-export.txt), and no file of bach-mcp: it runs on its own.
+(requirements/export.txt), and no file of bach-mcp: it runs on its own.
+
+    python py/bach_mcp/utilities/export_onnx.py maxrmorrison/fcnf0-plus-plus
+        -> models/export/fcnf0-plus-plus-onnx/ (PENN's FCNF0++ pitch model; needs torch and onnx only)
+
+A converted pitch folder (PENN, Morrison et al. 2023):
+
+    onnx/pitch_model.onnx   frames (count, 1024) float32: windows of mono sound at 8 kHz, one per pitch
+                            value wanted -> pitch (count) in Hz, periodicity (count) 0..1.
+                            PENN's decoding is inside the graph: the most likely of its 1440 pitch bins
+                            (5 cents each, from 31 Hz), refined by the expected value of the 19 bins
+                            around it; periodicity is 1 - the entropy of the bins (PENN's "entropy").
+    bachmcp.json            the manifest (kind "pitch": sample_rate, window, hop, fmin, fmax ...)
+    README.md, LICENSE      the model card and MIT's text
+
+Its check: the graph must give the pitch and periodicity of the same network in PyTorch (within
+0.01 cents and 1e-4) on tones, a sweep, noise and silence, and find a 440 Hz tone within 10 cents.
 """
 
 from __future__ import annotations
@@ -45,7 +61,8 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", 
 EXPORT_DIR = os.path.join(REPO_ROOT, "models", "export")
 APACHE_URL = "https://www.apache.org/licenses/LICENSE-2.0.txt"
 CONVERTER_URL = "https://github.com/agustinissidoro/bach-mcp/blob/main/py/bach_mcp/utilities/export_onnx.py"
-KINDS = {"clap2-": "clap2"}  # a repo's name -> how it is converted
+KINDS = {"clap2-": "clap2", "fcnf0": "pitch"}  # a repo's name -> how it is converted
+PENN_URL = "https://github.com/interactiveaudiolab/penn"
 
 
 def export(repo: str, target: str, say: Callable[[str], None] = print) -> None:
@@ -59,7 +76,7 @@ def export(repo: str, target: str, say: Callable[[str], None] = print) -> None:
         say(f"downloading {repo}")
         snapshot_download(repo, local_dir=source)
         say(f"converting {repo} to ONNX")
-        {"clap2": _clap2}[kind](source, target)
+        {"clap2": _clap2, "pitch": _penn}[kind](source, target)
     write_card(repo, target)
     say(f"done: {target}")
 
@@ -183,6 +200,195 @@ def _clap2(source: str, target: str) -> None:
     os.replace(out, os.path.join(target, "onnx"))
 
 
+def _penn(source: str, target: str) -> None:
+    """PENN's FCNF0++ (penn 1.0: model/fcnf0.py, decode.py, periodicity.py, config/defaults.py)."""
+    import numpy as np
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+
+    sr, window, hop, bins, cents_per_bin, fmin, local = 8000, 1024, 80, 1440, 5.0, 31.0, 19
+
+    def block(i, o, length, pool=False):
+        layers = [nn.Conv1d(i, o, 32), nn.ReLU()]
+        if pool:
+            layers.append(nn.MaxPool1d(2, 2))
+        return nn.Sequential(*layers, nn.LayerNorm((o, length)))
+
+    class Fcnf0(nn.Sequential):   # the names of penn's state dict: 0.0 (conv), 0.2 or 0.3 (norm), ..., 6
+        def __init__(self):
+            super().__init__(block(1, 256, 481, True), block(256, 32, 225, True), block(32, 32, 97, True),
+                             block(32, 128, 66), block(128, 256, 35), block(256, 512, 4), nn.Conv1d(512, bins, 4))
+
+    class Pitch(nn.Module):
+        """Fcnf0.forward, decode.Argmax (local expected value) and periodicity.entropy as one graph."""
+
+        def __init__(self, net):
+            super().__init__()
+            self.net = net
+            self.register_buffer("offsets", torch.arange(local))
+
+        def forward(self, frames):
+            logits = self.net(frames[:, None, 16:-15])[:, :, 0]                  # (count, bins)
+            p = F.softmax(logits, dim=1)
+            periodicity = 1 + (p * torch.log(p + 1e-7)).sum(dim=1) / math.log(bins)
+            padded = F.pad(logits, (local // 2, local // 2), value=-float("inf"))
+            index = logits.argmax(dim=1, keepdim=True) + self.offsets[None]      # into padded
+            cents = cents_per_bin * torch.clamp(index - local // 2, min=0).to(logits.dtype)
+            near = F.softmax(torch.gather(padded, 1, index), dim=1)
+            return fmin * 2 ** ((near * cents).sum(dim=1) / 1200), periodicity
+
+    weights = [f for f in os.listdir(source) if f.endswith(".pt")]
+    if len(weights) != 1:
+        raise RuntimeError(f"expected one .pt file of weights, found {weights}")
+    net = Fcnf0()
+    net.load_state_dict(torch.load(os.path.join(source, weights[0]), map_location="cpu", weights_only=True)["model"])
+    model = Pitch(net).eval()
+
+    out = os.path.join(target, "onnx.partial")  # renamed onnx/ once checked
+    shutil.rmtree(out, ignore_errors=True)
+    os.makedirs(out)
+    count = torch.export.Dim("count", min=1, max=1 << 20)
+    torch.onnx.export(model, (torch.zeros(3, window),), os.path.join(out, "pitch_model.onnx"), dynamo=True,
+                      input_names=["frames"], output_names=["pitch", "periodicity"],
+                      dynamic_shapes={"frames": {0: count}}, external_data=False, opset_version=18)
+
+    # The ONNX must answer as the network in PyTorch, and the network must hear a tone's pitch.
+    import onnxruntime
+    session = onnxruntime.InferenceSession(os.path.join(out, "pitch_model.onnx"))
+    t = np.arange(sr * 2) / sr
+    rng = np.random.default_rng(0)
+    sweep = 0.3 * np.sin(2 * np.pi * np.cumsum(110 * 2 ** (t * 1.5)) / sr)
+    harmonics = sum(0.3 / k * np.sin(2 * np.pi * 440 * k * t) for k in range(1, 6))
+    tests = {"tone": harmonics, "sine": 0.3 * np.sin(2 * np.pi * 220 * t), "sweep": sweep,
+             "noise": rng.uniform(-0.3, 0.3, sr * 2), "silence": np.zeros(sr)}
+    for name, x in tests.items():
+        x = np.pad(x.astype(np.float32), window // 2)
+        frames = np.stack([x[i:i + window] for i in range(0, len(x) - window + 1, hop)])
+        with torch.no_grad():
+            want_pitch, want_periodicity = (v.numpy() for v in model(torch.from_numpy(frames)))
+        got_pitch, got_periodicity = session.run(None, {"frames": frames})
+        cents = np.abs(1200 * np.log2(got_pitch / want_pitch)).max()
+        if cents > 0.01 or np.abs(got_periodicity - want_periodicity).max() > 1e-4:
+            raise RuntimeError(f"the ONNX pitch model does not answer as the original ({name}: {cents:.4f} cents)")
+        if name == "tone":
+            heard = float(np.median(got_pitch[10:-10]))
+            if abs(1200 * math.log2(heard / 440)) > 10:
+                raise RuntimeError(f"the pitch model hears {heard:.1f} Hz in a 440 Hz tone: wrong weights or layout")
+
+    manifest = {
+        "format": EXPORT_FORMAT, "kind": "pitch", "from": "penn 1.0.0 (fcnf0++)",
+        "pitch": {"file": "onnx/pitch_model.onnx", "input": "frames", "outputs": ["pitch", "periodicity"],
+                  "sample_rate": sr, "channels": 1, "window": window, "hop": hop,
+                  "fmin": fmin, "fmax": fmin * 2 ** (bins * cents_per_bin / 1200),
+                  "bins": bins, "cents_per_bin": cents_per_bin, "decoder": "argmax, local expected value",
+                  "periodicity": "entropy"},
+    }
+    with open(os.path.join(target, MANIFEST), "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+    shutil.rmtree(os.path.join(target, "onnx"), ignore_errors=True)
+    os.replace(out, os.path.join(target, "onnx"))
+
+
+MIT = """MIT License
+
+Copyright (c) 2022 Interactive Audio Lab
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
+
+def _pitch_card(repo: str, target: str, manifest: dict) -> None:
+    name = repo.split("/")[-1]
+    p = manifest["pitch"]
+    card = f"""---
+license: mit
+base_model: {repo}
+library_name: onnx
+tags:
+  - audio
+  - pitch-estimation
+  - f0
+  - penn
+  - onnx
+---
+
+# {name} (ONNX)
+
+**An unofficial ONNX conversion** of [{repo}](https://huggingface.co/{repo}): FCNF0++, the pitch and
+periodicity estimator of [PENN]({PENN_URL}) (Morrison, Hsieh, Pruyne, Pardo: *Cross-domain Neural Pitch and
+Periodicity Estimation*, 2023). It is not made or endorsed by its authors, to whom all credit for the model
+goes; see [PENN]({PENN_URL}) for its training data, scores and limitations.
+
+## What changed
+
+- The network is exported to ONNX (opset 18, float32). **The weights are unchanged.**
+- PENN's decoding is inside the graph: the most likely of the {p["bins"]} pitch bins ({p["cents_per_bin"]:g} cents
+  each, from {p["fmin"]:g} Hz), refined by the expected value of the 19 bins around it (PENN's `argmax` decoder
+  with `local_expected_value`), and the entropy-based periodicity. PENN's default Viterbi decoder is not included.
+- The conversion was checked against the same network in PyTorch ({manifest.get("from", "")}): pitch within
+  0.01 cents and periodicity within 1e-4, on tones, a sweep, noise and silence.
+
+## Files
+
+| File | |
+|---|---|
+| `onnx/pitch_model.onnx` | `{p["input"]}`: float32 `(count, {p["window"]})`, windows of mono sound at **{p["sample_rate"]} Hz**, one per value wanted -> `pitch`: `(count)` in Hz, `periodicity`: `(count)` 0..1 |
+| `bachmcp.json` | the same facts, for programs |
+
+## Use (Python)
+
+```python
+import numpy as np, onnxruntime as ort
+
+session = ort.InferenceSession("onnx/pitch_model.onnx")
+x = np.zeros({p["sample_rate"]} * 2, np.float32)               # your sound: mono, {p["sample_rate"]} Hz
+x = np.pad(x, {p["window"] // 2})                              # so that value i is at i * 10 ms
+frames = np.stack([x[i:i + {p["window"]}] for i in range(0, len(x) - {p["window"] - 1}, {p["hop"]})])
+pitch, periodicity = session.run(None, {{"{p["input"]}": frames}})   # Hz, 0..1 (low: no pitch there)
+```
+
+The pitch is between {p["fmin"]:g} and {p["fmax"]:g} Hz. Where the periodicity is low the pitch means nothing.
+Any hop works: the network hears each window on its own.
+
+Converted with [export_onnx.py]({CONVERTER_URL}) for [bach-mcp](https://github.com/agustinissidoro/bach-mcp).
+
+## License and citation
+
+MIT, as PENN (the full text is in `LICENSE`). Please cite the original authors:
+
+```bibtex
+@misc{{morrison2023crossdomain,
+    title={{Cross-domain Neural Pitch and Periodicity Estimation}},
+    author={{Morrison, Max and Hsieh, Caedon and Pruyne, Nathan and Pardo, Bryan}},
+    year={{2023}},
+    eprint={{2301.12258}},
+    archivePrefix={{arXiv}}
+}}
+```
+"""
+    with open(os.path.join(target, "README.md"), "w", encoding="utf-8") as f:
+        f.write(card)
+    with open(os.path.join(target, "LICENSE"), "w", encoding="utf-8") as f:
+        f.write(MIT)
+
+
 def _same(want, got, what: str) -> None:
     import numpy as np
     cosine = float(np.dot(want, got) / max(np.linalg.norm(want) * np.linalg.norm(got), 1e-12))
@@ -194,6 +400,8 @@ def write_card(repo: str, target: str) -> None:
     """README.md (the model card: licence, credit, what changed, how to use it) and LICENSE."""
     with open(os.path.join(target, MANIFEST), encoding="utf-8") as f:
         manifest = json.load(f)
+    if manifest.get("kind") == "pitch":
+        return _pitch_card(repo, target, manifest)
     name = repo.split("/")[-1]
     audio, text = manifest["audio"], manifest["text"]
     card = f"""---

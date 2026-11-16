@@ -14,6 +14,10 @@ as "source_mode 1|0". A selector has the same card, and under the mode
 two more segments, whole score | selection only (sent as "dump_selection_only 0|1"). "Parameters": one card each, its name and value above its
 control. A status line closes the panel.
 
+A parameter's description (its spec's "description": how it changes the result) shows
+in a tooltip when the pointer rests on the parameter's name for TIP_DELAY ms; a click
+hides it until the pointer leaves that name.
+
 "Presets" (every type but a synth or an fx, once an algorithm is loaded): ten slots,
 as the preset object: click recalls, shift-click saves, option-click removes, sent
 as "preset <n> recall|save|remove". The runner keeps them in the algorithm's file
@@ -103,6 +107,7 @@ Panel.prototype.clear = function () {
   this.active = null;
   this.places = null;
   this.hover = null;
+  this.tip = null;  // the tooltip: { name, at } (at: when the pointer came on the name; null after a click)
   this.snap = true;  // drags snap to each element's grid; alt inverts it for one gesture
   this.sourceMode = "nondestructive";  // transformers: or "destructive" (see the runner)
   this.involutive = false;  // selectors: sel (false) or select (true)
@@ -822,13 +827,76 @@ Panel.prototype.paint = function (g, width, height) {
     label(g, (s.kind === "ok" ? "" : s.kind + ": ") + s.text, { x: k.pad + v(12), y: sy, w: width - 2 * k.pad - v(12), h: k.status },
       "left", s.kind === "error" ? THEME.error : THEME.dim, v(10));
   }
+  if (this.tipShown()) this.paintTip(g, width, height);  // last: over everything
 };
 
 /** The mouse over the panel without a button (null: it left). True when the drawing changes. */
 Panel.prototype.mouseMove = function (x, y) {
-  var before = JSON.stringify(this.hover);
+  var before = JSON.stringify(this.hover), shown = this.tipShown();
   this.hover = x === null || x === undefined ? null : [x, y];
-  return JSON.stringify(this.hover) !== before;
+  var row = this.hover ? this.nameAt(x, y) : null;
+  // the timer starts when the pointer comes on a name, and runs on while it stays there
+  if (!row) this.tip = null;
+  else if (!this.tip || this.tip.name !== row.item.name) this.tip = { name: row.item.name, at: this.clock() };
+  return JSON.stringify(this.hover) !== before || this.tipShown() !== shown;
+};
+
+// ── The tooltip: a parameter's description ─────────────────────────────────── //
+
+var TIP_DELAY = 750;    // ms the pointer rests on a name before its description shows
+var TIP_WIDTH = 240;    // its widest, at chrome 1
+var TIP_SIZE = 10.5;    // its font size, at chrome 1
+var TIP_LINES = 12;
+
+/** The row whose name is under (x, y), if that parameter has a description. */
+Panel.prototype.nameAt = function (x, y) {
+  for (var i = 0; i < this.rows.length; i++) {
+    var row = this.rows[i];
+    if (!row.item.description || !row.label) continue;
+    var r = row.label;
+    if (!row.card) {
+      // a row's label spans the card: only the name itself counts
+      var wide = row.item.name.length * M.charWidth * (this.scale || 1) + 8 * (this.scale || 1);
+      r = { x: r.x, y: r.y, w: Math.min(r.w, wide), h: r.h };
+    }
+    if (inside(r, x, y)) return row;
+  }
+  return null;
+};
+
+/** Whether the tooltip is up: the pointer has rested TIP_DELAY ms on a name, with no click since. */
+Panel.prototype.tipShown = function () {
+  return Boolean(this.tip && this.tip.at !== null && this.clock() - this.tip.at >= TIP_DELAY);
+};
+
+/** The ms left before the tooltip shows (0: none waiting). For the v8ui's timer. */
+Panel.prototype.tipWait = function () {
+  if (!this.tip || this.tip.at === null) return 0;
+  return Math.max(0, TIP_DELAY - (this.clock() - this.tip.at));
+};
+
+/** The tooltip box over the row's name: under it, or above when the panel ends first. */
+Panel.prototype.paintTip = function (g, width, height) {
+  var row = null, i;
+  for (i = 0; i < this.rows.length; i++) if (this.rows[i].item.name === this.tip.name) row = this.rows[i];
+  if (!row) return;
+  var C = this.chrome || 1, pad = 6 * C, size = TIP_SIZE * C, lh = Math.round(size * 1.35);
+  var w = Math.min(TIP_WIDTH * C, width - 2 * (this.k || M).pad);
+  g.select_font_face(THEME.font);
+  g.set_font_size(size);
+  var lines = wrap(row.item.description, w - 2 * pad, function (t) { return g.text_measure(t)[0]; }, TIP_LINES);
+  var longest = 0;
+  for (i = 0; i < lines.length; i++) longest = Math.max(longest, g.text_measure(lines[i])[0]);
+  w = Math.min(w, Math.ceil(longest) + 2 * pad);
+  var h = lines.length * lh + 2 * pad - 2 * C;
+  var r = row.label, x = clamp(r.x, 2, Math.max(2, width - w - 2)), y = r.y + r.h + 2 * C;
+  if (y + h > height - 2 && r.y - h - 2 * C >= 0) y = r.y - h - 2 * C;
+  y = clamp(y, 2, Math.max(2, height - h - 2));
+  rounded(g, x, y, w, h, 4 * C, THEME.tip);
+  outline(g, x, y, w, h, 4 * C, THEME.fillDim);
+  for (i = 0; i < lines.length; i++) {
+    label(g, lines[i], { x: x + pad, y: y + pad - C + i * lh, w: w - 2 * pad, h: lh }, "left", THEME.text, size);
+  }
 };
 
 Panel.prototype.rowAt = function (x, y) {
@@ -846,6 +914,7 @@ Panel.prototype.message = function (item) {
 Panel.prototype.mouseDown = function (x, y, mods) {
   var p = this.width ? this.ui(this.width) : {};
   this.active = null;
+  if (this.tip) this.tip.at = null;  // a click hides the tooltip until the pointer leaves the name
   if (p.autoDump && inside(p.autoDump, x, y)) {
     this.autoDump = !this.autoDump;
     return [["auto_dump", this.autoDump ? 1 : 0]];
@@ -947,7 +1016,7 @@ Panel.prototype.snapshot = function () {
   var params = [];
   for (var i = 0; i < this.items.length; i++) {
     var it = this.items[i];
-    params.push({ name: it.name, type: it.type, range: it.range, step: it.step, unit: it.unit,
+    params.push({ name: it.name, type: it.type, range: it.range, step: it.step, unit: it.unit, description: it.description || undefined,
       options: it.options, value: copy(it.value), "default": copy(it.def),
       kind: it.kind, grid: it.baseGrid !== undefined ? it.baseGrid : it.grid, display: it.display });
   }
@@ -972,3 +1041,4 @@ Panel.prototype.restore = function (snapshot) {
 };
 
 exports.Panel = Panel;
+exports.TIP_DELAY = TIP_DELAY;

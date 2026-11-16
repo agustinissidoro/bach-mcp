@@ -11,6 +11,7 @@ The file marks its parts with lines of their own, which open and close:
                                               for these types of instance only (MODE_TYPES)
     <!-- gen --> ... <!-- /gen -->            for sound only (a synth or an fx instance: GenExpr
                                               for gen~), with <!-- synth --> and <!-- fx --> inside
+    <!-- buffer --> ... <!-- /buffer -->      for a buffer instance only (offline sound in Python)
 What is outside every part is for everyone. A closing marker goes back to what
 was on before its part: a part may sit inside another (a transformer part inside
 an algo part closes back to algo). A part opened inside another is for its own
@@ -33,6 +34,8 @@ The symbolic skill (BACH_SKILL.md: the score and its algorithms) and the sound s
 (GEN_SKILL.md: gen~) are two files. Each is whole inside its own parts, so an instance
 never reads the other's. A skill text with no part for gen gets the built-in sound skill
 after it (with_gen): a synth always has something to read, whatever was chosen for the score.
+The same holds for the buffer skill (BUFFER_SKILL.md: sound made from recorded sound, in Python)
+and with_buffer.
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ from typing import List, Optional, Set
 
 SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "BACH_SKILL.md")
 GEN_SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "GEN_SKILL.md")
+BUFFER_SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "BUFFER_SKILL.md")
 # An extra skill, chosen from the playground (skills.py): markers with a role, for bach.quantize.
 QUANTIZER_SKILL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "QUANTIZER_SKILL.md")
 
@@ -131,13 +135,28 @@ def closed(text: str) -> str:
     return text.rstrip("\n") + "\n" + "".join(t + "\n" for t in tail)
 
 
+def _with(text: str, mode: str, path: str, verbose: bool) -> str:
+    types = set(MODE_TYPES[mode])
+    if any(not m.group(1) and _readers(m.group(2)) & types and m.group(2).split() != ["both"] for m in _MARKER.finditer(text)):
+        return text
+    return closed(text) + "\n" + with_verbosity(read_skill(path), verbose)
+
+
 def with_gen(text: str, verbose: bool = True) -> str:
     """The text, and after it the built-in sound skill (GEN_SKILL.md, in the wording `verbose`
     chooses) when the text has no part for gen: a synth or an fx then reads that one."""
-    gen = set(MODE_TYPES["gen"])
-    if any(not m.group(1) and _readers(m.group(2)) & gen and m.group(2).split() != ["both"] for m in _MARKER.finditer(text)):
-        return text
-    return closed(text) + "\n" + with_verbosity(read_skill(GEN_SKILL_PATH), verbose)
+    return _with(text, "gen", GEN_SKILL_PATH, verbose)
+
+
+def with_buffer(text: str, verbose: bool = True) -> str:
+    """The text, and after it the built-in buffer skill (BUFFER_SKILL.md) when the text has no part
+    for a buffer instance."""
+    return _with(text, "buffer", BUFFER_SKILL_PATH, verbose)
+
+
+def with_built_in(text: str, verbose: bool = True) -> str:
+    """with_gen and with_buffer: every type of instance has a skill to read."""
+    return with_buffer(with_gen(text, verbose), verbose)
 
 
 def load_skill(mode: Optional[str] = None, raw: bool = False, path: str = SKILL_PATH,
@@ -147,5 +166,5 @@ def load_skill(mode: Optional[str] = None, raw: bool = False, path: str = SKILL_
     return text if raw else skill_for(text, mode, verbose)
 
 
-__all__ = ["SKILL_PATH", "GEN_SKILL_PATH", "QUANTIZER_SKILL_PATH", "MODE_TYPES", "read_skill", "with_verbosity", "skill_for", "closed",
-           "with_gen", "load_skill"]
+__all__ = ["SKILL_PATH", "GEN_SKILL_PATH", "BUFFER_SKILL_PATH", "QUANTIZER_SKILL_PATH", "MODE_TYPES", "read_skill", "with_verbosity",
+           "skill_for", "closed", "with_gen", "with_buffer", "with_built_in", "load_skill"]

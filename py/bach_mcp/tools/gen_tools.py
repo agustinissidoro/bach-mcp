@@ -156,9 +156,12 @@ _DOC = """gen~ code (sound, not a score): write the sound as GenExpr, the code o
           Data, Buffer) and the statements that set out1, out2 ...
         params: the panel, one entry for each Param of the code, with the same name and the
           same starting value:
-          {"cutoff": {"type": "slider", "range": [20, 20000], "value": 1000, "unit": "Hz"},
-           "drive": {"type": "toggle", "value": false},
-           "shape": {"type": "menu", "options": ["sine", "saw"], "value": "sine"}}
+          {"cutoff": {"type": "slider", "range": [20, 20000], "value": 1000, "unit": "Hz",
+                      "description": "Where the filter starts to cut: lower is darker."},
+           "drive": {"type": "toggle", "value": false, "description": "..."},
+           "shape": {"type": "menu", "options": ["sine", "saw"], "value": "sine", "description": "..."}}
+          Every entry has a description: how it changes the sound, shown when the user
+          rests the pointer on its name.
         The result lists the inlets, outlets, parameters and buffers of the file. Call it once
         per message of the user: after an OK the file is loaded and sounding, and a second call
         in the same answer is refused (nothing new is known: nobody has listened to it). Call
@@ -255,6 +258,9 @@ def register_gen_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> N
             return "\n".join(f"  {way}{row['index']}: {row['about']}" for row in rows) or "  (none)"
 
         described = "\n".join(f"  {row}" for row in result["describe"]) or "  (none)"
+        if result.get("undescribed"):
+            described += ("\n  (no description, so no tooltip on the panel: " + ", ".join(result["undescribed"]) +
+                          '. Give each a description: "...", one or two sentences on how it changes the sound.)')
         buffers = ""
         if result["buffers"]:
             rows = "\n".join(f"  {b['name']}: reads the buffer~ named {b['buffer']}" for b in result["buffers"])

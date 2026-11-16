@@ -31,8 +31,11 @@ Into the hub:
     <name> get_skills                         ones; none of either: back to the shared ones.
                                               Answers `<name> skills ...`
     clear_instance_names_map                  empty the map
-    add_instance_names_map <name> <type>      generator | transformer | selector | score | synth | fx | buffer; an instance
-                                              that changes type starts a new conversation, as with `new`
+    add_instance_names_map <name> <type>      generator | transformer | selector | score | synth | fx | buffer
+                                              | receiver; an instance that changes type starts a new
+                                              conversation, as with `new`. A receiver (a bachmcp.value on
+                                              another roll) is only read (read_score source): it has no
+                                              conversation and is never the active instance
     set_active_instance <name> [<type>]       with the type, the instance joins the map if new
     instances <name> <type> ...               Max's answer to `server get_instances`: the whole map
     <name> prompt <text>                      to that instance's conversation
@@ -146,11 +149,11 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Set, Tuple
 
 from ..audio_processing.runner import ProcessRunner, sound_models
 from ..bridge.protocol import Word, line, words
-from ..prompt.skill import with_gen, with_verbosity
+from ..prompt.skill import with_built_in, with_verbosity
 from ..prompt.skills import SkillError, build, estimate_tokens, remove_compiled
 from ..tools.playground import prepare
 from ..tools.buffer_process_tools import serve_runner
-from ..tools.session import TYPES, NoTarget, Target, direct, serve_instances, serve_targets
+from ..tools.session import RECEIVER, TYPES, NoTarget, Target, direct, serve_instances, serve_targets
 from .engine import Conversation
 
 INSTANCE_COMMANDS = ("prompt", "stop", "new", "remove", "set_profile", "set_skills", "get_skills",
@@ -449,7 +452,7 @@ class Hub:
         if warn:
             for warning in compiled.warnings:
                 self._warn(f"skills{' of ' + whose if whose else ''}: {warning}")
-        text = with_gen(with_verbosity(compiled.text, self.verbose), self.verbose)
+        text = with_built_in(with_verbosity(compiled.text, self.verbose), self.verbose)
         with self._lock:
             self._built[whose] = (text, [file for file, _ in compiled.used], compiled.tokens)
         return text
@@ -482,7 +485,7 @@ class Hub:
             if self.instances.get(name) not in (None, instance_type):
                 self._start_over(name)
             self.instances[name] = instance_type
-            first = not self.active  # so that Claude's tools always have an instance
+            first = not self.active and instance_type != RECEIVER  # so that Claude's tools always have an instance
             if first:
                 self.active = name
         self._send("add_instance_names_map", name, instance_type, to_max=echo)
@@ -511,9 +514,12 @@ class Hub:
                 self._histories([name])
         with self._lock:
             known = name in self.instances
-            if known:
+            receiver = self.instances.get(name) == RECEIVER
+            if known and not receiver:
                 self.active = name
-        if known:
+        if receiver:
+            self._warn(f"set_active_instance: {name} is a receiver: it is only read, never active")
+        elif known:
             self._send("set_active_instance", name, to_max=echo)
         else:
             self._warn(f"set_active_instance: no instance {name or '(no name)'} in the map")
@@ -536,9 +542,9 @@ class Hub:
                 elif name not in fresh:
                     self._conversations.pop(name, None)  # gone from the patch: its file stays for its return
             self.instances = fresh
-            moved = self.active not in fresh
+            moved = fresh.get(self.active) in (None, RECEIVER)
             if moved:
-                self.active = next(iter(fresh), "")
+                self.active = next((name for name, instance_type in fresh.items() if instance_type != RECEIVER), "")
             active = self.active
         self._send("clear_instance_names_map", to_max=False)
         for name, instance_type in fresh.items():
@@ -564,9 +570,11 @@ class Hub:
     def choose(self, name: str) -> str:
         """Make name the active instance, telling Max and the pages; "" if done, else why not."""
         with self._lock:
-            known = name in self.instances
-        if not known:
+            instance_type = self.instances.get(name)
+        if instance_type is None:
             return f"no instance {name or '(no name)'} in the patch"
+        if instance_type == RECEIVER:
+            return f"{name} is a receiver: it is never active; read it with read_score(source=\"{name}\")"
         self._set_active(name, "", echo=True)
         return ""
 
@@ -575,6 +583,8 @@ class Hub:
         instance_type = self.instances.get(name)
         if instance_type is None:
             return f"no instance {name} in the map"
+        if instance_type == RECEIVER:
+            return f"{name} is a receiver: it has no conversation (it is read from another instance's)"
         if not self.playground:
             return "no playground: the patch sends set_playground <folder>"
         if self.make is None:

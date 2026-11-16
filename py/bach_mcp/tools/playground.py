@@ -43,7 +43,7 @@ import os
 import re
 import shutil
 
-from ..prompt.skill import GEN_SKILL_PATH, QUANTIZER_SKILL_PATH, SKILL_PATH
+from ..prompt.skill import BUFFER_SKILL_PATH, GEN_SKILL_PATH, QUANTIZER_SKILL_PATH, SKILL_PATH
 
 FOLDERS = ("algorithms", "scores", "prompts", "gen", "processes", "skills", os.path.join("skills", "profiles"))
 CORE = os.path.join("skills", "core-algorithmic.md")
@@ -52,6 +52,7 @@ PROFILE_SKILLS = {"skills": ["core-algorithmic"]}
 GEN_CORE = os.path.join("skills", "core-electronic.md")
 GEN_PROFILE = os.path.join("skills", "profiles", "minimal-electronic-composer.json")
 QUANTIZER = os.path.join("skills", "quantizer.md")
+BUFFER_CORE = os.path.join("skills", "core-sound-design.md")
 GEN_PROFILE_SKILLS = {"skills": ["core-electronic"]}
 COPIED = os.path.join("skills", ".copied.json")  # {copy file name: sha256 of the copy as it was made}
 
@@ -105,7 +106,8 @@ def _copy_skills(root: str) -> None:
     except (OSError, ValueError):
         record = {}
     before = dict(record)
-    for source, copy in ((SKILL_PATH, CORE), (GEN_SKILL_PATH, GEN_CORE), (QUANTIZER_SKILL_PATH, QUANTIZER)):
+    for source, copy in ((SKILL_PATH, CORE), (GEN_SKILL_PATH, GEN_CORE), (QUANTIZER_SKILL_PATH, QUANTIZER),
+                         (BUFFER_SKILL_PATH, BUFFER_CORE)):
         core = os.path.join(root, copy)
         key = os.path.basename(copy)
         shipped = _sha256(source)
@@ -129,4 +131,4 @@ def _copy_skills(root: str) -> None:
             raise ValueError(f"cannot write {record_path}: {exc.strerror}") from None
 
 
-__all__ = ["FOLDERS", "CORE", "COPIED", "PROFILE", "GEN_CORE", "GEN_PROFILE", "QUANTIZER", "local_path", "prepare"]
+__all__ = ["FOLDERS", "CORE", "COPIED", "PROFILE", "GEN_CORE", "GEN_PROFILE", "QUANTIZER", "BUFFER_CORE", "local_path", "prepare"]

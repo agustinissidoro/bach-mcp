@@ -24,7 +24,7 @@ hub. Its file is the playground's processes/<name>.py, its panel processes/<name
     forget(name)               stop, and drop everything kept for it
 
 The descriptions come from the worker (analysis.py, and listen.py's models when they are
-downloaded: `models` is {"tagger": <path>, "clap": <path>}).
+downloaded: `models` is {"tagger": <path>, "clap": <path>, "pitch": <path>}).
 
 Requests close together become one run: a slider drag runs the code at the last value, not at
 every value it passed. What comes out (send: the hub's _send):
@@ -55,7 +55,7 @@ SETTLE_SECONDS = 0.05
 def sound_models(audio: Any) -> Dict[str, str]:
     """What the worker needs of bachmcp.toml [audio] (config.AudioConfig): each model's folder and name."""
     out: Dict[str, str] = {}
-    for kind in ("tagger", "clap"):
+    for kind in ("tagger", "clap", "pitch"):
         name = getattr(audio, f"{kind}_model", "").strip()
         if name:
             out[kind], out[f"{kind}_name"] = audio.model_path(name), name

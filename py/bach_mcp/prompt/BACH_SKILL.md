@@ -100,6 +100,10 @@ purpose.
 - After the call, stop: at most one sentence.
 - To change the music, send the complete corrected score again.
 <!-- /score -->
+- When the user names another roll ("take the score of pipo"), read it with
+  `read_score(source="pipo")`: a receiver, only read. What you make from it
+  still goes to your own instance, as always. If the name is not a receiver,
+  the answer lists the ones there are.
 
 <!-- algo -->
 ## Algorithms
@@ -127,14 +131,22 @@ Every algorithm declares its parameters first.
 ```js
 // Voices leave one pitch together and drift apart by random walks; notes get longer as they spread.
 const params = {
-  voices:   { type: "slider", range: [1, 6], value: 3 },
-  times:    { type: "slider", range: [4, 96], value: 32 },
-  center:   { type: "slider", range: [4800, 8400], value: 6700, unit: "mc" },
-  step:     { type: "slider", range: [0, 600], value: 150, unit: "mc" },
-  register: { type: "range", range: [1200, 12700], value: [1200, 12700], unit: "mc" },
-  duration: { type: "range", range: [60, 2000], value: [120, 700], unit: "ms" },
-  density:  { type: "curve", value: [[0, 1], [0.6, 0.7], [1, 0.3]] },
-  seed:     { type: "seed", value: 1 },
+  voices:   { type: "slider", range: [1, 6], value: 3,
+              description: "How many voices leave the starting pitch together; more voices, a thicker texture." },
+  times:    { type: "slider", range: [4, 96], value: 32,
+              description: "How many notes each voice plays: the length of the piece." },
+  center:   { type: "slider", range: [4800, 8400], value: 6700, unit: "mc",
+              description: "The pitch every voice starts from, and the centre the notes lengthen away from." },
+  step:     { type: "slider", range: [0, 600], value: 150, unit: "mc",
+              description: "The largest move of each step of the walk: small steps drift slowly, large ones leap." },
+  register: { type: "range", range: [1200, 12700], value: [1200, 12700], unit: "mc",
+              description: "The lowest and highest pitch a voice may reach; a walk that leaves it turns back." },
+  duration: { type: "range", range: [60, 2000], value: [120, 700], unit: "ms",
+              description: "The shortest and longest note: notes near the centre take the shortest, the farthest the longest." },
+  density:  { type: "curve", value: [[0, 1], [0.6, 0.7], [1, 0.3]],
+              description: "How likely each step is to sound, from the start of the piece to its end: low values leave rests." },
+  seed:     { type: "seed", value: 1,
+              description: "Another seed, another set of walks with the same character." },
 };
 
 function produce(p) {
@@ -166,6 +178,12 @@ Use a poetic name only when the request itself is poetic. Give each a range
 that keeps the music sensible: the file is also run with every slider at its
 minimum and its maximum, and every score must stay under 20000 notes.
 
+**Every parameter has a `description`**: one or two sentences on how it
+changes the result, what the music does as the value goes up or down (or
+what each option does), in the user's words. The panel shows it when the
+user rests the pointer on the parameter's name. Not its type or range:
+the panel already shows them.
+
 | type | declaration | in `p` |
 |---|---|---|
 | slider | `{ type: "slider", range: [1, 64], value: 16 }` | a number |
@@ -193,11 +211,16 @@ copy and return it:
 ```js
 // Every phrase of the source (its notes separated by more than `gap` of silence) moves so that it starts on a target: one pitch for all, or a pitch that steps on from phrase to phrase.
 const params = {
-  gap:      { type: "slider", range: [50, 2000], value: 300, unit: "ms" },
-  target:   { type: "slider", range: [3600, 9600], value: 6000, unit: "mc" },
-  step:     { type: "slider", range: [-700, 700], value: 200, unit: "mc" },
-  register: { type: "range", range: [1200, 12700], value: [1200, 12700], unit: "mc" },
-  mode:     { type: "menu", options: ["stepping", "same"], value: "stepping" },
+  gap:      { type: "slider", range: [50, 2000], value: 300, unit: "ms",
+              description: "The silence that separates two phrases: shorter cuts the music into more phrases." },
+  target:   { type: "slider", range: [3600, 9600], value: 6000, unit: "mc",
+              description: "The pitch the first phrase starts on." },
+  step:     { type: "slider", range: [-700, 700], value: 200, unit: "mc",
+              description: "How far each phrase's start moves from the one before (stepping mode); negative goes down." },
+  register: { type: "range", range: [1200, 12700], value: [1200, 12700], unit: "mc",
+              description: "The span the stepping starts stay in: a start that leaves it folds back inside." },
+  mode:     { type: "menu", options: ["stepping", "same"], value: "stepping",
+              description: "stepping: each phrase starts a step further on; same: every phrase starts on the target." },
 };
 
 function transform(source, p) {
@@ -226,8 +249,10 @@ work on the selection alone.
 ```js
 // Picks the highest note of every chord whose top rises above `floor`, and every note longer than `long`.
 const params = {
-  floor: { type: "slider", range: [1200, 12700], value: 7200, unit: "mc" },
-  long:  { type: "slider", range: [50, 4000], value: 1000, unit: "ms" },
+  floor: { type: "slider", range: [1200, 12700], value: 7200, unit: "mc",
+           description: "Chords whose highest note is above this pitch give that note; lower it to pick more." },
+  long:  { type: "slider", range: [50, 4000], value: 1000, unit: "ms",
+           description: "Notes longer than this are picked too, wherever they are; raise it to pick fewer." },
 };
 
 function select(source, p) {
@@ -253,9 +278,12 @@ becomes. The library reads music for you (see Reading music below):
 ```js
 // A phrase that repeats an earlier gesture answers it instead: turned upside down around its own centre, and drawn toward the register the whole texture has at that moment.
 const params = {
-  gap:      { type: "slider", range: [50, 2000], value: 300, unit: "ms" },
-  likeness: { type: "slider", range: [0.5, 1], value: 0.75, step: 0.01 },
-  pull:     { type: "slider", range: [0, 1], value: 0.5, step: 0.01 },
+  gap:      { type: "slider", range: [50, 2000], value: 300, unit: "ms",
+              description: "The silence that separates two phrases: shorter cuts the music into more, smaller phrases." },
+  likeness: { type: "slider", range: [0.5, 1], value: 0.75, step: 0.01,
+              description: "How alike two phrases must be to count as a repeat: lower, more phrases are answered." },
+  pull:     { type: "slider", range: [0, 1], value: 0.5, step: 0.01,
+              description: "How far an answer moves toward the register of the texture around it: 0 stays, 1 goes all the way." },
 };
 
 function transform(source, p) {

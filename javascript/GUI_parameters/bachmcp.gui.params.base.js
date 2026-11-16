@@ -22,6 +22,7 @@ var THEME = {
   guide: [1, 1, 1, 0.06],  // the lines across lists and curves
   button: [0.23, 0.235, 0.26, 1],
   buttonHover: [0.3, 0.305, 0.34, 1],
+  tip: [0.07, 0.075, 0.085, 0.97],  // a parameter's description, over the panel
   fill: [0.96, 0.63, 0.24, 1],
   fillDim: [0.96, 0.63, 0.24, 0.28],
   knob: [1, 0.86, 0.66, 1],
