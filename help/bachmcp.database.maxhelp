@@ -9,7 +9,7 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 34.0, 95.0, 989.0, 853.0 ],
+        "rect": [ 34.0, 95.0, 810.0, 853.0 ],
         "showrootpatcherontab": 0,
         "boxes": [
             {
@@ -58,19 +58,9 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 34.0, 121.0, 989.0, 827.0 ],
+                        "rect": [ 34.0, 121.0, 810.0, 827.0 ],
                         "showontab": 1,
                         "boxes": [
-                            {
-                                "box": {
-                                    "id": "obj-4",
-                                    "maxclass": "message",
-                                    "numinlets": 2,
-                                    "numoutlets": 1,
-                                    "outlettype": [ "" ],
-                                    "patching_rect": [ 241.0, 222.0, 50.0, 22.0 ]
-                                }
-                            },
                             {
                                 "box": {
                                     "border": 0,
@@ -94,7 +84,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 0,
                                     "patching_rect": [ 10.0, 100.0, 900.0, 21.0 ],
-                                    "text": "1. Build: analyse a folder of sounds (its subfolders too) into databases/bachmcp-help.db. Each sound is said in the Max console."
+                                    "text": "1) Build: analyse a folder of sounds (its subfolders too) into databases/bachmcp-help.db. Each sound is said in the Max console."
                                 }
                             },
                             {
@@ -151,7 +141,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 0,
                                     "patching_rect": [ 10.0, 232.0, 900.0, 21.0 ],
-                                    "text": "2. Ask: the answer comes at once, as a dictionary (the units, their times in their file, their descriptors)."
+                                    "text": "2) Ask: the answer comes at once, as a dictionary (the units, their times in their file, their descriptors)."
                                 }
                             },
                             {
@@ -250,12 +240,13 @@
                                 "box": {
                                     "fontsize": 13.0,
                                     "id": "obj-18",
+                                    "linecount": 4,
                                     "maxclass": "message",
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 490.0, 500.0, 420.0, 23.0 ],
-                                    "text": "error \"build: unable to open database file\""
+                                    "patching_rect": [ 490.0, 500.0, 420.0, 67.0 ],
+                                    "text": "progress 142. 18574. analysed \"/Users/agustin/Documents/Sounds/Cinetools - Otherworld (WAV)/Atmospheres & Backgrounds/Space Noises/OW_Exhale_CT.wav\""
                                 }
                             },
                             {
@@ -266,7 +257,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 490.0, 535.0, 488.0, 50.0 ],
+                                    "patching_rect": [ 490.5, 628.0, 488.0, 50.0 ],
                                     "text": "right outlet: progress <index> <total> <status> <path>,\ndone <analysed> <changed> <moved> <missing> <removed> <failed> <seconds>,\nopen <path>, stale <n>, error <words>"
                                 }
                             },
@@ -278,7 +269,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 490.0, 600.0, 419.0, 36.0 ],
+                                    "patching_rect": [ 30.0, 364.0, 419.0, 36.0 ],
                                     "text": "The argument names the database: <package>/databases/<name>.db,\nopened when it exists. The analyses run on their own threads."
                                 }
                             }
@@ -320,8 +311,8 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-16", 0 ],
+                                    "disabled": 1,
                                     "midpoints": [ 213.5, 381.5703125, 499.5, 381.5703125 ],
-                                    "order": 1,
                                     "source": [ "obj-14", 1 ]
                                 }
                             },
@@ -329,7 +320,6 @@
                                 "patchline": {
                                     "destination": [ "obj-17", 0 ],
                                     "midpoints": [ 213.5, 425.95703125, 499.5, 425.95703125 ],
-                                    "order": 0,
                                     "source": [ "obj-14", 1 ]
                                 }
                             },
@@ -354,14 +344,6 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-14", 0 ],
-                                    "order": 1,
-                                    "source": [ "obj-7", 0 ]
-                                }
-                            },
-                            {
-                                "patchline": {
-                                    "destination": [ "obj-4", 1 ],
-                                    "order": 0,
                                     "source": [ "obj-7", 0 ]
                                 }
                             }
@@ -388,7 +370,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 0.0, 26.0, 989.0, 827.0 ],
+                        "rect": [ 0.0, 26.0, 810.0, 827.0 ],
                         "showontab": 1,
                         "boxes": [
                             {
@@ -1008,7 +990,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 0.0, 26.0, 989.0, 827.0 ],
+                        "rect": [ 0.0, 26.0, 810.0, 827.0 ],
                         "showontab": 1,
                         "boxes": [
                             {
@@ -1229,7 +1211,7 @@
                                     "numoutlets": 1,
                                     "outlettype": [ "bang" ],
                                     "parameter_enable": 0,
-                                    "patching_rect": [ 30.0, 375.0, 24.0, 23.0 ]
+                                    "patching_rect": [ 30.0, 405.0, 24.0, 23.0 ]
                                 }
                             },
                             {
@@ -1240,7 +1222,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 2,
                                     "outlettype": [ "", "bang" ],
-                                    "patching_rect": [ 64.0, 375.0, 97.0, 23.0 ],
+                                    "patching_rect": [ 64.0, 405.0, 97.0, 23.0 ],
                                     "text": "opendialog fold"
                                 }
                             },
@@ -1252,7 +1234,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 226.0, 375.0, 82.0, 23.0 ],
+                                    "patching_rect": [ 226.0, 405.0, 82.0, 23.0 ],
                                     "text": "prepend add"
                                 }
                             },
@@ -1263,7 +1245,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 333.0, 376.0, 77.0, 21.0 ],
+                                    "patching_rect": [ 333.0, 406.0, 77.0, 21.0 ],
                                     "text": "add a folder"
                                 }
                             },
@@ -1275,7 +1257,7 @@
                                     "numoutlets": 1,
                                     "outlettype": [ "int" ],
                                     "parameter_enable": 0,
-                                    "patching_rect": [ 30.0, 410.0, 24.0, 23.0 ]
+                                    "patching_rect": [ 30.0, 440.0, 24.0, 23.0 ]
                                 }
                             },
                             {
@@ -1286,7 +1268,7 @@
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 64.0, 410.0, 81.2, 23.0 ],
+                                    "patching_rect": [ 64.0, 440.0, 81.2, 23.0 ],
                                     "text": "prune $1"
                                 }
                             },
@@ -1297,7 +1279,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 140.0, 410.0, 443.0, 21.0 ],
+                                    "patching_rect": [ 140.0, 440.0, 443.0, 21.0 ],
                                     "text": "@prune 1: update removes sounds gone from disk (0: marks them missing)"
                                 }
                             },
@@ -1309,7 +1291,7 @@
                                     "numoutlets": 1,
                                     "outlettype": [ "int" ],
                                     "parameter_enable": 0,
-                                    "patching_rect": [ 30.0, 440.0, 24.0, 23.0 ]
+                                    "patching_rect": [ 30.0, 470.0, 24.0, 23.0 ]
                                 }
                             },
                             {
@@ -1320,7 +1302,7 @@
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 64.0, 440.0, 110.8, 23.0 ],
+                                    "patching_rect": [ 64.0, 470.0, 110.8, 23.0 ],
                                     "text": "recursive $1"
                                 }
                             },
@@ -1331,7 +1313,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 170.0, 440.0, 399.0, 21.0 ],
+                                    "patching_rect": [ 170.0, 470.0, 399.0, 21.0 ],
                                     "text": "@recursive 0: build and add take only the sounds directly in a folder"
                                 }
                             },
@@ -1346,7 +1328,7 @@
                                     "numoutlets": 2,
                                     "outlettype": [ "", "bang" ],
                                     "parameter_enable": 0,
-                                    "patching_rect": [ 30.0, 470.0, 50.0, 23.0 ]
+                                    "patching_rect": [ 30.0, 500.0, 50.0, 23.0 ]
                                 }
                             },
                             {
@@ -1357,7 +1339,7 @@
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 90.0, 470.0, 96.0, 23.0 ],
+                                    "patching_rect": [ 90.0, 500.0, 96.0, 23.0 ],
                                     "text": "verbose $1"
                                 }
                             },
@@ -1368,7 +1350,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 180.0, 470.0, 447.0, 21.0 ],
+                                    "patching_rect": [ 180.0, 500.0, 447.0, 21.0 ],
                                     "text": "@verbose: the console says 0 start and end, 1 every change, 2 every sound"
                                 }
                             },
@@ -1380,7 +1362,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 2,
                                     "outlettype": [ "", "" ],
-                                    "patching_rect": [ 30.0, 515.0, 236.6, 23.0 ],
+                                    "patching_rect": [ 30.0, 545.0, 236.6, 23.0 ],
                                     "text": "bachmcp.database bachmcp-help"
                                 }
                             },
@@ -1390,7 +1372,7 @@
                                     "maxclass": "dict.view",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 30.0, 560.0, 440.0, 280.0 ]
+                                    "patching_rect": [ 30.0, 590.0, 440.0, 280.0 ]
                                 }
                             },
                             {
@@ -1400,8 +1382,31 @@
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 490.0, 560.0, 184.8, 23.0 ],
+                                    "patching_rect": [ 490.0, 590.0, 184.8, 23.0 ],
                                     "text": "print bachmcp.database"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "fontsize": 13.0,
+                                    "id": "obj-35",
+                                    "maxclass": "message",
+                                    "numinlets": 2,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 30.0, 370.0, 73.8, 23.0 ],
+                                    "text": "compact"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "fontsize": 13.0,
+                                    "id": "obj-36",
+                                    "maxclass": "comment",
+                                    "numinlets": 1,
+                                    "numoutlets": 0,
+                                    "patching_rect": [ 113.8, 370.0, 460.0, 21.0 ],
+                                    "text": "give back the space of removed and reanalysed sounds (slow)"
                                 }
                             }
                         ],
@@ -1505,6 +1510,12 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-32", 0 ],
+                                    "source": [ "obj-35", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-32", 0 ],
                                     "source": [ "obj-5", 0 ]
                                 }
                             },
@@ -1542,7 +1553,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 0.0, 26.0, 989.0, 827.0 ],
+                        "rect": [ 0.0, 26.0, 810.0, 827.0 ],
                         "showontab": 1,
                         "boxes": [
                             {
@@ -1603,7 +1614,7 @@
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
                                     "patching_rect": [ 30.0, 160.0, 288.4, 23.0 ],
-                                    "text": "analysis grid_ms 200 grid_hop_ms 100"
+                                    "text": "analysis grid_ms 200 grid_hop_ms 200"
                                 }
                             },
                             {
@@ -1614,7 +1625,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 0,
                                     "patching_rect": [ 328.4, 160.0, 560.0, 21.0 ],
-                                    "text": "longer grid slices"
+                                    "text": "longer grid slices (default 100 every 100 ms)"
                                 }
                             },
                             {
@@ -1740,7 +1751,7 @@
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 30.0, 430.0, 88.6, 23.0 ],
+                                    "patching_rect": [ 30.0, 460.0, 88.6, 23.0 ],
                                     "text": "reanalyse"
                                 }
                             },
@@ -1751,7 +1762,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 128.6, 430.0, 560.0, 21.0 ],
+                                    "patching_rect": [ 128.6, 460.0, 560.0, 21.0 ],
                                     "text": "bring the stale sounds up to date"
                                 }
                             },
@@ -1763,7 +1774,7 @@
                                     "numinlets": 1,
                                     "numoutlets": 2,
                                     "outlettype": [ "", "" ],
-                                    "patching_rect": [ 30.0, 475.0, 236.6, 23.0 ],
+                                    "patching_rect": [ 30.0, 505.0, 236.6, 23.0 ],
                                     "text": "bachmcp.database bachmcp-help"
                                 }
                             },
@@ -1773,7 +1784,7 @@
                                     "maxclass": "dict.view",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 30.0, 520.0, 440.0, 420.0 ]
+                                    "patching_rect": [ 30.0, 550.0, 440.0, 420.0 ]
                                 }
                             },
                             {
@@ -1783,7 +1794,7 @@
                                     "maxclass": "newobj",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 490.0, 520.0, 184.8, 23.0 ],
+                                    "patching_rect": [ 490.0, 550.0, 184.8, 23.0 ],
                                     "text": "print bachmcp.database"
                                 }
                             },
@@ -1795,7 +1806,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 490.0, 550.0, 326.0, 50.0 ],
+                                    "patching_rect": [ 490.0, 580.0, 326.0, 50.0 ],
                                     "text": "The levels: file; section (where the material changes);\nevent (onset to onset); phase (attack, sustain, release);\ngrid (fixed slices). Every key is in the reference."
                                 }
                             },
@@ -1807,7 +1818,7 @@
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 30.0, 340.0, 244.0, 23.0 ],
+                                    "patching_rect": [ 30.0, 370.0, 244.0, 23.0 ],
                                     "text": "analysis tagger none clap none"
                                 }
                             },
@@ -1818,7 +1829,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 284.0, 340.0, 420.0, 21.0 ],
+                                    "patching_rect": [ 284.0, 370.0, 420.0, 21.0 ],
                                     "text": "no models: much faster (no tags, no text search)"
                                 }
                             },
@@ -1830,7 +1841,7 @@
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 30.0, 370.0, 221.8, 23.0 ],
+                                    "patching_rect": [ 30.0, 400.0, 221.8, 23.0 ],
                                     "text": "analysis clap laion-clap2-m"
                                 }
                             },
@@ -1841,7 +1852,7 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 261.8, 370.0, 420.0, 21.0 ],
+                                    "patching_rect": [ 261.8, 400.0, 420.0, 21.0 ],
                                     "text": "a CLAP better at speech and music (download it first)"
                                 }
                             },
@@ -1853,7 +1864,7 @@
                                     "numinlets": 2,
                                     "numoutlets": 1,
                                     "outlettype": [ "" ],
-                                    "patching_rect": [ 30.0, 400.0, 266.2, 23.0 ],
+                                    "patching_rect": [ 30.0, 430.0, 266.2, 23.0 ],
                                     "text": "analysis clap_levels file section event"
                                 }
                             },
@@ -1864,8 +1875,31 @@
                                     "maxclass": "comment",
                                     "numinlets": 1,
                                     "numoutlets": 0,
-                                    "patching_rect": [ 306.2, 400.0, 420.0, 21.0 ],
+                                    "patching_rect": [ 306.2, 430.0, 420.0, 21.0 ],
                                     "text": "CLAP of sections and events too (default: files only; slower)"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "fontsize": 13.0,
+                                    "id": "obj-29",
+                                    "maxclass": "message",
+                                    "numinlets": 2,
+                                    "numoutlets": 1,
+                                    "outlettype": [ "" ],
+                                    "patching_rect": [ 30.0, 340.0, 214.4, 23.0 ],
+                                    "text": "analysis light_levels none"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "fontsize": 13.0,
+                                    "id": "obj-30",
+                                    "maxclass": "comment",
+                                    "numinlets": 1,
+                                    "numoutlets": 0,
+                                    "patching_rect": [ 254.4, 340.0, 460.0, 21.0 ],
+                                    "text": "every level described in full (default: phase grid light; about 4 times bigger)"
                                 }
                             }
                         ],
@@ -1927,6 +1961,12 @@
                             {
                                 "patchline": {
                                     "destination": [ "obj-19", 0 ],
+                                    "source": [ "obj-29", 0 ]
+                                }
+                            },
+                            {
+                                "patchline": {
+                                    "destination": [ "obj-19", 0 ],
                                     "source": [ "obj-3", 0 ]
                                 }
                             },
@@ -1970,7 +2010,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 0.0, 26.0, 989.0, 827.0 ],
+                        "rect": [ 0.0, 26.0, 810.0, 827.0 ],
                         "showontab": 1,
                         "boxes": [
                             {
@@ -2151,6 +2191,32 @@
                     },
                     "patching_rect": [ 448.0, 238.0, 49.0, 22.0 ],
                     "text": "p sql"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-9",
+                    "maxclass": "newobj",
+                    "numinlets": 0,
+                    "numoutlets": 0,
+                    "patcher": {
+                        "fileversion": 1,
+                        "appversion": {
+                            "major": 9,
+                            "minor": 2,
+                            "revision": 0,
+                            "architecture": "x64",
+                            "modernui": 1
+                        },
+                        "classnamespace": "box",
+                        "rect": [ 0.0, 26.0, 810.0, 827.0 ],
+                        "showontab": 1,
+                        "boxes": [],
+                        "lines": []
+                    },
+                    "patching_rect": [ 205.0, 205.0, 50.0, 22.0 ],
+                    "text": "p ?",
+                    "varname": "q_tab"
                 }
             }
         ],
