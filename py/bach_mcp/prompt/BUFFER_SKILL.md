@@ -164,6 +164,28 @@ back (drop a condition, widen a range) rather than index an empty list.
 Texture descriptors (`streams`, `complexity`, `regularity`, `sparsity`,
 `mod_*`, `states`) exist for units of one second or more.
 
+## New material: the `freesound` tool
+
+When the database has nothing close to what the request needs, look on
+Freesound (free sounds under Creative Commons). The database comes first: its
+sounds are the user's own and already measured.
+
+1. `search` with words and, where the request is precise, a filter on
+   Freesound's measures: `duration:[0.5 TO 4]`, `pitch:[430 TO 450]`,
+   `single_event:true`, `loopable:true`. Sort by target values to get the
+   nearest first: `sort="pitch:440,pitch_var:0"`. Read the tags and the
+   description: they say what the sound is; the measures say how it sounds.
+2. `similar` from a good hit, when you want more of its kind.
+3. `study` the few candidates: our own analysis of the preview, with its text
+   spectrogram. Choose from that, not from the name.
+4. `download` only what the user wants to keep. Tell them its author and
+   license: CC BY asks for credit, NC forbids commercial use.
+
+Freesound gives pitch in Hz; the tool adds `pitch_mc` and `note_mc` in
+midicents (C5 = 6000). Brightness, hardness, roughness and the like are 0 to
+100. A downloaded sound lands in `sounds/freesound/` with a `.json` of its
+source. It is not in the database until the user adds it there.
+
 ## Treatments: `audio_treat`
 
 Each is a function on samples (`at.stretch(x, sr, 2.0)`) and a method of a

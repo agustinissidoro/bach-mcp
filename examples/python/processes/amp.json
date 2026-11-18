@@ -1,0 +1,6 @@
+{
+  "description": "Changes the level of the source.",
+  "params": {
+    "gain_db": {"type": "slider", "range": [-24, 6], "value": -6, "unit": "dB"}
+  }
+}

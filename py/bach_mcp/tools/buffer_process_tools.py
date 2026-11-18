@@ -42,6 +42,7 @@ from typing import Any, Dict, List, Optional, Protocol, Set, Union
 from mcp.server.fastmcp import FastMCP
 
 from ..audio_processing.runner import WORKER
+from ..audio_processing.settings import BufferSettings
 from ..bridge.max import MaxBridge
 from ..bridge.protocol import line
 from .session import NoTarget, target
@@ -59,6 +60,7 @@ CHECK_TIMEOUT_SECONDS = 120.0
 # ── The hub's runner, when there is a hub ────────────────────────────── #
 
 class Runner(Protocol):
+    def settings(self, name: str) -> BufferSettings: ...
     def loaded(self, name: str) -> None: ...
     def listen(self, name: str, file: str, spec: Dict[str, Any]) -> Dict[str, Any]: ...
     def commit(self, name: str) -> bool: ...
@@ -75,8 +77,43 @@ def serve_runner(runner: Optional[Runner]) -> None:
 
 # ── Checks ───────────────────────────────────────────────────────────── #
 
-def static_check(code: str, declared: Set[str]) -> Dict[str, Any]:
-    """{"ok": True, "description": ...} or {"ok": False, "error": ..., "line": ...}."""
+def instance_settings(name: str) -> BufferSettings:
+    """The buffer settings of the instance (the defaults when no hub runs it)."""
+    return _runner.settings(name) if _runner is not None else BufferSettings()
+
+
+def _settings_refusal(tree: ast.AST, settings: BufferSettings) -> Optional[Dict[str, Any]]:
+    """What the instance's settings forbid in the file: an excluded audio_treat function, the
+    sound database when it is not a source."""
+    refused = settings.refused_fx()
+    alias = {"audio_treat": "audio_treat", "audio_corpus": "audio_corpus"}  # local name -> module
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.name in ("audio_treat", "audio_corpus"):
+                    alias[a.asname or a.name] = a.name
+        elif isinstance(node, ast.ImportFrom) and node.module in ("audio_treat", "audio_corpus"):
+            for a in node.names:
+                if node.module == "audio_treat" and (a.name in refused or a.name == "*") and refused:
+                    return {"line": node.lineno, "error": f"audio_treat.{a.name} is excluded by this instance's fx settings"
+                            if a.name != "*" else "from audio_treat import *: name the functions (some are excluded)"}
+                if node.module == "audio_corpus" and a.name in ("corpus", "*") and not settings.database:
+                    return {"line": node.lineno, "error": "the sound database is not among this instance's soundfile_sources"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in alias:
+            module = alias[node.value.id]
+            if module == "audio_treat" and node.attr in refused:
+                return {"line": node.lineno, "error": f"audio_treat.{node.attr} is excluded by this instance's fx settings "
+                        f"(not allowed: {', '.join(sorted(refused))})"}
+            if module == "audio_corpus" and node.attr == "corpus" and not settings.database:
+                return {"line": node.lineno, "error": "the sound database is not among this instance's soundfile_sources "
+                        "(audio_corpus.corpus may not be used)"}
+    return None
+
+
+def static_check(code: str, declared: Set[str], settings: Optional[BufferSettings] = None) -> Dict[str, Any]:
+    """{"ok": True, "description": ...} or {"ok": False, "error": ..., "line": ...}.
+    settings: the instance's (settings.py); p["variation"] may always be read."""
     try:
         tree = ast.parse(code)
     except SyntaxError as exc:
@@ -117,9 +154,12 @@ def static_check(code: str, declared: Set[str]) -> Dict[str, Any]:
               and isinstance(node.func.value, ast.Name) and node.func.value.id == p and node.args
               and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
             key = node.args[0].value
-        if key is not None and key not in declared:
+        if key is not None and key not in declared and key != "variation":
             return {"ok": False, "line": node.lineno,
                     "error": f"{p}[{key!r}] is read but not declared in params"}
+    refused = _settings_refusal(tree, settings) if settings is not None else None
+    if refused:
+        return {"ok": False, **refused}
     return {"ok": True, "description": description}
 
 
@@ -204,7 +244,7 @@ def register_buffer_process_tools(mcp: FastMCP, bridge: MaxBridge, python: str =
 
         name = t.name
         text = code.rstrip() + "\n"
-        found = static_check(text, set(declared))
+        found = static_check(text, set(declared), instance_settings(name))
         again = "Fix this and call send_buffer_process again with the whole file and its params."
         if not found["ok"]:
             where = f"{name}.py" + (f" line {found['line']}" if found.get("line") else "")
@@ -284,4 +324,4 @@ def register_buffer_process_tools(mcp: FastMCP, bridge: MaxBridge, python: str =
 
 
 __all__ = ["register_buffer_process_tools", "static_check", "run_check", "serve_runner", "BUFFER_PROCESS_TOOLS", "BUFFER_PROCESS_TYPES",
-           "ALLOWED", "FORBIDDEN"]
+           "instance_settings", "ALLOWED", "FORBIDDEN"]

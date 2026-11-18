@@ -32,6 +32,7 @@ from ..tools.algo_tools import ALGO_TOOLS
 from ..tools.gen_tools import GEN_TOOLS
 from ..tools.pitch_tools import PITCH_TOOLS
 from ..tools.buffer_process_tools import BUFFER_PROCESS_TOOLS
+from ..tools.freesound_tools import FREESOUND_TOOLS
 from ..tools.score_tools import SCORE_TOOLS
 from .skill import MODE_TYPES, skill_for
 
@@ -42,7 +43,7 @@ MODE_TOOLS = {
     "score": SCORE_TOOLS + PITCH_TOOLS,  # the notes, with exact pitch arithmetic
     "algo": ALGO_TOOLS + ("read_score",),  # the algorithm, and a look at the score in the roll
     "gen": GEN_TOOLS,  # sound: the gen~ code alone, nothing of the score
-    "buffer": BUFFER_PROCESS_TOOLS,  # offline audio: the Python file alone
+    "buffer": BUFFER_PROCESS_TOOLS + FREESOUND_TOOLS,  # offline audio: the Python file alone
 }
 
 TYPE_MODE = {instance_type: mode for mode, types in MODE_TYPES.items() for instance_type in types}  # generator -> algo ...

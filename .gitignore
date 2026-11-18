@@ -230,3 +230,7 @@ py/tests/
 # Scores on their way to read_score, rewritten on every read
 /buffer.txt
 /buffer.json
+
+# Freesound login tokens
+freesound_token.json
+sounds/freesound/

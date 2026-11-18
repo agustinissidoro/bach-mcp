@@ -45,7 +45,7 @@ from bach_mcp.config import ConfigError, load_config  # noqa: E402
 def main() -> None:
     parser = argparse.ArgumentParser(prog="bach", description="Bach: compose in bach.roll with a model.")
     parser.add_argument("command", nargs="?", default="serve",
-                        choices=["run", "serve", "connect", "agent", "eval", "claude", "download", "models"],
+                        choices=["run", "serve", "connect", "agent", "eval", "claude", "download", "models", "freesound-login"],
                         help="run = local model + chat page. serve = the tools for Claude (default). "
                              "connect = what Claude Desktop launches. "
                              "agent = local model in the terminal. eval = evaluation suite. claude = register in Claude. "
@@ -107,6 +107,15 @@ def main() -> None:
             from bach_mcp.utilities.download import sound_models
             used = set(sound_models(config).values())
             print("\nSound models in use, [audio] in bachmcp.toml: " + (", ".join(sorted(used)) or "none"))
+        elif args.command == "freesound-login":
+            import webbrowser
+            from bach_mcp.audio_processing.freesound import Freesound
+            fs = Freesound(config.audio)
+            url = fs.authorize_url()
+            print(f"Log in and authorize bach-mcp, then paste the code shown (or the whole address of the page):\n  {url}")
+            webbrowser.open(url)
+            fs.login(input("code: "))  # the same object: it keeps the PKCE verifier
+            print(f"Logged in to Freesound as {fs.me().get('username', '?')}.")
         elif args.command == "claude":
             from bach_mcp import claude
             print(claude.register_desktop())

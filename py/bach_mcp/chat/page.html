@@ -313,7 +313,9 @@ function hear(text) {
     case "state": [model.state, model.model, model.message] = [w[1] || "", w[2] || "", w[3] || ""]; break;
     case "set_playground": playground = w[1] || ""; break;
     case "clear_instance_names_map": instances.clear(); break;
-    case "add_instance_names_map": instances.set(w[1], w[2]); break;
+    case "add_instance_names_map":  // a receiver is only read by read_score: never chatted with
+      if (w[2] === "receiver") instances.delete(w[1]); else instances.set(w[1], w[2]);
+      break;
     case "set_active_instance": active = w[1] || ""; if (logs.has(active)) logs.get(active).unread = false; break;
     case "server": if (w[1] === "warning") banner(w.slice(2).join(" ")); break;
     default: if (w.length >= 2) instanceLine(w[0], w[1], w.slice(2));
@@ -344,9 +346,12 @@ function instanceLine(name, what, args) {
     case "answer": if (!answerOf(name).hasText()) answerOf(name).onText(args[0] || ""); break;
     case "error": answerOf(name).note(args.join(" "), "error"); break;
     case "stopped": answerOf(name).note("stopped"); busy.delete(name); log.answer = null; break;
+    case "conversation_tokens": log.conversation = Number(args[0]) || 0; break;  // just before done
     case "done": {
       const [tokens, ms] = [Number(args[0]) || 0, Number(args[1]) || 0];
-      if (tokens) answerOf(name).note(`${tokens} tokens · ${(ms / 1000).toFixed(1)} s`);
+      const held = log.conversation ? ` · conversation ${log.conversation} tokens` : "";
+      if (tokens) answerOf(name).note(`${tokens} tokens · ${(ms / 1000).toFixed(1)} s${held}`);
+      log.conversation = 0;
       busy.delete(name); log.answer = null;
       break;
     }

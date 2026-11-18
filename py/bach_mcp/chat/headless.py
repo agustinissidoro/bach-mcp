@@ -76,6 +76,8 @@ class ClaudeConversation:
         self.session = ""  # Claude Code's session: the hub restores it from the saved conversation
         self.number = new_conversation()
         self._process: Optional[subprocess.Popen] = None
+        self.reading = 0  # the tokens of the request being answered
+        self.context = 0  # the tokens of Claude's last request and its reply (_events), for the hub
 
     def cancel(self) -> None:
         """Stop the answer being written (from another thread)."""
@@ -173,6 +175,13 @@ def _events(said: Dict[str, Any], names: Dict[str, str], answer: List[str], chat
         yield {"type": "stage", "stage": "sent"}
     elif kind == "stream_event":
         block = (said.get("event") or {}).get("content_block") or {}
+        if said["event"].get("type") == "message_start":  # one request: everything Claude reads
+            usage = (said["event"].get("message") or {}).get("usage") or {}
+            chat.context = sum(int(usage.get(key) or 0) for key in
+                               ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+            chat.reading = chat.context
+        elif said["event"].get("type") == "message_delta":  # and its reply, counted so far
+            chat.context = chat.reading + int((said["event"].get("usage") or {}).get("output_tokens") or 0)
         if said["event"].get("type") == "content_block_start":
             if block.get("type") == "thinking":
                 yield {"type": "stage", "stage": "thinking"}
@@ -200,7 +209,8 @@ def _events(said: Dict[str, Any], names: Dict[str, str], answer: List[str], chat
                 id_ = block.get("tool_use_id", "")
                 yield {"type": "tool_result", "id": id_, "name": names.get(id_, ""), "result": _text(block.get("content"))}
     elif kind == "result":
-        yield {"type": "round", "finish": "stop", "usage": {"completion_tokens": (said.get("usage") or {}).get("output_tokens", 0)}}
+        yield {"type": "round", "finish": "stop", "usage": {"completion_tokens": (said.get("usage") or {}).get("output_tokens", 0),
+                                                            "context_tokens": chat.context}}
         if said.get("subtype") == "error_max_turns":
             yield {"type": "done", "finish": "rounds"}
             return

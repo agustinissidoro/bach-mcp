@@ -190,6 +190,14 @@ class Corpus:
 
     def _where(self, level, where: Optional[Dict[str, Any]]) -> tuple:
         clauses, args = ["f.state = 'ok'"], []
+        rules = (_scope or {}).get(self.path)
+        if rules:  # the instance's soundfile_sources: only these folders, never those
+            if rules["in"]:
+                clauses.append("(" + " OR ".join("f.path LIKE ?" for _ in rules["in"]) + ")")
+                args += [_folder_like(f) for f in rules["in"]]
+            for folder in rules["out"]:
+                clauses.append("f.path NOT LIKE ?")
+                args.append(_folder_like(folder))
         if level:
             levels = [level] if isinstance(level, str) else list(level)
             bad = [l for l in levels if l not in LEVELS]
@@ -405,6 +413,29 @@ class Corpus:
 
 
 _open: Dict[str, Corpus] = {}
+_scope: Optional[Dict[str, Dict[str, List[str]]]] = None  # None: every database, all of it
+
+
+def set_scope(scope: Optional[Dict[str, Any]]) -> None:
+    """The buffer instance's soundfile_sources (the worker sets it before each run):
+    {"databases": {path ("": bachmcp.toml's): {"in": folders (none: all), "out": folders}}}."""
+    global _scope
+    if scope is None:
+        _scope = None
+        return
+    out: Dict[str, Dict[str, List[str]]] = {}
+    for path, rules in (scope.get("databases") or {}).items():
+        if not path:
+            try:
+                path = database_path()
+            except CorpusError:
+                continue
+        out[os.path.abspath(path)] = {"in": list(rules.get("in") or []), "out": list(rules.get("out") or [])}
+    _scope = out
+
+
+def _folder_like(folder: str) -> str:
+    return (folder.rstrip("/") + "/%") if os.path.isabs(folder) else f"%{folder.strip('/')}/%"
 
 
 def database_path() -> str:
@@ -430,6 +461,21 @@ def database_path() -> str:
 
 def corpus(path: Optional[str] = None) -> Corpus:
     """The sound database, opened once (its CLAP too): the one of bachmcp.toml, or the file at `path`."""
+    if _scope is not None:
+        allowed = sorted(_scope)
+        if not allowed:
+            raise CorpusError("no database is among this instance's soundfile_sources")
+        if path is None:
+            try:
+                default = os.path.abspath(database_path())
+            except CorpusError:
+                default = ""
+            path = default if default in _scope else allowed[0] if len(allowed) == 1 else None
+            if path is None:
+                raise CorpusError("this instance has several databases: name one, corpus(path), of "
+                                  + ", ".join(allowed))
+        elif os.path.abspath(path) not in _scope:
+            raise CorpusError(f"{path} is not among this instance's soundfile_sources ({', '.join(allowed)})")
     path = os.path.abspath(path or database_path())
     if path not in _open:
         _open[path] = Corpus(path)
@@ -440,4 +486,4 @@ def _q(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
-__all__ = ["corpus", "Corpus", "Unit", "CorpusError", "read_span", "database_path", "LEVELS"]
+__all__ = ["corpus", "Corpus", "Unit", "CorpusError", "read_span", "database_path", "set_scope", "LEVELS"]

@@ -51,6 +51,7 @@ from .session import NoTarget, Target, target
 ALGO_TOOLS = ("send_algorithm",)
 
 _CHECK_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "algo_check.js")
+_PRESETS_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "algo_presets.js")
 _CHECK_TIMEOUT_SECONDS = 20.0
 _TRANSFORMER = re.compile(r"\bfunction\s+transform\s*\(")
 _SELECTOR = re.compile(r"\bfunction\s+select\s*\(")
@@ -80,6 +81,17 @@ def check_algorithm(path: str, node: str = "node", timeout: Optional[float] = No
     except (IndexError, json.JSONDecodeError):
         detail = (done.stderr or done.stdout).strip().splitlines()[-1:] or ["no output"]
         return {"ok": False, "error": f"the check failed: {detail[0]}", "fatal": True}
+
+
+def carry_presets(old: str, new: str, node: str = "node") -> Dict[str, Any]:
+    """Write the presets of `old` into `new` (in place), only the parameters `new` still declares
+    the same way (algo_presets.js). {"ok", "slots": {slot: {"kept", "dropped", "changed"}}}."""
+    try:
+        proc = subprocess.run([node, _PRESETS_SCRIPT, old, new], capture_output=True, text=True,
+                              timeout=_CHECK_TIMEOUT_SECONDS)
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+    except Exception as exc:  # noqa: BLE001 - presets are a convenience; never block a send
+        return {"ok": False, "error": str(exc)}
 
 
 def _error_text(name: str, result: Dict[str, Any]) -> str:
@@ -195,10 +207,13 @@ def register_algo_tools(mcp: FastMCP, bridge: MaxBridge, node: str = "node") -> 
                     "(shown above its panel). Nothing was loaded.")
         same = ""
         if os.path.exists(final):
+            carry_presets(final, draft, node=node)
             with open(final, encoding="utf-8") as f:
                 previous = f.read()
-            unchanged = previous == code.rstrip() + "\n"
-            if _bare(previous) == _bare(code):
+            with open(draft, encoding="utf-8") as f:
+                written = f.read()
+            unchanged = previous == written
+            if _bare(previous) == _bare(written):
                 same = ("\nNOTHING CHANGED: apart from comments this is the same code as the file it replaces, so "
                         "the music is the same as before. If you meant to correct something, the line that "
                         "causes it is still there: change that line. Otherwise do not send again.")

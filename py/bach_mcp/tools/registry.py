@@ -35,6 +35,7 @@ from .gen_tools import register_gen_tools
 from .instance_tools import register_instance_tools
 from .pitch_tools import register_pitch_tools
 from .buffer_process_tools import register_buffer_process_tools
+from .freesound_tools import register_freesound_tools
 from .score_tools import register_score_tools
 from .session import calling_directly
 
@@ -132,5 +133,6 @@ def create_tools(bridge: Any, node: str = "node", log_calls: bool = True,
     register_algo_tools(tools, bridge, node)
     register_gen_tools(tools, bridge, node)
     register_buffer_process_tools(tools, bridge)
+    register_freesound_tools(tools)
     register_instance_tools(tools)
     return mcp

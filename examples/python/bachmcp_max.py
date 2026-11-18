@@ -1,0 +1,1 @@
+../../py/bach_mcp/audio_processing/bachmcp_max.py

@@ -204,5 +204,19 @@
       "onset",
       "segmentation"
     ]
+  },
+  "bachmcp.python": {
+    "digest": "Run a Python script in its own process and call its functions",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "python",
+      "script",
+      "process",
+      "run",
+      "shell"
+    ]
   }
 }

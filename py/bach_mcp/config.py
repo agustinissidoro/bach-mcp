@@ -104,7 +104,9 @@ class AudioConfig:
     database: str = ""                   # the sound database a buffer instance's code may read (audio_corpus):
                                          # a bachmcp.database file; empty: the one .db in databases/
     sound_analysis: bool = True        # describe the source (and result) of a buffer instance to the model
-    freesound_api_key: str = ""        # https://freesound.org/apiv2/apply (not used yet)
+    freesound_api_key: str = ""        # https://freesound.org/apiv2/apply: "Client secret/Api key"
+    freesound_client_id: str = ""      # the same page: "Client id" (for the login that downloads originals)
+    freesound_redirect_uri: str = ""   # the credential's callback URL; empty: Freesound's own page that shows the code
 
     def model_path(self, name: str) -> str:
         """Where `download <name>` puts a sound model: models/audio/<its repo's name>. A name of

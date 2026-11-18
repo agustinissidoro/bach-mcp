@@ -15,6 +15,9 @@ A file that reads the sound database (audio_corpus) makes sound from nothing: it
 an empty source too.
 
 A request:  {"run": {"file": ..., "spec": {params}, "values": {...}, "source": <shm>, "target": <shm>}}
+            with "variations": N (> 1), the file runs N times with p["variation"] = 1 .. N, each
+            into <target>.<n> of the bachmcp.pshmbuffer~ <target> (made, or resized to N); answers
+            the first one's frames, the ms of all, and "variations": N
 An answer:  {"ok": true, "ms": ..., "frames": ..., "channels": ..., "sr": ..., "warnings": [...]}
             {"ok": false, "error": ..., "line": ...}
 
@@ -51,7 +54,7 @@ sys.path.insert(1, os.path.abspath(os.path.join(HERE, "..", "..")))  # bach_mcp
 
 import numpy as np  # noqa: E402
 
-from bach_mcp.utilities.shmbuffer import NoShmBuffer, ShmBuffer  # noqa: E402
+from bach_mcp.utilities.shmbuffer import NoShmBuffer, PShmBuffer, ShmBuffer  # noqa: E402
 
 MAX_CHANNELS = 64
 TEST_SR = 48000.0
@@ -201,12 +204,18 @@ def _source(source: str, target: str) -> Tuple[np.ndarray, float]:
     return x, sr
 
 
-def _process(request: Dict[str, Any], x: np.ndarray, sr: float) -> Tuple[np.ndarray, float, List[str], float]:
+def _process(request: Dict[str, Any], x: np.ndarray, sr: float,
+             variation: Optional[int] = None) -> Tuple[np.ndarray, float, List[str], float]:
     """The file's process on x: (result, its rate, warnings, ms it took)."""
     path = request["file"]
+    if "scope" in request:  # the instance's soundfile_sources: which databases, which folders of them
+        import audio_corpus
+        audio_corpus.set_scope(request["scope"])
     fn = load(path)
     start = time.perf_counter()
     p = parameters(request.get("spec"), request.get("values"))
+    if variation is not None:
+        p["variation"] = variation
     y, out_sr, warnings = output(call(fn, path, x, sr, p), sr)
     millis = (time.perf_counter() - start) * 1000.0
     if len(x) == 0 and not uses_corpus(path):
@@ -258,8 +267,43 @@ def _ran(y: np.ndarray, sr: float, warnings: List[str], millis: float, manifest:
             "sr": sr, "warnings": warnings, **({"made_of": _made_of(manifest)} if manifest else {})}
 
 
+def _write_variations(target: str, results: List[Tuple[np.ndarray, float]]) -> None:
+    """Each result into <target>.<n> of the pshmbuffer <target>, which ends with exactly that many."""
+    try:
+        poly = PShmBuffer(target)
+    except NoShmBuffer:
+        poly = PShmBuffer.create(target)
+    while len(poly) > len(results):
+        poly.pop()
+    for n, (y, sr) in enumerate(results, 1):
+        if n > len(poly):
+            poly.append(y, sr=sr)
+        else:
+            member = poly[n]
+            member.write(y, sr=sr)
+            member.close()
+    poly.touch()
+
+
+def run_variations(request: Dict[str, Any]) -> Dict[str, Any]:
+    count = int(request["variations"])
+    x, sr = _source(request["source"], request["target"] + ".1")
+    results, warnings, total = [], [], 0.0
+    for n in range(1, count + 1):
+        y, out_sr, said, millis = _process(request, x, sr, variation=n)
+        results.append((y, out_sr))
+        warnings += [f"variation {n}: {w}" for w in said]
+        total += millis
+    _write_variations(request["target"], results)
+    _keep_manifest(request["file"], dict(_made))
+    y, out_sr = results[0]
+    return {**_ran(y, out_sr, warnings, total, dict(_made)), "variations": count}
+
+
 def run(request: Dict[str, Any]) -> Dict[str, Any]:
     """One run: the source memory through the file's process, into the target memory."""
+    if int(request.get("variations") or 1) > 1:
+        return run_variations(request)
     x, sr = _source(request["source"], request["target"])
     y, out_sr, warnings, millis = _process(request, x, sr)
     _write(request["target"], y, out_sr)

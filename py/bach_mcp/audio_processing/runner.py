@@ -18,6 +18,8 @@ hub. Its file is the playground's processes/<name>.py, its panel processes/<name
                                next to the source (send_buffer_process, before it loads the file)
     commit(name)               what the listen test made, into the target: Max gets it
     set_goal(name, text)       the prompt being answered: what CLAP measures the sound against
+    set_setting(name, key, words)  a buffer setting (settings.py): sources, fx, fx_exclude, variations
+    settings(name)             its BufferSettings
     prompt_analysis(name)      the description of its source (and of its result, once there is one)
                                that the hub adds to each prompt
     stop(name)                 the run in progress ends (its worker is killed)
@@ -30,7 +32,8 @@ Requests close together become one run: a slider drag runs the code at the last 
 every value it passed. What comes out (send: the hub's _send):
 
     <name> processing
-    <name> processed <ms> <frames> <channels> <sr>
+    <name> processed <ms> <frames> <channels> <sr>   (with variations > 1: the first one's, ms of all)
+    <name> processed_variations <count>         before it, with variations > 1: <target>.1 .. .<count> are written
     <name> process_note <text>                  the result is silent, clips, had no sound in ...
     <name> process_error <text>
     <name> process_stopped
@@ -46,6 +49,8 @@ import sys
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
+
+from .settings import BufferSettings
 
 WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.py")
 TIMEOUT_SECONDS = 600.0
@@ -103,6 +108,7 @@ class _Instance:
     syncing: bool = False        # a listen test is running it, on a tool's thread
     has_result: bool = False     # a run wrote its target
     goal: str = ""
+    settings: BufferSettings = field(default_factory=BufferSettings)
     asking: threading.Lock = field(default_factory=threading.Lock)  # one request at a time to its worker
 
 
@@ -148,6 +154,20 @@ class ProcessRunner:
         with self._lock:
             self._get(name).goal = text
 
+    def set_setting(self, name: str, key: str, words: List[str]) -> Optional[str]:
+        """One buffer setting (settings.py). None when set, else why not."""
+        root = self.playground()
+        with self._lock:
+            return self._get(name).settings.set(key, words, root)
+
+    def settings(self, name: str) -> BufferSettings:
+        with self._lock:
+            return self._get(name).settings
+
+    def prompt_settings(self, name: str) -> str:
+        """What the hub adds to a prompt of this instance about its settings ("" at the defaults)."""
+        return self.settings(name).prompt_block()
+
     def describe(self, name: str, which: str = "source") -> Optional[Dict[str, Any]]:
         """The worker's description of the instance's source or target memory (None: the worker ended)."""
         with self._lock:
@@ -182,6 +202,7 @@ class ProcessRunner:
             instance = self._get(name)
             instance.stopped, instance.syncing = False, True
             request = {"file": file, "spec": spec, "values": dict(instance.values), "source": instance.source,
+                       "scope": instance.settings.scope(),
                        "target": instance.target, "goal": instance.goal, "models": self.models if self.analysis else {}}
         try:
             answer = self._ask(instance, {"listen": request})
@@ -199,6 +220,12 @@ class ProcessRunner:
         with self._lock:
             instance = self._get(name)
             target = instance.target
+            variations = instance.settings.variations
+            request = {"source": instance.source, "target": target, "values": dict(instance.values),
+                       "scope": instance.settings.scope()}
+        if variations > 1:  # the listen test made one: run them all, into the pshmbuffer
+            answer = self._run_once(name, instance, request)
+            return bool(answer and answer.get("ok"))
         self.send(name, "processing")
         answer = self._ask(instance, {"commit": {"target": target}})
         if not answer or not answer.get("ok"):
@@ -260,7 +287,8 @@ class ProcessRunner:
                     instance.thread = None
                     return
                 instance.wanted = False
-                request = {"source": instance.source, "target": instance.target, "values": dict(instance.values)}
+                request = {"source": instance.source, "target": instance.target, "values": dict(instance.values),
+                           "scope": instance.settings.scope()}
             self._run_once(name, instance, request)
 
     def _run_once(self, name: str, instance: _Instance, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -280,6 +308,10 @@ class ProcessRunner:
         except (OSError, ValueError):
             pass
         request.update(file=file, spec=spec)
+        with self._lock:
+            variations = instance.settings.variations
+        if variations > 1:
+            request["variations"] = variations
         self.send(name, "processing")
         answer = self._ask(instance, {"run": request})
         if answer is None:
@@ -294,6 +326,8 @@ class ProcessRunner:
             instance.has_result = True
         for note in answer.get("warnings") or []:
             self.send(name, "process_note", note)
+        if answer.get("variations"):
+            self.send(name, "processed_variations", answer["variations"])
         self.send(name, "processed", answer["ms"], answer["frames"], answer["channels"], answer["sr"])
         return answer
 

@@ -21,6 +21,16 @@ It cannot be resized: to change the size, one side retires it (state 0), unlinks
 makes a new one. `array` follows such a change by itself, so read it again rather than keeping
 it across a resize done in Max. There is no lock between the two programs.
 
+A bachmcp.pshmbuffer~ is a polybuffer of such memories, <name>.1 .. <name>.<count>, with a small
+index memory under the name itself:
+
+    poly = PShmBuffer("pepe")           # join [bachmcp.pshmbuffer~ pepe]
+    len(poly)                           # how many
+    poly[3].array                       # the third: a ShmBuffer, the same as ShmBuffer("pepe.3")
+    poly.append(samples, sr=48000)      # one more at the end: pepe.<len+1>
+    poly.pop()                          # remove the last
+    poly[2].write(other); poly.touch()  # the Max object, with @notify 1, writes what changed
+
 Uses numpy and the standard library only (macOS, Linux).
 """
 
@@ -262,6 +272,219 @@ class ShmBuffer:
         try:
             self._refresh()
             self._put("<I", _STATE, RETIRED)
+        except NoShmBuffer:
+            pass
+        self._map = None
+        try:
+            _posixshmem.shm_unlink(self.shm)
+        except FileNotFoundError:
+            pass
+
+
+# ---------------------------------------------------------------- bachmcp.pshmbuffer~
+
+PMAGIC = b"BMPB"
+PVERSION = 1
+INDEX_SIZE = 64
+INDEX_DIGITS = 4                    # <name>.9999 at most
+# magic, version, count, zero, serial, state, creator_pid
+_INDEX = struct.Struct("<4sIIIQII")
+_I_COUNT, _I_SERIAL, _I_STATE = 8, 16, 24
+
+
+class _Member(ShmBuffer):
+    """One memory of a PShmBuffer: touch() also tells the Max object, which listens to the index."""
+
+    def __init__(self, name: str, poly: "PShmBuffer"):
+        self._poly = poly
+        super().__init__(name)
+
+    def touch(self) -> None:
+        super().touch()
+        self._poly.touch()
+
+
+class PShmBuffer:
+    """The memories of the bachmcp.pshmbuffer~ of this name: poly[1] .. poly[len(poly)], from 1
+    like polybuffer~. Raises NoShmBuffer if there is no index under the name."""
+
+    def __init__(self, name: str):
+        self._check(name)
+        self.name = name
+        self.shm = shm_name(name)
+        self._map: mmap.mmap | None = None
+        self._listen: tuple[int, int] | None = None
+        self._attach()
+
+    @staticmethod
+    def _check(name: str) -> None:
+        if len(PREFIX + name) + 1 + INDEX_DIGITS > NAME_MAX:
+            raise ValueError(f"pshmbuffer name {name!r}: {NAME_MAX - len(PREFIX) - 1 - INDEX_DIGITS} characters at most")
+
+    @classmethod
+    def create(cls, name: str) -> "PShmBuffer":
+        """A new, empty index under the name (what was there is removed). Max follows."""
+        cls._check(name)
+        poly = cls.__new__(cls)
+        poly.name, poly.shm, poly._map, poly._listen = name, shm_name(name), None, None
+        try:
+            poly._attach()
+            poly.clear()
+            poly._put("<I", _I_STATE, RETIRED)
+        except NoShmBuffer:
+            pass
+        poly._map = None
+        try:
+            _posixshmem.shm_unlink(poly.shm)
+        except FileNotFoundError:
+            pass
+        fd = _posixshmem.shm_open(poly.shm, os.O_CREAT | os.O_EXCL | os.O_RDWR, mode=0o600)
+        try:
+            os.ftruncate(fd, INDEX_SIZE)
+            poly._map = mmap.mmap(fd, INDEX_SIZE)
+        finally:
+            os.close(fd)
+        _INDEX.pack_into(poly._map, 0, b"\0\0\0\0", PVERSION, 0, 0, 1, LIVE, os.getpid())
+        poly._map[0:4] = PMAGIC
+        return poly
+
+    def _attach(self) -> None:
+        self._map = None
+        try:
+            fd = _posixshmem.shm_open(self.shm, os.O_RDWR, mode=0o600)
+        except FileNotFoundError:
+            raise NoShmBuffer(self.name) from None
+        try:
+            if os.fstat(fd).st_size < INDEX_SIZE:
+                raise NoShmBuffer(self.name)
+            m = mmap.mmap(fd, INDEX_SIZE)
+        finally:
+            os.close(fd)
+        magic, version, _, _, _, state, _ = _INDEX.unpack_from(m)
+        if magic != PMAGIC or version != PVERSION or state != LIVE:
+            m.close()
+            raise NoShmBuffer(self.name)
+        self._map = m
+
+    def _refresh(self) -> None:
+        if self._map is None or self._get("<I", _I_STATE) != LIVE:
+            self._attach()
+
+    def _get(self, fmt: str, offset: int):
+        return struct.unpack_from(fmt, self._map, offset)[0]
+
+    def _put(self, fmt: str, offset: int, value) -> None:
+        struct.pack_into(fmt, self._map, offset, value)
+
+    # ---------------------------------------------------------------- the set
+
+    def __len__(self) -> int:
+        self._refresh()
+        return self._get("<I", _I_COUNT)
+
+    @property
+    def serial(self) -> int:
+        self._refresh()
+        return self._get("<Q", _I_SERIAL)
+
+    def member(self, n: int) -> str:
+        return f"{self.name}.{n}"
+
+    def __getitem__(self, n: int) -> ShmBuffer:
+        """Memory n, from 1 (negative: from the end, -1 the last)."""
+        count = len(self)
+        if n < 0:
+            n += count + 1
+        if not 1 <= n <= count:
+            raise IndexError(f"{self.name} has memories 1 to {count}")
+        return _Member(self.member(n), self)
+
+    def __iter__(self):
+        for n in range(1, len(self) + 1):
+            yield self[n]
+
+    def touch(self) -> None:
+        """Say something changed: raises serial and tells the Max object (with @notify 1 it
+        then writes the memories that changed)."""
+        self._refresh()
+        self._put("<Q", _I_SERIAL, self._get("<Q", _I_SERIAL) + 1)
+        if _notify_post:
+            _notify_post((NOTIFY_PREFIX + self.name).encode())
+
+    def append(self, samples=None, sr: float = 44100.0, frames: int = 0, channels: int = 1) -> ShmBuffer:
+        """One more memory at the end: these samples, or silence of frames x channels."""
+        n = len(self) + 1
+        if n > 10 ** INDEX_DIGITS - 1:
+            raise ValueError(f"{10 ** INDEX_DIGITS - 1} memories at most")
+        if samples is not None:
+            data = np.asarray(samples, dtype=np.float32)
+            data = data[:, None] if data.ndim == 1 else data
+            frames, channels = data.shape
+        buf = ShmBuffer.create(self.member(n), frames, channels, sr)    # made first, then counted
+        if samples is not None:
+            buf.array[:] = data
+        self._put("<I", _I_COUNT, n)
+        self.touch()
+        return _Member(buf.name, self)
+
+    def pop(self) -> None:
+        """Remove the last memory."""
+        n = len(self)
+        if n == 0:
+            raise IndexError(f"{self.name} has no memories")
+        self._put("<I", _I_COUNT, n - 1)                              # uncounted first, then gone
+        try:
+            ShmBuffer(self.member(n)).unlink()
+        except NoShmBuffer:
+            pass
+        self.touch()
+
+    def clear(self) -> None:
+        """Remove every memory."""
+        while len(self):
+            n = len(self)
+            self._put("<I", _I_COUNT, n - 1)
+            try:
+                ShmBuffer(self.member(n)).unlink()
+            except NoShmBuffer:
+                pass
+        self.touch()
+
+    # ---------------------------------------------------------------- waiting for Max
+
+    def listen(self) -> None:
+        if self._listen is None:
+            if _notify_register_fd is None:
+                raise OSError("waiting for Max needs macOS notifications")
+            fd, token = ctypes.c_int(), ctypes.c_int()
+            key = (NOTIFY_PREFIX + self.name + NOTIFY_FROM_MAX).encode()
+            if _notify_register_fd(key, ctypes.byref(fd), 0, ctypes.byref(token)) != 0:
+                raise OSError("can't listen for Max's changes")
+            self._listen = (fd.value, token.value)
+
+    def wait(self, timeout: float | None = None) -> bool:
+        """Sleep until the Max object changes the set (appendempty, append, remove, clear,
+        source). True: it did. False: timeout (seconds)."""
+        self.listen()
+        fd = self._listen[0]
+        if not select.select([fd], [], [], timeout)[0]:
+            return False
+        while select.select([fd], [], [], 0)[0]:
+            os.read(fd, 4)
+        return True
+
+    def close(self) -> None:
+        self._map = None
+        if self._listen is not None:
+            _notify_cancel(self._listen[1])
+            self._listen = None
+
+    def unlink(self) -> None:
+        """Remove the memories and the index this side made, when no Max object owns them."""
+        try:
+            self._refresh()
+            self.clear()
+            self._put("<I", _I_STATE, RETIRED)
         except NoShmBuffer:
             pass
         self._map = None

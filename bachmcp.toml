@@ -30,7 +30,7 @@ open_browser = false      # open the chat page when the model is ready
 
 [claude]
 # The Claude that answers prompts from Max and the chat page (bachmcp.server claude).
-claude_model = "sonnet"   # "" = your account's default; an alias ("opus", "sonnet", "haiku") or a full name ("claude-opus-5-5")
+claude_model = "opus"     # "" = your account's default; an alias ("opus", "sonnet", "haiku") or a full name ("claude-opus-5-5")
 claude_effort = "medium"  # "" = the model's default; "low", "medium", "high", "xhigh" or "max" (more thinking: slower, more tokens)
 claude_code_prompt = false # true: Claude Code's own system prompt, with the skill added to it.
                           # false: the skill alone, as the local model reads it: about 2,300 fewer tokens per request
@@ -64,4 +64,5 @@ clap_model = "laion-clap2-l"      # CLAP: how close a sound is to the words of t
 pitch_model = "penn"              # PENN: the pitch of a sound in midicents, and how much of it is pitched
 sound_analysis = true       # add a description of the source (levels, spectrum, a text spectrogram,
                             # labels) to each prompt of a buffer instance, and of the result to send_buffer_process
-freesound_api_key = ""      # your own key, from https://freesound.org/apiv2/apply (not used yet)
+freesound_api_key = "GiEnCgsX2oO4Uv5VIHxqI5l9LH0FZE9ilW1AVjHU"  # your own key, from https://freesound.org/apiv2/apply ("Client secret/Api key")
+freesound_client_id = "bpmswetmkDhztWqbtANn"  # the "Client id" on the same page; then python py/main.py freesound-login

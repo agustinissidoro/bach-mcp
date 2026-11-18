@@ -62,6 +62,8 @@ Out of the hub, to Max and to the page:
     <name> queued                             waits for another instance's answer
     <name> tool <tool> <first line of what the tool answered>
     <name> answer <text>                      the whole answer, once
+    <name> conversation_tokens <tokens>       just before done: what the model holds at the end of its
+                                              last request (as server answer conversation_tokens)
     <name> done <tokens> <ms>
     <name> stopped
     <name> error <message>
@@ -95,16 +97,20 @@ once, when it changes:
     server prompt <name> calling <tool>       it writes a tool call
     server prompt <name> running <tool>       the tool runs, here in Bach
     server prompt <name> done <tokens> <ms>
-    server prompt <name> skills_size <tokens> at each prompt: the estimated tokens of the skill its
-                                              conversation reads (the compiled file, else the built-in skill)
+    server prompt <name> skills_size <tokens> at each prompt: the estimated tokens (characters / 4) of
+                                              the system prompt the model gets: only the parts of the skill
+                                              for the instance's type, not the whole compiled file
     server prompt <name> stopped
     server prompt <name> error <message>
 
 Only to Max, after each answer:
 
-    server answer <name> <text>
     server answer tokens <tokens>
     server answer time <ms>
+    server answer conversation_tokens <tokens>  what the model holds at the end of its last request:
+                                              that request's prompt (system prompt, tools, the whole
+                                              conversation) and its reply, as the model server counted them
+    server answer <name> <text>               last, so the numbers before it are this answer's
 
 Only to the page (Max does not need them):
 
@@ -158,7 +164,7 @@ from .engine import Conversation
 
 INSTANCE_COMMANDS = ("prompt", "stop", "new", "remove", "set_profile", "set_skills", "get_skills",
                      "buffer_process_run", "buffer_process_param", "buffer_process_source", "buffer_process_target",
-                     "buffer_process_stop")
+                     "buffer_process_stop", "buffer_settings")
 # First words that are not an instance: the hub's own commands, Max's requests (bridge/max.py),
 # the lines for the server object and the page's state line.
 RESERVED = ("set_playground", "set_profile", "set_skills", "get_skills", "clear_instance_names_map", "add_instance_names_map", "set_active_instance",
@@ -332,6 +338,11 @@ class Hub:
                 self._stop(name)
             elif command == "buffer_process_stop":
                 self.processes.stop(name)
+            elif command == "buffer_settings":
+                why = (self.processes.set_setting(name, said[2], said[3:]) if len(said) >= 3
+                       else "buffer_settings needs a setting: soundfile_sources, fx, fx_exclude or variations")
+                if why:
+                    self._send(name, "error", why)
             elif command == "buffer_process_run":
                 self.processes.run(name)
             elif command == "buffer_process_param":
@@ -759,11 +770,11 @@ class Hub:
             self._report(name, "error", refusal)
             return
         before = len(conversation.history)
-        started, tokens, answer, finish = time.time(), 0, [], "stop"
+        started, tokens, context, answer, finish = time.time(), 0, 0, [], "stop"
         self._said = []
         self._send(name, "thinking", web_only=True)  # the page's busy sign; Max hears the stages
         self._stage(name, "starting")
-        self._report(name, "skills_size", estimate_tokens(conversation.skill))
+        self._report(name, "skills_size", estimate_tokens(conversation.system_prompt()))  # what this type reads
         events = conversation.send(self._with_sound(name, target, text))
         try:
             for event in events:
@@ -790,6 +801,7 @@ class Hub:
                     self._send(name, "tool", event["name"], (event["result"].splitlines() or [""])[0])
                 elif kind == "round":
                     tokens += (event.get("usage") or {}).get("completion_tokens", 0)
+                    context = context_tokens(event.get("usage") or {}) or context
                 elif kind == "docs":
                     self._send(name, "note", f"instrument docs: {', '.join(event['added'])}", web_only=True)
                 elif kind == "retry":
@@ -816,11 +828,13 @@ class Hub:
         whole, ms = "".join(answer).strip(), int((time.time() - started) * 1000)
         if whole:
             self._send(name, "answer", whole)
+        self._send(name, "conversation_tokens", context)  # to the instance, and the page shows it with done
         self._send(name, "done", tokens, ms)
         self._report(name, "done", tokens, ms)
-        self.bridge.send(line("server", "answer", name, whole))
         self.bridge.send(line("server", "answer", "tokens", tokens))
         self.bridge.send(line("server", "answer", "time", ms))
+        self.bridge.send(line("server", "answer", "conversation_tokens", context))
+        self.bridge.send(line("server", "answer", name, whole))  # last: Max's dict.pack sends on this one
 
     # ── Conversations, kept in the playground ──────────────────────────── #
 
@@ -829,7 +843,10 @@ class Hub:
         the conversation's file keeps the prompt as typed."""
         if target.type != "buffer":
             return text
-        self.processes.set_goal(name, text)
+        self.processes.set_goal(name, text)  # CLAP measures against the prompt as typed
+        settings = self.processes.prompt_settings(name)
+        if settings:
+            text = f"{text}\n\n{settings}"
         self._stage(name, "analysing")
         analysis = self.processes.prompt_analysis(name)
         if not analysis:
@@ -896,4 +913,15 @@ class Hub:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-__all__ = ["Hub", "Message", "INSTANCE_COMMANDS", "RESERVED"]
+def context_tokens(usage: Dict[str, Any]) -> int:
+    """The tokens the model held at the end of one request, from its usage: Claude Code's
+    context_tokens (chat/headless.py), else the local server's prompt_tokens + completion_tokens.
+    0 when the server did not say."""
+    if "context_tokens" in usage:
+        return int(usage["context_tokens"])
+    if "prompt_tokens" in usage:
+        return int(usage["prompt_tokens"]) + int(usage.get("completion_tokens", 0))
+    return 0
+
+
+__all__ = ["Hub", "context_tokens", "Message", "INSTANCE_COMMANDS", "RESERVED"]

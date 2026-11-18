@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.python" module="bachmcp" category="bachmcp">
+	<digest>Run a Python script in its own process and call its functions</digest>
+	<description>Runs a Python script in a process of its own, with arguments, and calls its functions while it runs. Max never waits for the script: a slow, hung or crashing script cannot freeze or crash Max. No shell is involved: each argument reaches the script's <i>sys.argv</i> as typed.<br /><br />Nothing is preset: the object knows no Python and no working folder until you give them. <m>run</m> refuses until <at>python</at> and <at>folder</at> are set. Both take absolute paths, <i>~/...</i>, Max paths (<i>Macintosh HD:/...</i>) or paths relative to the patch's own folder (the patch must be saved).<br /><br />Calls and messages travel on a channel of their own (JSON lines on two pipes), never mixed with what the script prints: types survive both ways, and <i>print()</i> is only a log. A Python helper for it is the small <i>bachmcp_max.py</i> module: put it next to the script, which then imports it. Deleting the object or closing the patch stops the script and everything it started.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">python</metadata>
+		<metadata name="tag">process</metadata>
+		<metadata name="tag">script</metadata>
+		<metadata name="tag">shell</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>run, call, eof, stop, kill, folder, python</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>Messages from the script: out() and returned values</digest>
+		</outlet>
+		<outlet id="1" type="">
+			<digest>Log: stdout &lt;line&gt;, stderr &lt;line&gt;</digest>
+		</outlet>
+		<outlet id="2" type="">
+			<digest>Status: pid, done, error, failed</digest>
+		</outlet>
+	</outletlist>
+	<methodlist>
+		<method name="run">
+			<arglist><arg name="script" optional="0" type="symbol" /><arg name="arguments" optional="1" type="list" /></arglist>
+			<digest>Run a script</digest>
+			<description>Starts <i>&lt;python&gt; -u &lt;script&gt; &lt;arguments...&gt;</i> with <at>folder</at> as its current directory. A relative <i>script</i> is found from <at>folder</at>. The arguments reach <i>sys.argv</i> one by one as typed (<i>-a</i>, <i>--name</i>, <i>3.5</i>...); numbers as Max shows them. Max reads the arguments of a message box before they arrive, so put an argument with spaces in quotes. Sends <m>pid</m> &lt;n&gt; out of the right outlet when it starts and <m>done</m> &lt;exit code&gt; when it ends; <m>error</m> &lt;reason&gt; if <at>python</at> or <at>folder</at> is not set, or the folder, the script or Python is not found. One run at a time: a <m>run</m> while running is refused (send <m>stop</m> first). The script's stdin is empty: <i>input()</i> gets end of file instead of waiting forever.</description>
+		</method>
+		<method name="call">
+			<arglist><arg name="function" optional="0" type="symbol" /><arg name="arguments" optional="1" type="list" /></arglist>
+			<digest>Call a function of the running script</digest>
+			<description>Calls the function registered under that name with <i>bachmcp_max</i>'s <i>@on</i>. Ints, floats and symbols arrive as int, float and str (a symbol <i>3</i> stays the str <i>"3"</i>, a symbol with spaces is one str); the pair <m>dictionary</m> &lt;name&gt; among the arguments arrives as a dict. What the function returns leaves the left outlet with the function's name in front: <i>None</i> sends nothing, a list or tuple several atoms, a dict <m>dictionary</m> &lt;name&gt;. An unknown function, wrong arguments or an exception send <m>failed</m> &lt;function&gt; &lt;message&gt; out of the right outlet and the traceback to the log; the script goes on. Calls are answered in order. Max never waits: if the script is busy, calls are queued until it reads them. Refused (<m>error</m>) when nothing is running, or after <m>eof</m>.</description>
+		</method>
+		<method name="eof">
+			<arglist />
+			<digest>Close the call channel</digest>
+			<description>Closes the channel into the script once the calls already sent are written. <i>bachmcp_max.loop()</i> returns, so a script built around it ends and sends <m>done</m>.</description>
+		</method>
+		<method name="stop">
+			<arglist />
+			<digest>Stop the script</digest>
+			<description>Sends Ctrl-C (SIGINT), which Python raises as <i>KeyboardInterrupt</i>, so the script can clean up. Still running 2 seconds later: SIGTERM; 2 seconds more: SIGKILL. Processes the script started are stopped too.</description>
+		</method>
+		<method name="kill">
+			<arglist />
+			<digest>Kill the script at once</digest>
+			<description>SIGKILL to the script and the processes it started, without waiting.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="python" get="1" set="1" type="symbol" size="1">
+			<digest>Python interpreter (required)</digest>
+			<description>The Python that runs the scripts: the file itself, for example <i>/opt/homebrew/bin/python3</i>, a venv's <i>.venv/bin/python</i> or a conda environment's <i>bin/python</i>. Max does not have your terminal's PATH, so a bare <i>python</i> is not looked up. No default: <m>run</m> refuses until it is set. A relative path starts from the patch's folder. <m>python</m> with no argument unsets it.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Python Interpreter" />
+			</attributelist>
+		</attribute>
+		<attribute name="folder" get="1" set="1" type="symbol" size="1">
+			<digest>Working folder (required)</digest>
+			<description>The script's current directory, and where relative script paths start. No default: <m>run</m> refuses until it is set. A relative path starts from the patch's folder. <m>folder</m> with no argument unsets it.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Working Folder" />
+			</attributelist>
+		</attribute>
+		<attribute name="console" get="1" set="1" type="int" size="1">
+			<digest>Print the log to the Max console</digest>
+			<description><m>1</m> (default): what the script prints is also printed to the Max console, stdout as posts and stderr (errors, tracebacks, warnings) as errors. <m>0</m>: only out of the middle outlet.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="1" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Print stdout and stderr to the Console" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<misc name="Output">
+		<entry name="Messages (left outlet)">
+			<description>Only what the script sends on purpose: <i>out(...)</i> and the values called functions return. <i>out("note", 0, 6000)</i> gives the message note 0 6000, <i>out(1, 2, 3)</i> the list 1 2 3, a str with spaces one symbol, a dict <m>dictionary</m> &lt;name&gt; (valid until the next message). bool becomes 0/1, None <i>null</i>; numpy numbers and arrays work. A list inside a list cannot be a Max message: send a dict.</description>
+		</entry>
+		<entry name="Log (middle outlet)">
+			<description>Everything the script and its libraries print: <m>stdout</m> &lt;line&gt; and <m>stderr</m> &lt;line&gt;, a line each, as printed. Also in the Max console with <at>console</at> 1.</description>
+		</entry>
+		<entry name="Status (right outlet)">
+			<description><m>pid</m> &lt;n&gt; when the script starts; <m>done</m> &lt;exit code&gt; when it ends (negative: killed by that signal); <m>error</m> &lt;reason&gt; when it could not start or <m>call</m> found nothing running; <m>failed</m> &lt;function&gt; &lt;message&gt; when a call raised or named no function.</description>
+		</entry>
+	</misc>
+	<misc name="bachmcp_max">
+		<entry name="The Python side">
+			<description>A module in the package, in the Python runner's folder (<i>py/bach_mcp/audio_processing/bachmcp_max.py</i>, standard library only), so the runner can be driven from Max with no server running. The object does not know about it: a script imports it when it sits in the same folder (Python looks in the script's own folder first). <i>examples/python</i> holds a link to it for its examples. <i>from bachmcp_max import on, out, loop</i>. <i>@on("name")</i> registers a function for <m>call</m> (plain <i>@on</i>: the function's own name). <i>out(...)</i> sends a message at any time, from any thread (progress, streams). <i>loop()</i> answers calls until <m>eof</m> or <m>stop</m>. Run from a terminal instead of Max, the channel is stdin/stdout: type <i>{"call": "transpose", "args": [6000, 200]}</i>. Examples: <i>examples/python/hello.py</i>, <i>slow.py</i>, <i>functions.py</i>.</description>
+		</entry>
+		<entry name="The buffer runner">
+			<description><i>py/bach_mcp/audio_processing/max_runner.py</i> is the MCP server's buffer runner, driven from Max with no server: <m>run</m> it, then <m>call</m> <i>set_playground</i>, <i>buffer_process_source</i>, <i>buffer_process_target</i>, <i>buffer_process_run</i>, <i>buffer_process_param</i>, <i>buffer_settings</i>, <i>buffer_process_stop</i> and <i>remove</i>, each with the instance name first, as the server takes them. It answers with the server's own lines (<i>&lt;name&gt; processing</i>, <i>&lt;name&gt; processed ...</i>, <i>&lt;name&gt; process_error ...</i>), so a process iterates the same way with the server on or off. See the runner tab of the help.</description>
+		</entry>
+		<entry name="The channel">
+			<description>JSON lines on the script's file descriptors 3 (calls in) and 4 (messages out), named in the environment variable <i>BACHMCP_PYTHON_CHANNEL</i>. Calls: <i>{"call": name, "args": [...]}</i>. Messages: <i>{"out": [...]}</i> and <i>{"error": name, "message": text}</i>. Any language can speak it; <i>bachmcp_max</i> is only the Python helper. Big data (audio, long arrays) is better passed by name: a shmbuffer, a dictionary, a file path.</description>
+		</entry>
+	</misc>
+	<seealsolist>
+		<seealso name="bachmcp.server" />
+		<seealso name="shell" />
+		<seealso name="dict" />
+	</seealsolist>
+</c74object>
