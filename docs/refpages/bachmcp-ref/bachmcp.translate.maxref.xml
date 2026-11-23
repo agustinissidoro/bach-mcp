@@ -14,7 +14,7 @@
 	</metadatalist>
 	<inletlist>
 		<inlet id="0" type="">
-			<digest>llll or dictionary; read, readwrite</digest>
+			<digest>llll or dictionary; addchords, read, readwrite</digest>
 		</inlet>
 	</inletlist>
 	<outletlist>
@@ -35,6 +35,11 @@
 			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
 			<digest>Score in (dictionary)</digest>
 			<description>A score as a dictionary, when <at>from</at> is <m>json</m>.</description>
+		</method>
+		<method name="addchords">
+			<arglist><arg name="mode" optional="1" type="symbol" /><arg name="voices" optional="0" type="llll" /></arglist>
+			<digest>Part of a score for bach.roll's addchords</digest>
+			<description>Voices only, with no header, for <o>bach.roll</o>'s <m>addchords</m>. The optional <m>mode</m> is <m>fromscratch</m>, <m>add</m>, <m>addsel</m> or <m>replacesel</m>. With <at>from</at> <m>json</m> it is <m>addchords</m> [mode] <m>dictionary</m> &lt;name&gt;; with <m>llll</m> or <m>t</m>, <m>addchords</m> [mode] followed by the voices (a native llll or a text message). It goes out with the same message and mode in the <at>to</at> format: <m>addchords</m> [mode] <m>dictionary</m> &lt;name&gt; (the dictionary holds only <i>voices</i>) or <m>addchords</m> [mode] followed by the voices. A header in the incoming dictionary is not sent; its <i>slotinfo</i> only says which slots hold text. <at>merge_onset_chords</at> applies.</description>
 		</method>
 		<method name="read">
 			<arglist><arg name="path" optional="0" type="symbol" /></arglist>

@@ -20,7 +20,8 @@ is bachmcp.runner.source.js. This file is only what Max sees: the outlets and
 the messages.
 
 Outlets, the same for every type:
-  0  only scores: dictionary <name> (bachjson-complete)
+  0  only scores: dictionary <name> (bachjson-complete), or addchords replacesel dictionary <name>
+     (dump_replacesel 1: through bachmcp.translate @to llll, bach.roll's own addchords message)
   1  to bach.roll: dump (asks for its score), clearselection, sel note [v c n] ...
   2  to bachmcp.gui.params: spec, set, status, type, and every setting's value back
   3  bang: a process is done, after its score (and a selector's commands)
@@ -63,6 +64,9 @@ them across a type change; a type that does not use one ignores it:
   source_mode 0/1           transformer, selector: 0 destructive, 1 non-destructive (default)
   process_only_selection 0/1  transformer, selector: 1 work only on the selected notes (flag 16)
   dump_selection_only 0/1   selector: the score out, the selected notes (1, default) or the whole source flagged
+  dump_replacesel 0/1       transformer with process_only_selection 1: 1 (default) only the result, no header,
+                            as "addchords replacesel dictionary <name>" (the roll replaces its selection);
+                            0 the whole score, the other notes put back
   involutive 0/1            selector: kept for later; ignored for now
   input_mode 0/1, selection_slot <n>   old names (process_only_selection; nothing), kept for old patches
 
@@ -181,7 +185,7 @@ function sync(name, ...args) {
   if (!fn) return engine.refuse(`sync: ${name} cannot be synced`);
   engine.quietly(() => fn(...args));
 }
-const SYNCED = { param, snap, bypass, source_mode, process_only_selection, dump_selection_only };
+const SYNCED = { param, snap, bypass, source_mode, process_only_selection, dump_selection_only, dump_replacesel };
 function done() {} // end of patcherargs' attribute list
 
 // ── Settings: every type takes them ─────────────────────────────────────── //
@@ -191,6 +195,7 @@ function process_only_selection(value) { engine.setProcessOnlySelection(value); 
 function input_mode(value) { engine.setProcessOnlySelection(value); }  // its old name, kept for old patches
 function selection_slot() {}  // ignored: the selection is bach's flag 16 now (old patches send it)
 function dump_selection_only(value) { engine.setDumpSelectionOnly(value); }
+function dump_replacesel(value) { engine.setDumpReplaceSel(value); }
 function involutive(value) { engine.setInvolutive(value); }
 
 // ── Actions: some types ─────────────────────────────────────────────────── //

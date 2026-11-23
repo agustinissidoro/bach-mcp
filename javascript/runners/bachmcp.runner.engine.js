@@ -21,6 +21,8 @@ type: what the runner is now:
   and the hooks, all optional:
     source()            the score a run works on (a transformer's or a selector's source)
     output(score)       a run's score -> the score sent (process_only_selection 1 puts back the rest)
+    prefix()            after output: the atoms before "dictionary <name>" on outlet 0, or nothing
+                        (a transformer's "addchords replacesel", dump_replacesel 1)
     spec()              more to tell the panel with the algorithm's spec
     request()           before a run; true if the type asked the roll for the score and calls process() when it comes
     stale()             true: the last output cannot be trusted (the roll may have changed), so bang runs again
@@ -33,6 +35,8 @@ type: what the runner is now:
 
 The outlets, the same for every type:
     0  SCORE    dictionary <name>                           only scores (bachjson-complete)
+                addchords replacesel dictionary <name>      dump_replacesel 1: a transformer's result
+                                                            alone, no header, to replace the roll's selection
     1  BACH     dump, clearselection, sel note [v c n] ...  to bach.roll
     2  PANEL    spec, set, status, type, the settings,      to bachmcp.gui.params
                 clear (the type changed with a file loaded)
@@ -134,6 +138,8 @@ function createEngine(max) {
     destructive: false,  // source_mode 0: every run asks the roll for its score
     selectedOnly: false, // process_only_selection 1: a run sees only the selected notes
     selectionOnly: true, // dump_selection_only 1: a selector sends only the selected notes
+    replaceSel: true,    // dump_replacesel 1: a transformer with process_only_selection 1 sends
+                         // only its result, as "addchords replacesel dictionary <name>"
     involutive: false,   // involutive 1: kept for later, ignored for now
     verbose: false,      // verbose 1: say in the Max console what happens (errors are always said)
   };
@@ -390,6 +396,18 @@ function createEngine(max) {
     changed();
   }
 
+  /**
+   * dump_replacesel 1 (default): a transformer working on the selection (process_only_selection 1)
+   * sends only its result, without header, as "addchords replacesel dictionary <name>": the roll
+   * replaces its selection with it. 0: the whole score, the other notes put back.
+   */
+  function setDumpReplaceSel(value) {
+    const m = flag(value);
+    if (m === null) return refuse(`dump_replacesel is 0 (the whole score) or 1 (addchords replacesel), got ${value}`);
+    state.replaceSel = m === 1;
+    changed();
+  }
+
   /** involutive 0: sel (adds to the selection), 1: select (toggles). Kept for later: ignored for now. */
   function setInvolutive(value) {
     const m = flag(value);
@@ -426,7 +444,7 @@ function createEngine(max) {
   /** repeat: the last score sent, out of outlet 0 again (and what the type sends with it). */
   function repeat() {
     if (!hasLastScore()) return refuse("repeat: no score sent yet");
-    sendScore(JSON.parse(lastScore.stringify()));
+    sendScore(JSON.parse(lastScore.stringify()), state.lastPrefix);
     hook("repeated");
   }
 
@@ -619,10 +637,12 @@ function createEngine(max) {
     pending.cancel();
     if (!state.compiled || state.bypass) return;
     let result;
+    let prefix = null;
     try {
       result = loader.run(state.compiled, state.values, hook("source") || null);
       if (result.score && type.output) result.score = type.output(result.score);
-      if (result.score) ownMarkers(result.score);
+      prefix = (result.score && hook("prefix")) || null;
+      if (result.score && !prefix) ownMarkers(result.score);  // addchords takes no header
     } catch (e) {
       return fail(e);
     }
@@ -631,7 +651,7 @@ function createEngine(max) {
     tellPanel("status", "ok", `${result.notes} ${what}, ${result.ms} ms`);
     status("algo_done", result.notes, result.ms);
     hook("ran", result);  // a selector sends its score and commands
-    if (result.score) sendScore(result.score);
+    if (result.score) sendScore(result.score, prefix);
     done();
   }
 
@@ -653,14 +673,15 @@ function createEngine(max) {
     }
   }
 
-  /** A score out of outlet 0, as dictionary <name>. */
-  function sendScore(score) {
+  /** A score out of outlet 0, as dictionary <name>; prefix: atoms before it (addchords replacesel). */
+  function sendScore(score, prefix = null) {
     snapPitches(score, SNAP_STEPS[state.snap]);
     scoreDict.clear();
     scoreDict.parse(JSON.stringify(score));
     lastScore.clear();
     lastScore.parse(JSON.stringify(score));
-    max.outlet(OUT.SCORE, "dictionary", scoreDict.name);
+    state.lastPrefix = prefix;
+    max.outlet(OUT.SCORE, ...(prefix || []), "dictionary", scoreDict.name);
   }
 
   /** write_to_playground: the last score sent, to <playground>/scores/<name>.json. */
@@ -688,7 +709,7 @@ function createEngine(max) {
     say, fail, refuse, status, tellPanel, flag,
     setType, setname, getSpecs, load, loadAlgo, tryLoadAlgo, reload, autoDump, verbose, watch, setParam,
     preset,
-    changed, quietly, setBypass, setSourceMode, setProcessOnlySelection, setDumpSelectionOnly, setInvolutive, setSnap, passThrough, bang, repeat, runNow, process, schedule, sendScore, writeScore, deleted,
+    changed, quietly, setBypass, setSourceMode, setProcessOnlySelection, setDumpSelectionOnly, setDumpReplaceSel, setInvolutive, setSnap, passThrough, bang, repeat, runNow, process, schedule, sendScore, writeScore, deleted,
     get type() { return type; },
   };
 }

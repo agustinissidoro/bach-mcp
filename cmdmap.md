@@ -124,7 +124,7 @@ Errors are also printed in the Max console. These status lines stay in Max: Pyth
 
 **The prompt box.** `bachmcp.prompt` sends `prompt <text>` on Enter, the whole text as one symbol. By hand: `set <text>`, `append <text>`, `clear`, `bang`, `paste`.
 
-**Translation.** `bachmcp.translate @from llll|t|json @to json|llll|t` takes a bach llll or `dictionary <name>`, and passes other messages through with `@transparent 1`.
+**Translation.** `bachmcp.translate @from llll|t|json @to json|llll|t` takes a bach llll or `dictionary <name>`, and passes other messages through with `@transparent 1`. `addchords [fromscratch|add|addsel|replacesel] …` carries voices only (no header) for bach.roll's addchords: `addchords [mode] dictionary <name>` ↔ `addchords [mode] VOICE…`, following `@to`.
 
 ---
 
