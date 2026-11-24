@@ -144,11 +144,12 @@ Element.prototype.atoms = function () {
   return [].concat(this.value);
 };
 
-// A value from atoms ("set" messages, pattr), clamped to this element. Returns false if unusable.
+// A value from atoms ("set" messages, pattr), held exactly as it comes: only a gesture
+// snaps (to the step, inside the range). Returns false if unusable.
 Element.prototype.accept = function (atoms) {
   var n = Number(atoms[0]);
   if (isNaN(n)) return false;
-  this.value = snap(this, n);
+  this.value = n;
   return true;
 };
 
@@ -169,8 +170,10 @@ Element.prototype.widest = function () {
   return out || this.text();
 };
 
+// Where a value sits on the control, 0 to 1: a value set from outside the range (a
+// message) is held as it is and drawn at the end it passed.
 Element.prototype.fraction = function (v) {
-  return (v - this.range[0]) / (this.range[1] - this.range[0]);
+  return clamp((v - this.range[0]) / (this.range[1] - this.range[0]), 0, 1);
 };
 
 Element.prototype.at = function (r, x) {
@@ -238,7 +241,7 @@ Range.prototype = Object.create(Element.prototype);
 Range.prototype.accept = function (atoms) {
   var a = Number(atoms[0]), b = Number(atoms[1]);
   if (isNaN(a) || isNaN(b)) return false;
-  this.value = [snap(this, Math.min(a, b)), snap(this, Math.max(a, b))];
+  this.value = [Math.min(a, b), Math.max(a, b)];
   return true;
 };
 
@@ -434,7 +437,7 @@ Curve.prototype.accept = function (atoms) {
   for (var i = 0; i < atoms.length; i += 2) {
     var x = Number(atoms[i]), y = Number(atoms[i + 1]);
     if (isNaN(x) || isNaN(y)) return false;
-    pts.push([tidy(clamp(x, 0, 1)), snap(this, y)]);
+    pts.push([tidy(clamp(x, 0, 1)), y]);
   }
   pts.sort(function (a, b) { return a[0] - b[0]; });
   pts[0][0] = 0;
@@ -555,7 +558,7 @@ List.prototype.accept = function (atoms) {
   for (var i = 0; i < atoms.length && i < 256; i++) {
     var n = Number(atoms[i]);
     if (isNaN(n)) return false;
-    out.push(snap(this, n));
+    out.push(n);
   }
   if (!out.length) return false;
   this.value = out;
@@ -645,7 +648,7 @@ Knob.prototype = Object.create(Element.prototype);
 
 Knob.prototype.fraction = function (v) {
   if (!this.log) return Element.prototype.fraction.call(this, v);
-  return Math.log(Math.max(v, this.range[0]) / this.range[0]) / Math.log(this.range[1] / this.range[0]);
+  return clamp(Math.log(Math.max(v, this.range[0]) / this.range[0]) / Math.log(this.range[1] / this.range[0]), 0, 1);
 };
 
 /** The value at a fraction of the knob's turn. */

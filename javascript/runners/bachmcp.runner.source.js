@@ -18,7 +18,9 @@ What happens depends on the source mode:
                   score: it becomes the source, held, and every later run
                   starts again from it, without a dump. capture asks for a new
                   one. An input that arrives unasked becomes the source only
-                  when there is none yet.
+                  when there is none yet. Turning process_only_selection on or
+                  off while a source is held makes the next run ask again (as
+                  capture), since the roll holds the selection's results now.
   source_mode 0   destructive. Every run asks for the score, so it works on
                   what the roll holds now. An input that arrives unasked is
                   kept as the source but never run on by itself (no loop
@@ -55,6 +57,7 @@ function createSource(engine, options = {}) {
     from: "",              // "inlet"
     open: false,           // capture: the next input becomes the source
     processing: false,     // a dump went out, the score has not come in yet
+    behind: false,         // process_only_selection changed: the roll holds more than the source, the next run asks
   };
 
   /** No score answered the dump: stop waiting, so that the next change asks again. */
@@ -95,13 +98,15 @@ function createSource(engine, options = {}) {
 
   const hooks = {
     request() {
-      if (s.score && !destructive()) return false;  // non-destructive: the held source
+      if (s.score && !destructive() && !s.behind) return false;  // non-destructive: the held source
+      if (s.behind) s.open = true;                                // the answer becomes the source, as capture
       askForScore();
       return true;
     },
     stale: destructive,                              // the roll may hold something else now
     setting(name) {
       if (name === "source_mode") setProcessing(false);
+      if (name === "process_only_selection" && s.score && !destructive()) s.behind = true;
     },
     // spec: () => ({ source: info() }),  // commented out for now: the panel does not show the source
     bypassed(on) {
@@ -119,6 +124,7 @@ function createSource(engine, options = {}) {
     if (what === "clear") {
       s.score = null;
       s.from = "";
+      s.behind = false;
       engine.state.changed = true;
       tellPanelSource();
       return;
@@ -137,6 +143,7 @@ function createSource(engine, options = {}) {
     if (destructive() || first) {
       s.score = score;
       s.from = "inlet";
+      s.behind = false;
       engine.state.changed = true;
       if (options.onNewSource) options.onNewSource(score);
       tellPanelSource();

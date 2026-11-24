@@ -112,8 +112,10 @@ function snap(spec, x) {
 }
 
 function formatNumber(x, step) {
-  if (step >= 1 || Math.round(x) === x) return String(Math.round(x));
-  var digits = step > 0 ? Math.min(4, Math.max(0, Math.ceil(-Math.log(step) / Math.LN10))) : 3;
+  if (Math.round(x) === x) return String(Math.round(x));
+  var digits = step > 0 && step < 1 ? Math.min(4, Math.max(0, Math.ceil(-Math.log(step) / Math.LN10))) : 3;
+  // a value between the steps (set by a message) shows its own digits, as a free one would
+  if (Math.abs(Number(x.toFixed(digits)) - x) > 1e-9) digits = Math.max(digits, 3);
   var s = x.toFixed(digits);
   if (s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
   return s;

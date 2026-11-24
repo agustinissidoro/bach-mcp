@@ -49,12 +49,9 @@ function decimals(x) {
   return Number(Number(x).toFixed(6));
 }
 
-function snapTo(spec, x) {
-  const [lo, hi] = spec.range;
-  x = clamp(x, lo, hi);
-  if (spec.step > 0) x = clamp(lo + Math.round((x - lo) / spec.step) * spec.step, lo, hi);
-  return decimals(x);
-}
+// The range and the step are the panel's: where a drag goes, where it lands, how many
+// digits it shows. The runner never clamps or snaps: a value it receives (a message,
+// the panel, a preset, the file's own default) is the value the algorithm gets.
 
 function rangeOf(raw, name, fallback) {
   const r = raw === undefined ? fallback : raw;
@@ -64,8 +61,13 @@ function rangeOf(raw, name, fallback) {
   return [r[0], r[1]];
 }
 
+// Whole numbers over a span wider than this ([1, 8], [0, 100]) read as a count: whole
+// values only. Over a narrower one ([-1, 1], [0, 2]) they read as an amount: free.
+const WHOLE_SPAN = 2;
+
+/** The step a declaration without one gets: 1 for a count, 0 (free) for anything else. */
 function autoStep(numbers, range) {
-  return numbers.every(Number.isInteger) && range[1] - range[0] > 1 ? 1 : 0;
+  return numbers.every(Number.isInteger) && range[1] - range[0] > WHOLE_SPAN ? 1 : 0;
 }
 
 // What a number parameter is, read from its unit and range, so that the panel can show
@@ -158,7 +160,7 @@ function normalizeSpec(name, raw) {
     const v = s.value === undefined ? spec.range[0] : s.value;
     if (!isNumber(v)) throw new AlgoError(`params.${name}: "value" must be a number`);
     spec.step = s.step !== undefined ? s.step : autoStep([spec.range[0], spec.range[1], v], spec.range);
-    spec.value = snapTo(spec, v);
+    spec.value = v;
   } else if (type === "range") {
     spec.range = rangeOf(s.range, name);
     const v = s.value === undefined ? spec.range.slice() : s.value;
@@ -166,7 +168,7 @@ function normalizeSpec(name, raw) {
       throw new AlgoError(`params.${name}: "value" must be [low, high], e.g. [${spec.range[0]}, ${spec.range[1]}]`);
     }
     spec.step = s.step !== undefined ? s.step : autoStep(spec.range.concat(v), spec.range);
-    spec.value = v.map((x) => snapTo(spec, x)).sort((a, b) => a - b);
+    spec.value = v.slice().sort((a, b) => a - b);
   } else if (type === "toggle") {
     spec.value = Boolean(s.value);
   } else if (type === "menu") {
@@ -182,7 +184,7 @@ function normalizeSpec(name, raw) {
   } else if (type === "seed") {
     spec.range = rangeOf(s.range, name, [0, 9999]);
     spec.step = 1;
-    spec.value = snapTo(spec, isNumber(s.value) ? s.value : 1);
+    spec.value = isNumber(s.value) ? s.value : 1;
   } else if (type === "curve") {
     spec.range = rangeOf(s.range, name, [0, 1]);
     spec.step = s.step || 0;
@@ -195,7 +197,7 @@ function normalizeSpec(name, raw) {
       throw new AlgoError(`params.${name}: a list needs "value": 1 to ${MAX_LIST} numbers, e.g. [250, 250, 500]`);
     }
     spec.step = s.step !== undefined ? s.step : autoStep(spec.range.concat(v), spec.range);
-    spec.value = v.map((x) => snapTo(spec, x));
+    spec.value = v.slice();
   }
   if (spec.range && spec.step > spec.range[1] - spec.range[0]) spec.step = 0;
   if (spec.kind !== undefined) spec.grid = gridOf(spec, s.step);
@@ -208,7 +210,7 @@ function curvePoints(spec, v, name) {
         v.every((p) => Array.isArray(p) && p.length === 2 && p.every(isNumber)))) {
     throw new AlgoError(`params.${name}: a curve "value" is a list of [x, y] points, x from 0 to 1, e.g. [[0, 0], [1, 1]]`);
   }
-  const pts = v.map(([x, y]) => [decimals(clamp(x, 0, 1)), snapTo(spec, y)]).sort((a, b) => a[0] - b[0]);
+  const pts = v.map(([x, y]) => [decimals(clamp(x, 0, 1)), y]).sort((a, b) => a[0] - b[0]);
   pts[0][0] = 0;
   pts[pts.length - 1][0] = 1;
   return pts;
@@ -249,10 +251,10 @@ function coerce(spec, atoms) {
     case "slider":
     case "seed":
       if (!isNumber(nums[0])) throw bad();
-      return snapTo(spec, nums[0]);
+      return nums[0];
     case "range":
       if (!(nums.length >= 2 && isNumber(nums[0]) && isNumber(nums[1]))) throw bad();
-      return [snapTo(spec, nums[0]), snapTo(spec, nums[1])].sort((a, b) => a - b);
+      return [nums[0], nums[1]].sort((a, b) => a - b);
     case "toggle":
       if (atoms[0] === "true" || atoms[0] === "on") return true;
       if (atoms[0] === "false" || atoms[0] === "off") return false;
@@ -266,7 +268,7 @@ function coerce(spec, atoms) {
     }
     case "list":
       if (!(nums.length && nums.length <= MAX_LIST && nums.every(isNumber))) throw bad();
-      return nums.map((x) => snapTo(spec, x));
+      return nums.slice();
     case "curve": {
       if (!(nums.length >= 4 && nums.length % 2 === 0 && nums.every(isNumber))) throw bad();
       const pts = [];

@@ -9,7 +9,9 @@ transforms is always a score that came in at the inlet, so that anything
 transformations. write_to_playground writes the result, not the source.
 
 process_only_selection 1: the algorithm gets a score of the selected notes
-only. With dump_replacesel 1 (default) its result goes out alone, without
+only, moved so that its first chord is at 0, and its result is moved back by
+the same amount: an algorithm that copies its source keeps the onsets, one that
+writes from 0 lands where the selection starts. With dump_replacesel 1 (default) its result goes out alone, without
 header, as "addchords replacesel dictionary <name>": bach.roll replaces its
 selection with it (the new notes stay selected, so the next run works on them).
 With dump_replacesel 0 the other notes are put back unchanged around it and the
@@ -36,6 +38,7 @@ function create(engine) {
   const source = createSource(engine);
   let rest = null;  // process_only_selection 1: the notes left out of the run, put back after it
   let replacing = false;  // the last output was the result alone, for addchords replacesel
+  let offset = 0;         // where the selection starts: the algorithm sees it at 0
 
   return Object.assign({}, source.hooks, {
     name: "transformer",
@@ -43,13 +46,16 @@ function create(engine) {
     messages: source.messages,
     source() {
       rest = null;
+      offset = 0;
       const s = source.state;
       if (!engine.state.selectedOnly || !s.score) return s.score;
       const parts = sel.split(s.score);
       rest = parts.rest;
-      return parts.picked;
+      offset = sel.start(parts.picked);
+      return sel.shift(parts.picked, -offset);
     },
     output(score) {
+      if (rest) score = sel.shift(score, offset);  // back where the selection was
       replacing = Boolean(rest) && engine.state.replaceSel;
       if (replacing) return { voices: score.voices || [] };  // addchords takes no header
       return rest ? sel.merge(rest, score) : score;

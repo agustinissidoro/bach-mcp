@@ -463,8 +463,11 @@ mode.
 
 - Write only the starting value in the code; the range lives in `params`.
   A Param is read, never assigned.
-- A range of whole numbers gives whole values only: for anything finer, add
-  `"step": 0.01`.
+- A range of whole numbers wider than 2 (`[1, 16]`, `[0, 100]`) gives whole
+  values only; a narrower one (`[-1, 1]`, `[0, 2]`) slides freely. `"step": 1`
+  or `"step": 0` sets it yourself. The range and the step are the panel's:
+  a value sent by a message arrives as sent, so clamp in the code where a
+  limit matters (a feedback below 1).
 - `"unit"` is a label: `"Hz"`, `"ms"`, `"dB"`, `"st"`, `"cents"`, `"%"`.
   Prefer the units a musician reads: decibels for levels (`dbtoa`),
   milliseconds for times (`mstosamps`), Hz or MIDI notes for pitch.

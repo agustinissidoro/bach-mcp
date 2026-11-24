@@ -194,7 +194,13 @@ the panel already shows them.
 | curve | `{ type: "curve", range: [0, 1], value: [[0, 0], [1, 1]] }` | a function: `p.name(t)`, t from 0 to 1 |
 | list | `{ type: "list", range: [50, 2000], value: [250, 250, 500] }` | an array of numbers |
 
-A range of whole numbers gives whole values; add `step: 0.01` for decimals.
+A range of whole numbers wider than 2 (`[1, 64]`, `[0, 100]`) gives whole
+values; a narrower one (`[-1, 1]`, `[0, 2]`) and any range with a decimal slide
+freely. `step` sets it yourself: `step: 1` for whole values, `step: 0` for free
+ones. The range and the step are the panel's: where a drag goes and lands. A
+value sent by a message reaches `p` exactly as sent, between the steps or
+outside the range, so round or clamp in the code where the algorithm needs a
+whole number or a limit (`Math.round(p.times)`, `clamp(p.amount, 0, 1)`).
 Give every number its `unit`: `"mc"` for a pitch or an interval, `"ms"` for a
 time. A pitch parameter always spans C1 to G10 (1200 to 12700), and a pitch
 that leaves it comes back by octaves. A **register** starts at the full range,

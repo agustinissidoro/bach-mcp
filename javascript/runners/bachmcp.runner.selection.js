@@ -17,6 +17,8 @@ addresses them: [voice, chord, note], 1-based.
     only(score, addresses)           a score of the notes at those addresses, each flagged selected
     mark(score, addresses)           the whole score, the notes at those addresses flagged selected, no other
     allAddresses(score)              every note's address
+    start(score)                     the earliest chord onset (0 for a score without chords)
+    shift(score, ms)                 a copy, every chord onset and header marker onset moved by ms
     bracket(list)                    an llll as Max atoms: [[1, 2, 3]] -> "[", "[", 1, 2, 3, "]", "]"
 */
 "use strict";
@@ -84,6 +86,28 @@ function merge(rest, result) {
   return out;
 }
 
+function start(score) {
+  let first = Infinity;
+  for (const v of score.voices || []) for (const c of (v && v.chords) || []) {
+    const onset = Number(c && c.onset);
+    if (Number.isFinite(onset) && onset < first) first = onset;
+  }
+  return Number.isFinite(first) ? first : 0;
+}
+
+function shift(score, ms) {
+  const out = copy(score);
+  if (!ms) return out;
+  for (const v of out.voices || []) for (const c of (v && v.chords) || []) {
+    if (c && Number.isFinite(Number(c.onset))) c.onset = Number(c.onset) + ms;
+  }
+  const markers = out.header && out.header.markers;
+  if (Array.isArray(markers)) for (const m of markers) {
+    if (m && Number.isFinite(Number(m.onset))) m.onset = Number(m.onset) + ms;
+  }
+  return out;
+}
+
 function allAddresses(score) {
   const out = [];
   (score.voices || []).forEach((v, vi) => ((v && v.chords) || []).forEach((c, ci) =>
@@ -126,4 +150,4 @@ function bracket(list) {
   return out;
 }
 
-module.exports = { SELECTED, isSelected, split, merge, only, mark, allAddresses, bracket };
+module.exports = { SELECTED, isSelected, split, merge, only, mark, allAddresses, start, shift, bracket };

@@ -382,7 +382,9 @@ function createEngine(max) {
   function setProcessOnlySelection(value) {
     const m = flag(value);
     if (m === null) return refuse(`process_only_selection is 0 (the whole score) or 1 (only the selected notes), got ${value}`);
+    const was = state.selectedOnly;
     state.selectedOnly = m === 1;
+    if (was !== state.selectedOnly) hook("setting", "process_only_selection");
     tellPanel("process_only_selection", m);
     changed();
   }

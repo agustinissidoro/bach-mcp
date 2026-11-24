@@ -9,7 +9,7 @@ new file replaces the old one):
 The presets of <old.js> are written into <new.js> (in place), keeping in every slot
 only the parameters the new file still declares with the same meaning (name, type,
 kind and unit: paramspec.sameMeaning) and whose stored value the new declaration
-accepts (coerce: snapped into its range, a menu option it still has). A slot left
+accepts (coerce: a number of the right shape, a menu option it still has). A slot left
 with nothing is dropped. A new file that declares presets itself keeps its own.
 
 Replies one JSON line:
