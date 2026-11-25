@@ -129,6 +129,11 @@ class ProcessRunner:
         self._lock = threading.Lock()
         self._instances: Dict[str, _Instance] = {}
 
+    def _scope(self, instance: "_Instance") -> Dict[str, Any]:
+        """What the worker gives audio_corpus.set_scope: the instance's databases, and the playground
+        (where the default database is looked for)."""
+        return {**instance.settings.scope(), "playground": self.playground() or ""}
+
     def _get(self, name: str) -> _Instance:
         """Call with the lock held."""
         if name not in self._instances:
@@ -234,7 +239,7 @@ class ProcessRunner:
             instance = self._get(name)
             instance.stopped, instance.syncing = False, True
             request = {"file": file, "spec": spec, "values": dict(instance.values), "source": instance.source,
-                       "scope": instance.settings.scope(),
+                       "scope": self._scope(instance),
                        "target": instance.target, "goal": instance.goal, "models": self.models if self.analysis else {}}
         try:
             answer = self._ask(instance, {"listen": request})
@@ -254,7 +259,7 @@ class ProcessRunner:
             target = instance.target
             variations = instance.settings.variations
             request = {"source": instance.source, "target": target, "values": dict(instance.values),
-                       "scope": instance.settings.scope()}
+                       "scope": self._scope(instance)}
         if variations > 1:  # the listen test made one: run them all, into the pshmbuffer
             answer = self._run_once(name, instance, request)
             return bool(answer and answer.get("ok"))
@@ -320,7 +325,7 @@ class ProcessRunner:
                     return
                 instance.wanted = False
                 request = {"source": instance.source, "target": instance.target, "values": dict(instance.values),
-                           "scope": instance.settings.scope()}
+                           "scope": self._scope(instance)}
             self._run_once(name, instance, request)
 
     def _run_once(self, name: str, instance: _Instance, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:

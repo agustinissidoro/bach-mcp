@@ -169,11 +169,13 @@ def static_check(code: str, declared: Set[str], settings: Optional[BufferSetting
 
 
 def run_check(path: str, params_path: Optional[str], python: str = sys.executable,
-              timeout: float = CHECK_TIMEOUT_SECONDS) -> Dict[str, Any]:
-    """worker.py --check on the file. Returns its JSON answer, or {"ok": False, "error": ...}."""
+              timeout: float = CHECK_TIMEOUT_SECONDS, playground: str = "") -> Dict[str, Any]:
+    """worker.py --check on the file. Returns its JSON answer, or {"ok": False, "error": ...}.
+    playground: where its default database is looked for (<playground>/databases/)."""
+    env = {**os.environ, "BACHMCP_PLAYGROUND": playground} if playground else None
     try:
         done = subprocess.run([python, WORKER, "--check", path] + (["--params", params_path] if params_path else []),
-                              capture_output=True, text=True, timeout=timeout)
+                              capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": f"it did not finish within {timeout:.0f} s on a two-second test sound"}
     rows = [row for row in done.stdout.splitlines() if row.strip()]
@@ -282,7 +284,7 @@ def register_buffer_process_tools(mcp: FastMCP, bridge: MaxBridge, python: str =
             f.write(text)
         with open(draft_params, "w", encoding="utf-8") as f:
             json.dump(declared, f)
-        result = run_check(draft, draft_params, python=python)
+        result = run_check(draft, draft_params, python=python, playground=t.playground)
         os.remove(draft_params)
         if not result.get("ok"):
             os.remove(draft)

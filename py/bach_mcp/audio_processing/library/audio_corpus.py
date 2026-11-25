@@ -414,15 +414,18 @@ class Corpus:
 
 _open: Dict[str, Corpus] = {}
 _scope: Optional[Dict[str, Dict[str, List[str]]]] = None  # None: every database, all of it
+_playground = ""  # the instance's playground (the scope says it; else BACHMCP_PLAYGROUND): its databases/
 
 
 def set_scope(scope: Optional[Dict[str, Any]]) -> None:
     """The buffer instance's soundfile_sources (the worker sets it before each run):
-    {"databases": {path ("": bachmcp.toml's): {"in": folders (none: all), "out": folders}}}."""
-    global _scope
+    {"databases": {path ("": bachmcp.toml's): {"in": folders (none: all), "out": folders}},
+     "playground": <folder>}   where the default database is looked for first (<playground>/databases/)."""
+    global _scope, _playground
     if scope is None:
         _scope = None
         return
+    _playground = scope.get("playground") or _playground
     out: Dict[str, Dict[str, List[str]]] = {}
     for path, rules in (scope.get("databases") or {}).items():
         if not path:
@@ -440,7 +443,8 @@ def _folder_like(folder: str) -> str:
 
 def database_path() -> str:
     """The database a process file reads: BACHMCP_DATABASE, else bachmcp.toml [audio] database, else
-    the one .db file of the package's databases/ folder."""
+    the one .db file of the playground's databases/ folder (the instance's playground; else the
+    package's own playground/), else of the package's databases/ folder."""
     named = os.environ.get("BACHMCP_DATABASE", "")
     if not named:
         try:
@@ -451,12 +455,18 @@ def database_path() -> str:
     repo = os.path.abspath(os.path.join(PY, ".."))
     if named:
         return named if os.path.isabs(named) else os.path.join(repo, named)
-    folder = os.path.join(repo, "databases")
-    found = sorted(f for f in os.listdir(folder) if f.endswith(".db")) if os.path.isdir(folder) else []
-    if len(found) != 1:
-        raise CorpusError(("no database in databases/" if not found else f"several databases in databases/ ({', '.join(found)})")
-                          + ': name one in bachmcp.toml, [audio] database = "databases/<name>.db"')
-    return os.path.join(folder, found[0])
+    playground = _playground or os.environ.get("BACHMCP_PLAYGROUND", "")
+    folders = [os.path.join(playground, "databases")] if playground else []
+    folders += [os.path.join(repo, "playground", "databases"), os.path.join(repo, "databases")]
+    for folder in dict.fromkeys(os.path.abspath(f) for f in folders):
+        found = sorted(f for f in os.listdir(folder) if f.endswith(".db")) if os.path.isdir(folder) else []
+        if len(found) == 1:
+            return os.path.join(folder, found[0])
+        if found:
+            raise CorpusError(f"several databases in {folder} ({', '.join(found)}): name one, "
+                              "database <name> in Max, or [audio] database in bachmcp.toml")
+    raise CorpusError("no database in " + ", ".join(dict.fromkeys(os.path.abspath(f) for f in folders))
+                      + ": put one in the playground's databases/ folder, or name one in bachmcp.toml")
 
 
 def corpus(path: Optional[str] = None) -> Corpus:
