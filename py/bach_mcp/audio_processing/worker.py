@@ -14,12 +14,17 @@ and what was done to them. That manifest is written next to the file (<name>.man
 A file that reads the sound database (audio_corpus) makes sound from nothing: it runs with
 an empty source too.
 
-A request:  {"run": {"file": ..., "spec": {params}, "values": {...}, "source": <shm>, "target": <shm>}}
-            with "variations": N (> 1), the file runs N times with p["variation"] = 1 .. N, each
-            into <target>.<n> of the bachmcp.pshmbuffer~ <target> (made, or resized to N); answers
-            the first one's frames, the ms of all, and "variations": N
+A request:  {"run": {"file": ..., "spec": {params}, "values": {...}, "source": <shm>, "target": <pshm>}}
+            The source is a bachmcp.shmbuffer~; the target is always a bachmcp.pshmbuffer~: one run
+            writes <target>.1 and leaves exactly one memory. With "variations": N (> 1), the file
+            runs N times with p["variation"] = 1 .. N, each into <target>.<n> (the set made, or
+            resized to N); answers the first one's frames, the ms of all, and "variations": N
 An answer:  {"ok": true, "ms": ..., "frames": ..., "channels": ..., "sr": ..., "warnings": [...]}
             {"ok": false, "error": ..., "line": ...}
+
+A request:  {"load": {"file": ...}}     the file executed (its imports, what it loads at the top), no
+            sound processed: a run after it starts at once; answers {"ok": true} or the error
+            with its line
 
 A request:  {"describe": {"shm": <shm>, "title": ..., "goal": <the prompt>, "models": {"tagger": <path>, "clap": <path>}}}
 An answer:  {"ok": true, "text": <analysis.describe, with the labels and CLAP lines>, "features": {...},
@@ -28,7 +33,7 @@ An answer:  {"ok": true, "text": <analysis.describe, with the labels and CLAP li
 A request:  {"listen": <as run, with "goal" and "models">}   the listen test: the code on the real
             source, kept here and NOT written to the target; answers as run, with "text" (the
             result described), "changes" (source -> result) and "before"/"similarity" (CLAP)
-            {"commit": {"target": <shm>}}                what the last listen made, into the target
+            {"commit": {"target": <pshm>}}               what the last listen made, into <target>.1
 
 A description is kept for each memory and serial: the same sound is analysed once; only its
 CLAP similarity to a new goal is computed again (from the kept embedding).
@@ -187,7 +192,8 @@ def call(fn: Callable[..., Any], path: str, x: np.ndarray, sr: float, p: Dict[st
 
 
 def _source(source: str, target: str) -> Tuple[np.ndarray, float]:
-    """The samples of the source memory and its rate; no memory: no frames, at the target's rate."""
+    """The samples of the source memory and its rate; no memory: no frames, at the rate of the
+    target's first memory (none: the test rate)."""
     try:
         src = ShmBuffer(source)
         x, sr = src.read(), src.sr
@@ -196,12 +202,12 @@ def _source(source: str, target: str) -> Tuple[np.ndarray, float]:
         x, sr = np.zeros((0, 1), dtype=np.float32), 0.0
     if not sr:
         try:
-            dest = ShmBuffer(target)
-            sr = dest.sr
-            dest.close()
+            first = ShmBuffer(f"{target}.1")
+            sr = first.sr
+            first.close()
         except NoShmBuffer:
-            sr = TEST_SR
-    return x, sr
+            pass
+    return x, sr or TEST_SR
 
 
 def _process(request: Dict[str, Any], x: np.ndarray, sr: float,
@@ -226,7 +232,7 @@ def _process(request: Dict[str, Any], x: np.ndarray, sr: float,
 
 
 def _manifest_path(file: str) -> str:
-    """<processes>/<name>.manifest.json for <name>.py, or for its draft in .history."""
+    """<recipes>/<name>.manifest.json for <name>.py, or for its draft in .history."""
     folder, base = os.path.split(os.path.abspath(file))
     if base.startswith(".") and base.endswith(".draft.py"):
         folder, base = os.path.dirname(folder), base[1:-len(".draft.py")] + ".py"
@@ -253,22 +259,14 @@ def _made_of(manifest: Dict[str, Any]) -> Optional[Dict[str, int]]:
     return {"sounds": len(manifest.get("placed", [])), "units": len(units), "files": len(manifest.get("files", []))}
 
 
-def _write(target: str, y: np.ndarray, sr: float) -> None:
-    try:
-        dest = ShmBuffer(target)
-    except NoShmBuffer:
-        dest = ShmBuffer.create(target, y.shape[0], y.shape[1], sr)
-    dest.write(y, sr=sr)
-    dest.close()
-
-
 def _ran(y: np.ndarray, sr: float, warnings: List[str], millis: float, manifest: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return {"ok": True, "ms": round(millis), "frames": int(y.shape[0]), "channels": int(y.shape[1]),
             "sr": sr, "warnings": warnings, **({"made_of": _made_of(manifest)} if manifest else {})}
 
 
-def _write_variations(target: str, results: List[Tuple[np.ndarray, float]]) -> None:
-    """Each result into <target>.<n> of the pshmbuffer <target>, which ends with exactly that many."""
+def _write(target: str, results: List[Tuple[np.ndarray, float]]) -> None:
+    """Each result into <target>.<n> of the pshmbuffer <target>, which ends with exactly that many
+    (one run: <target>.1). Whatever else holds the name (an old plain shmbuffer) is replaced."""
     try:
         poly = PShmBuffer(target)
     except NoShmBuffer:
@@ -287,26 +285,26 @@ def _write_variations(target: str, results: List[Tuple[np.ndarray, float]]) -> N
 
 def run_variations(request: Dict[str, Any]) -> Dict[str, Any]:
     count = int(request["variations"])
-    x, sr = _source(request["source"], request["target"] + ".1")
+    x, sr = _source(request["source"], request["target"])
     results, warnings, total = [], [], 0.0
     for n in range(1, count + 1):
         y, out_sr, said, millis = _process(request, x, sr, variation=n)
         results.append((y, out_sr))
         warnings += [f"variation {n}: {w}" for w in said]
         total += millis
-    _write_variations(request["target"], results)
+    _write(request["target"], results)
     _keep_manifest(request["file"], dict(_made))
     y, out_sr = results[0]
     return {**_ran(y, out_sr, warnings, total, dict(_made)), "variations": count}
 
 
 def run(request: Dict[str, Any]) -> Dict[str, Any]:
-    """One run: the source memory through the file's process, into the target memory."""
+    """One run: the source memory through the file's process, into <target>.1."""
     if int(request.get("variations") or 1) > 1:
         return run_variations(request)
     x, sr = _source(request["source"], request["target"])
     y, out_sr, warnings, millis = _process(request, x, sr)
-    _write(request["target"], y, out_sr)
+    _write(request["target"], [(y, out_sr)])
     _keep_manifest(request["file"], dict(_made))
     return _ran(y, out_sr, warnings, millis, dict(_made))
 
@@ -341,10 +339,10 @@ def listen(request: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def commit(request: Dict[str, Any]) -> Dict[str, Any]:
-    """Write what the last listen made into the target memory: Max gets it."""
+    """Write what the last listen made into <target>.1 (the only memory left): Max gets it."""
     if "y" not in _pending:
         return {"ok": False, "error": "nothing was listened to"}
-    _write(request["target"], _pending["y"], _pending["sr"])
+    _write(request["target"], [(_pending["y"], _pending["sr"])])
     _keep_manifest(_pending["file"], _pending.get("manifest") or {})
     answer = _ran(_pending["y"], _pending["sr"], _pending["warnings"], _pending["ms"], _pending.get("manifest"))
     _pending.clear()
@@ -475,6 +473,12 @@ def _answer(out, payload: Dict[str, Any]) -> None:
     out.flush()
 
 
+def load_file(request: Dict[str, Any]) -> Dict[str, Any]:
+    """The file executed now, nothing run (see the module's docstring)."""
+    load(request["file"])
+    return {"ok": True}
+
+
 def _failure(exc: BaseException) -> Dict[str, Any]:
     if isinstance(exc, ProcessError):
         return {"ok": False, "error": str(exc), "line": exc.line}
@@ -502,7 +506,7 @@ def main(argv: List[str]) -> int:
         try:
             request = json.loads(text)
             kind = next(iter(request))
-            _answer(out, {"run": run, "describe": describe, "listen": listen, "commit": commit}[kind](request[kind]))
+            _answer(out, {"run": run, "load": load_file, "describe": describe, "listen": listen, "commit": commit}[kind](request[kind]))
         except BaseException as exc:  # noqa: BLE001 — answer, keep serving
             if isinstance(exc, KeyboardInterrupt):
                 raise

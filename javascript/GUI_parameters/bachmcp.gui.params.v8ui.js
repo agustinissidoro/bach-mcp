@@ -146,9 +146,22 @@ function readText(path) {
 readText.local = 1;
 
 /**
+ * The declared params of a recipe's .json ({"name": {"type": ...}, ...}, as send_buffer_process
+ * writes recipes/<name>.json) as the panel draws them: the algorithm runner's own normalizer
+ * (bachmcp.runner.paramspec.js), each at its declared value. A list (send_gen's) passes as it is.
+ */
+function panelParams(params) {
+  if (Array.isArray(params) || !params || typeof params !== "object") return params;
+  const paramspec = require("bachmcp.runner.paramspec.js");
+  return paramspec.normalizeParams(params).map((s) => Object.assign({}, s, { value: s.default }));
+}
+panelParams.local = 1;
+
+/**
  * spec_file <path>: the spec read from a JSON file ({"description", "params": [...]}, as send_gen
- * writes gen/<name>.json). The path may come in pieces (a message is split at its spaces). A file
- * without a title or a path gets them from where it is: <name>.json is titled <name>.
+ * writes gen/<name>.json; or "params": {...} by name, as a recipe's recipes/<name>.json). The path
+ * may come in pieces (a message is split at its spaces). A file without a title or a path gets them
+ * from where it is: <name>.json is titled <name>.
  */
 function spec_file(...pieces) {
   if (!panel) return;
@@ -164,6 +177,11 @@ function spec_file(...pieces) {
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return post(`bachmcp.gui.params: spec_file ${path} must hold an object with "params"\n`);
+  }
+  try {
+    data.params = panelParams(data.params);
+  } catch (e) {
+    return post(`bachmcp.gui.params: spec_file ${path}: ${e.message || e}\n`);
   }
   if (!data.title) data.title = path.split(/[\/:]/).pop().replace(/\.json$/i, "");
   if (!data.path) data.path = path;

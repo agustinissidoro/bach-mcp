@@ -7,7 +7,8 @@ Node for Max ([node.script]): makes sure a playground folder is there, with
     <path>/scores
     <path>/prompts
     <path>/gen
-    <path>/processes
+    <path>/recipes
+    <path>/databases
     <path>/skills              the skill files the model's skill is built from (<name>.md)
     <path>/skills/profiles     lists of skills (<name>.json)
     <path>/skills/core-algorithmic.md
@@ -53,7 +54,7 @@ const path = require("path");
 let Max = null;
 try { Max = require("max-api"); } catch (e) { /* outside Max: print instead */ }
 
-const FOLDERS = ["algorithms", "scores", "prompts", "gen", "processes", "skills", path.join("skills", "profiles")];
+const FOLDERS = ["algorithms", "scores", "prompts", "gen", "recipes", "databases", "skills", path.join("skills", "profiles")];
 const PROMPT = path.join(__dirname, "..", "..", "py", "bach_mcp", "prompt");
 // [the package's skill, its copy in the playground], and [a profile, the skills it lists]
 const CORES = [

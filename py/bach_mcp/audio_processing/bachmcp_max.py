@@ -125,7 +125,10 @@ def out(*values):
 
 def _fail(name, exc):
     print(traceback.format_exc().rstrip(), file=sys.stderr, flush=True)
-    _send({"error": name, "message": f"{type(exc).__name__}: {exc}"})
+    try:
+        _send({"error": name, "message": f"{type(exc).__name__}: {exc}"})
+    except Exception as e:  # noqa: BLE001 — a failure that cannot be said must not end the loop
+        print(f"bachmcp_max: could not report the failure of {name}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
 
 
 def call(name, args=()):
@@ -140,14 +143,15 @@ def call(name, args=()):
         if result is not None:
             out(name, result)
         return result
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — any error of the function: said, and the script goes on
         _fail(name, e)
         return None
 
 
 def loop():
-    """Answer calls from Max until eof, stop or the end of the patch."""
+    """Answer calls from Max until eof, stop or the end of the patch. Says in the log why it ended."""
     reader, _ = _open()
+    why = "the channel closed (eof, or the object was deleted)"
     try:
         for line in reader:
             line = line.strip()
@@ -159,6 +163,14 @@ def loop():
             except (ValueError, KeyError, TypeError) as e:
                 print(f"bachmcp_max: not a call: {line[:200]} ({e})", file=sys.stderr, flush=True)
                 continue
-            call(name, args)
-    except KeyboardInterrupt:    # "stop": end quietly
-        pass
+            try:
+                call(name, args)
+            except Exception as e:  # noqa: BLE001 — never ends the loop
+                print(f"bachmcp_max: {name}: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    except KeyboardInterrupt:    # "stop" (SIGINT): end quietly
+        why = "stopped (SIGINT: the object got stop)"
+    except BaseException as e:
+        why = f"{type(e).__name__}: {e}"
+        raise
+    finally:
+        print(f"bachmcp_max: the loop ended: {why}", file=sys.stderr, flush=True)

@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.shmbuffer~" module="bachmcp" category="bachmcp">
+	<digest>Samples in shared memory, for Python to read and write</digest>
+	<description>Holds samples in a POSIX shared memory object, <i>/bachmcp.&lt;name&gt;</i>, so that another program, notably Python (<i>ShmBuffer</i> in <i>py/bach_mcp/utilities/shmbuffer.py</i>), works on the very same memory: nothing is written to disk and nothing is sent. <at>source</at> fills the memory from a <o>buffer~</o> or a sound file; <m>bang</m> puts it into a <o>buffer~</o> (<at>target</at>, or one the object makes) and sends that buffer~'s name out of the left outlet. When Python changes the samples and says so (<i>touch()</i>, <i>write()</i>), the object hears it, and with <at>notify</at> 1 writes its buffer~ by itself. Whenever Max changes the memory, Python can hear it too (<i>wait()</i>). No audio: to play or show the samples, write them to a buffer~.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">audio</metadata>
+		<metadata name="tag">buffer</metadata>
+		<metadata name="tag">shared memory</metadata>
+		<metadata name="tag">python</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>bang: the memory into a buffer~; source, target, size, write, set_name, info</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>The name of the buffer~ just written</digest>
+		</outlet>
+		<outlet id="1" type="">
+			<digest>bang when done; info; written &lt;path&gt;</digest>
+		</outlet>
+	</outletlist>
+	<objarglist>
+		<objarg name="name" optional="0" type="symbol">
+			<digest>Memory name</digest>
+			<description>The memory is <i>/bachmcp.&lt;name&gt;</i>: at most 22 characters (macOS allows 31 with the prefix), no slash. With a name only, the object joins the memory if a program already made it, or makes an empty one.</description>
+		</objarg>
+		<objarg name="ms" optional="1" type="float">
+			<digest>Duration (ms)</digest>
+			<description>With a duration, the object makes a new, silent memory of this size, replacing what was under the name, at Max's sample rate.</description>
+		</objarg>
+		<objarg name="channels" optional="1" type="int">
+			<digest>Channels</digest>
+			<description>The channels of the new memory, 1 (default) to 1024.</description>
+		</objarg>
+	</objarglist>
+	<methodlist>
+		<method name="bang">
+			<arglist />
+			<digest>Write the memory to a buffer~</digest>
+			<description>Writes the memory into <at>target</at>, resized to the memory's frames, channels and sample rate; with no target, into a <o>buffer~</o> the object makes on first need, with a unique name. Then a <m>bang</m> out of the right outlet and the buffer~'s name out of the left one.</description>
+		</method>
+		<method name="source">
+			<arglist><arg name="buffer~ or file" optional="0" type="symbol" /></arglist>
+			<digest>Read a buffer~ or a sound file into the memory, now</digest>
+			<description>The same as <at>source</at>, and it reads it at once.</description>
+		</method>
+		<method name="target">
+			<arglist><arg name="buffer~" optional="1" type="symbol" /></arglist>
+			<digest>Write the memory into a buffer~, now</digest>
+			<description>The same as <at>target</at>, and it writes at once. Alone: no target; <m>bang</m> writes the object's own buffer~ again.</description>
+		</method>
+		<method name="size">
+			<arglist>
+				<arg name="ms" optional="0" type="float" />
+				<arg name="channels" optional="1" type="int" />
+			</arglist>
+			<digest>New, silent memory of this duration</digest>
+			<description>A new memory of this many ms at the memory's sample rate, with these channels (default: as they were). macOS can't resize a shared memory: a new size is a new memory under the same name, which Python follows by itself.</description>
+		</method>
+		<method name="sizeinsamps">
+			<arglist>
+				<arg name="frames" optional="0" type="int" />
+				<arg name="channels" optional="1" type="int" />
+			</arglist>
+			<digest>New, silent memory of this many frames</digest>
+			<description>As <m>size</m>, in frames.</description>
+		</method>
+		<method name="sr">
+			<arglist><arg name="Hz" optional="0" type="float" /></arglist>
+			<digest>Sample rate written in the memory</digest>
+			<description>Sets the sample rate held in the memory's header; the samples are left as they are.</description>
+		</method>
+		<method name="clear">
+			<arglist />
+			<digest>Silence</digest>
+			<description>Every sample to 0.</description>
+		</method>
+		<method name="set_name">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Go to another memory</digest>
+			<description>The object goes to this name. A memory already there: it joins it. None: the samples come along to the new name, and the old memory is removed if this object made it. <m>name</m> is the same.</description>
+		</method>
+		<method name="info">
+			<arglist />
+			<digest>Report the memory</digest>
+			<description>Out of the right outlet, one message each: <m>name</m>, <m>shm</m> (the name for <i>shm_open</i>), <m>frames</m>, <m>channels</m>, <m>sr</m>, <m>ms</m>, <m>serial</m> (raised by whoever changes the memory).</description>
+		</method>
+		<method name="write">
+			<arglist><arg name="file" optional="1" type="symbol" /></arglist>
+			<digest>Write the memory into a sound file</digest>
+			<description>As <o>buffer~</o> does: the format comes from the extension (<i>.wav .aif .caf .flac</i>; none: <i>.wav</i>), the sample type from <at>samptype</at>. No file: a save dialog. A bare name goes next to the patcher. Then <m>written</m> &lt;path&gt; out of the right outlet.</description>
+		</method>
+		<method name="writewave">
+			<arglist><arg name="file" optional="1" type="symbol" /></arglist>
+			<digest>Write a WAVE file</digest>
+			<description>As <m>write</m>, in WAVE format.</description>
+		</method>
+		<method name="writeaiff">
+			<arglist><arg name="file" optional="1" type="symbol" /></arglist>
+			<digest>Write an AIFF file</digest>
+			<description>As <m>write</m>, in AIFF format.</description>
+		</method>
+		<method name="writeflac">
+			<arglist><arg name="file" optional="1" type="symbol" /></arglist>
+			<digest>Write a FLAC file</digest>
+			<description>As <m>write</m>, in FLAC format.</description>
+		</method>
+		<method name="writecaf">
+			<arglist><arg name="file" optional="1" type="symbol" /></arglist>
+			<digest>Write a CAF file</digest>
+			<description>As <m>write</m>, in CAF format.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="source" get="1" set="1" type="symbol" size="1">
+			<digest>Where the samples come from</digest>
+			<description>A <o>buffer~</o> or a sound file (any format macOS reads: absolute, <i>Disk:/...</i>, or a name in Max's search path); a buffer~ of that name wins. The memory takes its format: frames, channels, sample rate, whatever the arguments. Given as an argument, it is read once the patcher is loaded, so the buffer~ may come later in the patch.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Source buffer~" />
+			</attributelist>
+		</attribute>
+		<attribute name="target" get="1" set="1" type="symbol" size="1">
+			<digest>The buffer~ the samples go to</digest>
+			<description>The <o>buffer~</o> <m>bang</m> writes into, resized to fit the memory. None: a buffer~ of the object's own.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Target buffer~" />
+			</attributelist>
+		</attribute>
+		<attribute name="notify" get="1" set="1" type="int" size="1">
+			<digest>Write when Python says it changed the samples</digest>
+			<description><m>1</m>: when the other program announces a change (in Python: <i>touch()</i> or <i>write()</i>, which post the Darwin notification <i>bachmcp.shmbuffer.&lt;name&gt;</i>), do as for <m>bang</m>. Nothing is polled: a change nobody announces is not seen. Either way, the Max console says <i>python written &lt;name&gt;</i>.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Notify of Changes" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+		<attribute name="samptype" get="1" set="1" type="symbol" size="1">
+			<digest>Sample type of written files</digest>
+			<description><m>int16</m>, <m>int24</m> (default), <m>int32</m> or <m>float32</m>.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="int24" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Sample Type of Written Files" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="4">
+					<enum name="int16" />
+					<enum name="int24" />
+					<enum name="int32" />
+					<enum name="float32" />
+				</attribute>
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<discussion>
+		The memory is a 64-byte header, then float32 samples interleaved by channel, as in a buffer~ (layout in <i>sources/bachmcp.shmbuffer~/source/bachmcp.shmbuffer.h</i>). In Python: <i>buf = ShmBuffer("name")</i>; <i>buf.array</i> is the samples themselves, float32, frames x channels; <i>buf.touch()</i> says they changed; <i>buf.write(samples, sr)</i> replaces them (another size: a new memory); <i>buf.wait()</i> sleeps until Max changes the memory (<at>source</at>, <m>size</m>, <m>sizeinsamps</m>, <m>sr</m>, <m>clear</m>). There is no lock: two programs writing at once get a mix of both. The memory is removed when the object that made it is freed; a retyped box or a reopened patch keeps it. Messages run in the main thread. <i>examples/python/shmbuffers.py</i>, run by <o>bachmcp.python</o>, shows the Python side.
+	</discussion>
+	<seealsolist>
+		<seealso name="bachmcp.pshmbuffer~" />
+		<seealso name="bachmcp.python" />
+		<seealso name="buffer~" />
+	</seealsolist>
+</c74object>

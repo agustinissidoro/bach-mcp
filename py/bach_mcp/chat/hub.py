@@ -49,10 +49,11 @@ Into the hub:
 
 A buffer instance (offline audio in Python, audio_processing/runner.py) is run by the hub:
 
-    <name> buffer_process_run                 run processes/<name>.py on its source shmbuffer
+    <name> buffer_process_run                 run recipes/<name>.py on its source shmbuffer
     <name> buffer_process_param <param> <value> ...  a panel change: kept, then a run
     <name> buffer_process_source <shmbuffer>  the bachmcp.shmbuffer~ it reads (default <name>-in)
-    <name> buffer_process_target <shmbuffer>  the one it writes (default <name>-out)
+    <name> buffer_process_target <pshmbuffer> the bachmcp.pshmbuffer~ it writes (default <name>,
+                                              the instance's own name): one run is <name>.1, variations .1 .. .N
     <name> buffer_process_stop                end the run in progress
 
 Out of the hub, to Max and to the page:
@@ -68,7 +69,7 @@ Out of the hub, to Max and to the page:
     <name> stopped
     <name> error <message>
     <name> processing                         a buffer instance's run began
-    <name> processed <ms> <frames> <channels> <sr>   its result is in the target shmbuffer
+    <name> processed <ms> <frames> <channels> <sr>   its result is in <target>.1 of the target pshmbuffer
     <name> process_note <text>                the result is silent, clips ...
     <name> process_error <text>
     <name> process_stopped

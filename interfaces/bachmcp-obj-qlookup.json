@@ -218,5 +218,36 @@
       "run",
       "shell"
     ]
+  },
+  "bachmcp.shmbuffer~": {
+    "digest": "Samples in shared memory, for Python to read and write",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "audio",
+      "buffer",
+      "shared memory",
+      "shm",
+      "python",
+      "samples"
+    ]
+  },
+  "bachmcp.pshmbuffer~": {
+    "digest": "A polybuffer~ of shared memories, for Python to read and write",
+    "module": "bachmcp",
+    "category": [
+      "bachmcp"
+    ],
+    "keywords": [
+      "audio",
+      "buffer",
+      "polybuffer",
+      "shared memory",
+      "shm",
+      "python",
+      "samples"
+    ]
   }
 }

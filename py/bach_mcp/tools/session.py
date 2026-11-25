@@ -19,7 +19,7 @@ its calls are always for the active one, also while another instance's prompt is
 being answered: the app it reaches marks them (calling_directly, registry.py).
 
     Target(name, type, playground)
-      .algorithms .scores .prompts .gen .processes      the playground's folders
+      .algorithms .scores .prompts .gen .processes (recipes/)     the playground's folders
       .algorithm_file .roll_file .gen_file .process_file
                                              <name>.js, <name>.json, <name>.genexpr, <name>.py in them
 """
@@ -130,7 +130,7 @@ class Target:
 
     @property
     def processes(self) -> str:
-        return os.path.join(self.playground, "processes")
+        return os.path.join(self.playground, "recipes")
 
     @property
     def process_file(self) -> str:

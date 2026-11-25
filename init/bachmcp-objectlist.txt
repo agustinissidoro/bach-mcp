@@ -14,3 +14,5 @@ max oblist "bachmcp" bachmcp.onnx~;
 max oblist "bachmcp" bachmcp.onnxb~;
 max oblist "bachmcp" bachmcp.database;
 max oblist "bachmcp" bachmcp.python;
+max oblist "bachmcp" bachmcp.shmbuffer~;
+max oblist "bachmcp" bachmcp.pshmbuffer~;

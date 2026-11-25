@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet href="./_c74_ref.xsl" type="text/xsl"?>
+
+<c74object name="bachmcp.pshmbuffer~" module="bachmcp" category="bachmcp">
+	<digest>A polybuffer~ of shared memories, for Python to read and write</digest>
+	<description>Like <o>polybuffer~</o>, it holds buffers named <i>&lt;name&gt;.1</i>, <i>&lt;name&gt;.2</i> ... <i>&lt;name&gt;.&lt;count&gt;</i>: in Max they are <o>buffer~</o> objects (<i>groove~ pepe.3</i> plays the third), and each one has a shared memory of the same name that another program, notably Python (<i>PShmBuffer</i> in <i>py/bach_mcp/utilities/shmbuffer.py</i>), reads and writes: each is a plain <o>bachmcp.shmbuffer~</o> memory, so <i>ShmBuffer("pepe.3")</i> is the third. A small index memory under the name itself says how many there are; <i>&lt;name&gt;</i> alone is not a buffer~, as with polybuffer~. The buffer~s exist in Max as soon as their memories do; a <o>buffer~</o> of that name already in a patch is used, not duplicated. Python may add memories, remove the last one, resize or rewrite any: the object follows on the next message, and at once with <at>notify</at> 1. No audio: the buffer~s hold what plays.</description>
+	<metadatalist>
+		<metadata name="author">Agustín Issidoro</metadata>
+		<metadata name="tag">bachmcp</metadata>
+		<metadata name="tag">audio</metadata>
+		<metadata name="tag">buffer</metadata>
+		<metadata name="tag">polybuffer</metadata>
+		<metadata name="tag">shared memory</metadata>
+		<metadata name="tag">python</metadata>
+	</metadatalist>
+	<inletlist>
+		<inlet id="0" type="">
+			<digest>bang, int: memories into buffer~s; load, append, remove, source, target, write, info</digest>
+		</inlet>
+	</inletlist>
+	<outletlist>
+		<outlet id="0" type="">
+			<digest>&lt;name&gt; &lt;count&gt; after a write</digest>
+		</outlet>
+		<outlet id="1" type="">
+			<digest>bang when done; count; info; written</digest>
+		</outlet>
+	</outletlist>
+	<objarglist>
+		<objarg name="name" optional="0" type="symbol">
+			<digest>Name</digest>
+			<description>The memories are <i>/bachmcp.&lt;name&gt;.&lt;n&gt;</i> and the index <i>/bachmcp.&lt;name&gt;</i>: at most 17 characters, no slash. With a name only, the object joins the memories if a program already made them, or starts with none.</description>
+		</objarg>
+		<objarg name="count" optional="1" type="int">
+			<digest>How many memories</digest>
+			<description>With a count, the object makes that many new, silent memories (0 to 9999), replacing what was under the name.</description>
+		</objarg>
+		<objarg name="ms" optional="1" type="float">
+			<digest>Duration of each (ms)</digest>
+			<description>The duration of each new memory, at Max's sample rate. Default 0.</description>
+		</objarg>
+		<objarg name="channels" optional="1" type="int">
+			<digest>Channels of each</digest>
+			<description>1 (default) to 1024.</description>
+		</objarg>
+	</objarglist>
+	<methodlist>
+		<method name="bang">
+			<arglist />
+			<digest>Write every memory to its buffer~</digest>
+			<description>Writes each memory into its buffer~ (the object's own <i>&lt;name&gt;.&lt;n&gt;</i>, or <at>target</at>'s), resized to fit. Then a <m>bang</m> out of the right outlet and <i>&lt;name&gt; &lt;count&gt;</i> out of the left one (the target's name when there is one).</description>
+		</method>
+		<method name="int">
+			<arglist><arg name="n" optional="0" type="int" /></arglist>
+			<digest>Write memory n only</digest>
+			<description>As <m>bang</m>, for memory n (from 1).</description>
+		</method>
+		<method name="load">
+			<arglist>
+				<arg name="n" optional="0" type="int" />
+				<arg name="file or buffer~" optional="0" type="symbol" />
+			</arglist>
+			<digest>Memory n becomes a sound file or a buffer~</digest>
+			<description>Memory n becomes this sound file (any format macOS reads: wav, aiff, caf, mp3, m4a, flac ...; absolute, or a name in Max's search path) or a copy of this <o>buffer~</o>, with its format. n = count + 1 adds one at the end.</description>
+		</method>
+		<method name="readfolder">
+			<arglist><arg name="folder" optional="0" type="symbol" /></arglist>
+			<digest>Add every sound file of a folder</digest>
+			<description>Every sound file in the folder, sorted by name, added at the end, as <o>polybuffer~</o> does. <m>loadfolder</m> is the same.</description>
+		</method>
+		<method name="appendempty">
+			<arglist>
+				<arg name="ms" optional="0" type="float" />
+				<arg name="channels" optional="1" type="int" />
+			</arglist>
+			<digest>One more memory, silent</digest>
+			<description>Adds <i>&lt;name&gt;.&lt;count+1&gt;</i>, silent, of this duration and channels (default 1).</description>
+		</method>
+		<method name="append">
+			<arglist><arg name="buffer~" optional="0" type="symbol" /></arglist>
+			<digest>One more memory, a copy of a buffer~</digest>
+			<description>Adds <i>&lt;name&gt;.&lt;count+1&gt;</i>, a copy of this <o>buffer~</o>.</description>
+		</method>
+		<method name="remove">
+			<arglist />
+			<digest>Remove the last memory</digest>
+			<description>Only the last can be removed: the names stay <i>.1</i> to <i>.&lt;count&gt;</i>.</description>
+		</method>
+		<method name="clear">
+			<arglist />
+			<digest>Remove every memory</digest>
+			<description>The count becomes 0; the index stays.</description>
+		</method>
+		<method name="source">
+			<arglist><arg name="polybuffer~, buffer~, folder or file" optional="0" type="symbol" /></arglist>
+			<digest>Read the memories from somewhere, now</digest>
+			<description>The same as <at>source</at>, and it reads at once.</description>
+		</method>
+		<method name="target">
+			<arglist><arg name="polybuffer~" optional="1" type="symbol" /></arglist>
+			<digest>Write the memories into a polybuffer~, now</digest>
+			<description>The same as <at>target</at>, and it writes at once. Alone: no target; the object's own buffer~s again.</description>
+		</method>
+		<method name="set_name">
+			<arglist><arg name="name" optional="0" type="symbol" /></arglist>
+			<digest>Go to another name</digest>
+			<description>Memories already under the new name: the object joins them. None: its memories come along (<i>&lt;name&gt;.1</i> ...), and the old ones are removed if this object made them. <m>name</m> is the same.</description>
+		</method>
+		<method name="getcount">
+			<arglist />
+			<digest>How many memories</digest>
+			<description><m>count</m> &lt;n&gt; out of the right outlet.</description>
+		</method>
+		<method name="info">
+			<arglist><arg name="n" optional="1" type="int" /></arglist>
+			<digest>Report the index, or memory n</digest>
+			<description>Out of the right outlet, one message each. Alone: <m>name</m>, <m>shm</m> (the index's name for <i>shm_open</i>), <m>count</m>, <m>serial</m>. With n: <m>name</m> (<i>&lt;name&gt;.&lt;n&gt;</i>), <m>shm</m>, <m>frames</m>, <m>channels</m>, <m>sr</m>, <m>ms</m>, <m>serial</m>.</description>
+		</method>
+		<method name="write">
+			<arglist>
+				<arg name="n" optional="0" type="int" />
+				<arg name="file" optional="1" type="symbol" />
+			</arglist>
+			<digest>Write memory n into a sound file</digest>
+			<description>As <o>buffer~</o> does: the format comes from the extension (<i>.wav .aif .caf .flac</i>; none: <i>.wav</i>), the sample type from <at>samptype</at>. No file: a save dialog. A bare name goes next to the patcher. Then <m>written</m> &lt;n&gt; &lt;path&gt; out of the right outlet.</description>
+		</method>
+		<method name="writewave">
+			<arglist>
+				<arg name="n" optional="0" type="int" />
+				<arg name="file" optional="1" type="symbol" />
+			</arglist>
+			<digest>Write memory n as WAVE</digest>
+			<description>As <m>write</m>, in WAVE format.</description>
+		</method>
+		<method name="writeaiff">
+			<arglist>
+				<arg name="n" optional="0" type="int" />
+				<arg name="file" optional="1" type="symbol" />
+			</arglist>
+			<digest>Write memory n as AIFF</digest>
+			<description>As <m>write</m>, in AIFF format.</description>
+		</method>
+		<method name="writeflac">
+			<arglist>
+				<arg name="n" optional="0" type="int" />
+				<arg name="file" optional="1" type="symbol" />
+			</arglist>
+			<digest>Write memory n as FLAC</digest>
+			<description>As <m>write</m>, in FLAC format.</description>
+		</method>
+		<method name="writecaf">
+			<arglist>
+				<arg name="n" optional="0" type="int" />
+				<arg name="file" optional="1" type="symbol" />
+			</arglist>
+			<digest>Write memory n as CAF</digest>
+			<description>As <m>write</m>, in CAF format.</description>
+		</method>
+		<method name="writetofolder">
+			<arglist>
+				<arg name="folder" optional="0" type="symbol" />
+				<arg name="format" optional="1" type="symbol" />
+			</arglist>
+			<digest>Write every memory into a folder</digest>
+			<description>Every memory as <i>&lt;name&gt;.&lt;n&gt;.wav</i> (or <m>aiff</m>, <m>flac</m>, <m>caf</m>), as <o>polybuffer~</o> does; the folder is made if missing. Then <m>written</m> &lt;count&gt; &lt;folder&gt; out of the right outlet.</description>
+		</method>
+	</methodlist>
+	<attributelist>
+		<attribute name="source" get="1" set="1" type="symbol" size="1">
+			<digest>Where the memories come from</digest>
+			<description>Looked up in this order: a <o>polybuffer~</o> (buffers <i>&lt;source&gt;.1</i>, <i>&lt;source&gt;.2</i> ... until one is missing): as many memories as its buffers, with their formats; a <o>buffer~</o>: one memory, a copy; a folder: one memory per sound file, sorted by name; a sound file: one memory. Given as an argument, it is read once the patcher is loaded.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Source polybuffer~" />
+			</attributelist>
+		</attribute>
+		<attribute name="target" get="1" set="1" type="symbol" size="1">
+			<digest>The polybuffer~ the memories go to</digest>
+			<description>A <o>polybuffer~</o> written instead of the object's own buffer~s: memory n into <i>&lt;target&gt;.&lt;n&gt;</i>. It must already hold as many buffers (<m>appendempty</m>): the object can't add buffers to another polybuffer~.</description>
+			<attributelist>
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Target polybuffer~" />
+			</attributelist>
+		</attribute>
+		<attribute name="notify" get="1" set="1" type="int" size="1">
+			<digest>Write when Python says it changed something</digest>
+			<description><m>1</m>: when the other program announces a change (in Python: <i>touch()</i> on the set or on a member, <i>append()</i>, <i>pop()</i>, <i>clear()</i>, which post the Darwin notification <i>bachmcp.shmbuffer.&lt;name&gt;</i>), write the memories that changed, and make buffer~s for new ones. Nothing is polled. Either way, the Max console says <i>python written &lt;name&gt;</i>.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="int" size="1" value="0" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Notify of Changes" />
+				<attribute name="style" get="1" set="1" type="symbol" size="1" value="onoff" />
+			</attributelist>
+		</attribute>
+		<attribute name="samptype" get="1" set="1" type="symbol" size="1">
+			<digest>Sample type of written files</digest>
+			<description><m>int16</m>, <m>int24</m> (default), <m>int32</m> or <m>float32</m>.</description>
+			<attributelist>
+				<attribute name="default" get="1" set="1" type="symbol" size="1" value="int24" />
+				<attribute name="label" get="1" set="1" type="symbol" size="1" value="Sample Type of Written Files" />
+				<attribute name="enumvals" get="1" set="1" type="atom" size="4">
+					<enum name="int16" />
+					<enum name="int24" />
+					<enum name="int32" />
+					<enum name="float32" />
+				</attribute>
+			</attributelist>
+		</attribute>
+	</attributelist>
+	<discussion>
+		The index is a 64-byte shared memory holding the count and a serial (layout in <i>sources/bachmcp.shmbuffer~/source/bachmcp.shmbuffer.h</i>); whoever adds a memory makes it first, then raises the count. In Python: <i>poly = PShmBuffer("name")</i>; <i>len(poly)</i>; <i>poly[2].array</i>, the samples of the second (from 1, as polybuffer~; negative from the end); <i>poly[2].touch()</i>; <i>poly.append(samples, sr=48000)</i>; <i>poly.pop()</i>; <i>poly.wait()</i>, which sleeps until Max changes the set (<m>appendempty</m>, <m>append</m>, <m>load</m>, <m>remove</m>, <m>clear</m>, <at>source</at>). There is no lock. The memories and the index are removed when the object that made the index is freed. Messages run in the main thread. <i>examples/python/shmbuffers.py</i>, run by <o>bachmcp.python</o>, shows the Python side.
+	</discussion>
+	<seealsolist>
+		<seealso name="bachmcp.shmbuffer~" />
+		<seealso name="bachmcp.python" />
+		<seealso name="polybuffer~" />
+		<seealso name="buffer~" />
+	</seealsolist>
+</c74object>

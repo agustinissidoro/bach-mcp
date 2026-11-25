@@ -3,7 +3,8 @@ buffer_process_tools.py
 ----------------
 send_buffer_process: the model writes offline audio processing, as Python: a file that defines
 process(x, sr, p), for a buffer instance. The hub runs it (audio_processing/runner.py) on
-the samples Max holds in a bachmcp.shmbuffer~ and puts the result in another one; Max never
+the samples Max holds in a bachmcp.shmbuffer~ and puts the result in a bachmcp.pshmbuffer~
+(<target>.1, or .1 .. .N with variations); Max never
 runs Python, it only sends lines to the hub.
 
 Before a file is kept it is checked here:
@@ -15,17 +16,21 @@ Before a file is kept it is checked here:
     sound database: every slider low, then every slider high): it must return finite samples;
   - by the listen test, when there is a hub (it registers its runner: serve_runner): the code on
     the real source, in the instance's worker, its result described next to the source
-    (runner.listen). The target and Max get nothing yet; a failure here also refuses the file.
-Only a file that passes replaces the previous version (kept in processes/.history). Then:
+    (runner.listen). The target and Max get nothing; a failure here also refuses the file.
+Only a file that passes replaces the previous version (kept in recipes/.history). Then:
 
     <name> load_buffer_process <name>.json                  to Max: the panel's file
-    and what the listen test made goes into the target (runner.commit): Max gets it at once,
-    nothing is computed twice
 
-Two files for the instance, in the playground's processes/ folder:
+and Max runs it: the instance loads and runs the recipe in its own runner ([bachmcp.python]
+with max_runner.py), which writes the target. The hub never writes it: what the listen test
+made stays in the hub's worker, only described to the model.
+
+Two files for the instance, in the playground's recipes/ folder:
 
     <name>.py     the code as the model wrote it
-    <name>.json   {"description", "params"}: the panel, in the same spec as an algorithm's
+    <name>.json   {"description", "params"}: the panel, in the same spec as an algorithm's;
+                  and, when the recipe has them, "spread" and "prompt" (recompose.py's): kept when
+                  the model sends a new version, "spread" only for the parameters still declared
 """
 
 from __future__ import annotations
@@ -224,6 +229,24 @@ _DOC = """ONLY for a buffer instance: offline processing of a recorded sound, as
         """
 
 
+def _kept(panel: str, declared: Dict[str, Any]) -> Dict[str, Any]:
+    """What the recipe's .json holds besides its description and params ("spread", "prompt"):
+    kept across a new version; "spread" only for parameters the new version still declares."""
+    try:
+        with open(panel, encoding="utf-8") as f:
+            old = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(old, dict):
+        return {}
+    kept = {k: v for k, v in old.items() if k not in ("description", "params")}
+    if isinstance(kept.get("spread"), dict):
+        kept["spread"] = {k: v for k, v in kept["spread"].items() if k in declared}
+        if not kept["spread"]:
+            del kept["spread"]
+    return kept
+
+
 def register_buffer_process_tools(mcp: FastMCP, bridge: MaxBridge, python: str = sys.executable) -> None:
     """Register send_buffer_process on `mcp`. python: what runs the check (the hub's own Python)."""
 
@@ -286,8 +309,9 @@ def register_buffer_process_tools(mcp: FastMCP, bridge: MaxBridge, python: str =
                 shutil.copy2(final, os.path.join(history, f"{name}-{time.strftime('%Y%m%d-%H%M%S')}.py"))
         os.replace(draft, final)
         panel = os.path.splitext(final)[0] + ".json"
+        about = {"description": found["description"], "params": declared, **_kept(panel, declared)}
         with open(panel, "w", encoding="utf-8") as f:
-            json.dump({"description": found["description"], "params": declared}, f, indent=1)
+            json.dump(about, f, indent=1)
 
         bridge.flush()
         status = (f"and sent to Max ({name})" if bridge.send(line(name, "load_buffer_process", f"{name}.json"))
@@ -296,8 +320,7 @@ def register_buffer_process_tools(mcp: FastMCP, bridge: MaxBridge, python: str =
         if heard.get("skipped"):
             listened = f"\nNot listened to: {heard['skipped']}. It runs when Max fills the source."
         elif heard:
-            in_max = ("now in Max" if _runner.commit(name) is not False
-                      else "but it did NOT reach Max (it runs again at the next change of its panel)")
+            in_max = "Max runs it now, in the instance's own runner"
             changes = list(heard.get("changes") or [])
             before = (heard.get("before") or {}).get("similarity")
             if before is not None and heard.get("similarity") is not None:
@@ -305,14 +328,14 @@ def register_buffer_process_tools(mcp: FastMCP, bridge: MaxBridge, python: str =
             notes_heard = "".join(f"\nNote: {w}." for w in heard.get("warnings") or [])
             made = heard.get("made_of")
             made_of = (f"\nMade of {made['sounds']} sounds placed, from {made['units']} units of {made['files']} files "
-                       f"of the database (processes/{name}.manifest.json lists them)." if made else "")
+                       f"of the database (recipes/{name}.manifest.json lists them once Max has run it)." if made else "")
             listened = (f"\n\nListen test on the real sound: {heard['frames']} frames, {heard['channels']} ch at "
                         f"{heard['sr']:g} Hz in {heard['ms']} ms; {in_max}.{notes_heard}{made_of}"
                         + ("\nSource -> result:\n" + "\n".join(changes) if changes else "")
                         + f"\n\n{heard['text']}")
         notes = "".join(f"Note: {w}.\n" for w in result.get("warnings") or [])
         names = ", ".join(declared) or "(none)"
-        return (f"OK. Saved as processes/{name}.py {status}.\n"
+        return (f"OK. Saved as recipes/{name}.py {status}.\n"
                 f'Shown above its panel: "{found["description"]}"\n'
                 f"Parameters (now a panel in Max): {names}\n"
                 f"Checked: {result['runs']} runs on a two-second stereo test sound at 48000 Hz (declared values and "

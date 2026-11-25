@@ -7,11 +7,14 @@ Max never runs Python: it sends lines to the hub, and the hub has this runner.
 
 Each instance has a worker of its own (worker.py), a Python process started at its first run
 and kept: imports and models are loaded once, and a crash or an endless loop never reaches the
-hub. Its file is the playground's processes/<name>.py, its panel processes/<name>.json.
+hub. Its file is the playground's recipes/<name>.py, its panel recipes/<name>.json.
 
+    load(name)                 recipes/<name>.py into its worker, nothing run; the kept values dropped
     run(name)                  run it now (after the last change, see below)
     set_param(name, key, words) a panel change: kept, then a run
-    set_source / set_target    which shmbuffers it reads and writes (default <name>-in, <name>-out)
+    set_source / set_target    the bachmcp.shmbuffer~ it reads (default <name>-in) and the
+                               bachmcp.pshmbuffer~ it writes (default <name>, the instance's own
+                               name: one run is <name>.1, variations <name>.1 .. .N)
     loaded(name)               a new file: the values set before are dropped
     listen(name, file, spec)   the listen test of a file not yet loaded: run on the real source,
                                kept in the worker (the target and Max get nothing), described
@@ -50,6 +53,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+from ..utilities.shmbuffer import NoShmBuffer, ShmBuffer
 from .settings import BufferSettings
 
 WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker.py")
@@ -128,7 +132,7 @@ class ProcessRunner:
     def _get(self, name: str) -> _Instance:
         """Call with the lock held."""
         if name not in self._instances:
-            self._instances[name] = _Instance(f"{name}-in", f"{name}-out")
+            self._instances[name] = _Instance(f"{name}-in", name)  # the target: [bachmcp.pshmbuffer~ <name>]
         return self._instances[name]
 
     # ── What the hub asks ───────────────────────────────────────────── #
@@ -145,6 +149,26 @@ class ProcessRunner:
         with self._lock:
             self._get(name).values[key] = value(words)
         self.run(name)
+
+    def load(self, name: str) -> Dict[str, Any]:
+        """recipes/<name>.py into the instance's worker, nothing run: the file is executed (its
+        imports, what it loads at the top) and the panel's kept values are dropped, so the
+        recipe starts at its declared values. {"ok": True}, or {"ok": False, "error", "line"}."""
+        root = self.playground()
+        if not root:
+            return {"ok": False, "error": "no playground: the patch sends set_playground <folder>"}
+        file = os.path.join(root, "recipes", f"{name}.py")
+        if not os.path.exists(file):
+            return {"ok": False, "error": f"no recipes/{name}.py yet: prompt {name} for one"}
+        with self._lock:
+            instance = self._get(name)
+        answer = self._ask(instance, {"load": {"file": file}})
+        if answer is None:
+            return {"ok": False, "error": "the worker ended"}
+        if answer.get("ok"):  # only a file that loaded drops them: a failed load changes nothing
+            with self._lock:
+                instance.values.clear()
+        return answer
 
     def loaded(self, name: str) -> None:
         with self._lock:
@@ -172,7 +196,7 @@ class ProcessRunner:
         """The worker's description of the instance's source or target memory (None: the worker ended)."""
         with self._lock:
             instance = self._get(name)
-            shm = instance.source if which == "source" else instance.target
+            shm = instance.source if which == "source" else f"{instance.target}.1"  # the first result
             request = {"shm": shm, "title": "SOURCE" if which == "source" else "RESULT",
                        "goal": instance.goal, "models": self.models}
         answer = self._ask(instance, {"describe": request})
@@ -180,12 +204,20 @@ class ProcessRunner:
 
     def prompt_analysis(self, name: str) -> str:
         """What the hub adds to a prompt of this instance: its source described, and its result
-        when a run has written one. "" when analysis is off."""
+        when there is one: written by a run here, or by Max's own runner (bachmcp.python), so
+        whenever <target>.1 exists. "" when analysis is off."""
         if not self.analysis:
             return ""
         blocks = []
         with self._lock:
-            has_result = self._get(name).has_result
+            instance = self._get(name)
+            has_result, first = instance.has_result, f"{instance.target}.1"
+        if not has_result:
+            try:
+                ShmBuffer(first).close()
+                has_result = True
+            except (NoShmBuffer, ValueError):
+                pass
         for which in ("source", "target") if has_result else ("source",):
             found = self.describe(name, which)
             if found:
@@ -297,13 +329,13 @@ class ProcessRunner:
         if not root:
             self.send(name, "process_error", "no playground: the patch sends set_playground <folder>")
             return {"ok": False, "error": "no playground"}
-        file = os.path.join(root, "processes", f"{name}.py")
+        file = os.path.join(root, "recipes", f"{name}.py")
         if not os.path.exists(file):
-            self.send(name, "process_error", f"no processes/{name}.py yet: prompt {name} for one")
-            return {"ok": False, "error": f"no processes/{name}.py"}
+            self.send(name, "process_error", f"no recipes/{name}.py yet: prompt {name} for one")
+            return {"ok": False, "error": f"no recipes/{name}.py"}
         spec: Dict[str, Any] = {}
         try:
-            with open(os.path.join(root, "processes", f"{name}.json"), encoding="utf-8") as f:
+            with open(os.path.join(root, "recipes", f"{name}.json"), encoding="utf-8") as f:
                 spec = json.load(f).get("params") or {}
         except (OSError, ValueError):
             pass

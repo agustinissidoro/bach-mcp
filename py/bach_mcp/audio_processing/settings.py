@@ -11,8 +11,8 @@ The settings of a buffer instance, set from Max one at a time:
 
 soundfile_sources   where the sound may come from, any of them together:
                       database               the database of bachmcp.toml (audio_corpus.corpus())
-                      mine.db                a database by name, in <playground>/database/
-                      /path/to/mine.db       a database by its path
+                      mine.db                a database by name, in <playground>/databases/
+                      /path/to/mine.db       a database by its full path (absolute or ~/...)
                       <database>/<folder>    only the sounds of that database under that folder
                                              (database/drums, mine.db/perc/metal)
                       freesound              the freesound tool
@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
@@ -54,11 +55,22 @@ def treatments() -> Tuple[str, ...]:
     return ()
 
 
+_MAX_VOLUME = re.compile(r"^[^/:]+:(/.*)$")  # "Macintosh HD:/Users/...", as Max writes a path
+
+
+def local_path(word: str) -> str:
+    """A path as Max or a person writes it, as this machine reads it: without a Max volume, ~
+    expanded (not made absolute: a relative path stays relative). As tools/playground.local_path."""
+    m = _MAX_VOLUME.match(word.strip())
+    return os.path.expanduser(m.group(1) if m else word.strip())
+
+
 Source = Tuple[str, str, str]  # ("freesound", "", "") | ("db", <path or DEFAULT_DB>, <folder or "">) | ("path", <path>, "")
 
 
 def parse_source(word: str, playground: str = "") -> Source:
     """One word of soundfile_sources(_exclude). Raises ValueError when it names nothing there."""
+    word = local_path(word) if _MAX_VOLUME.match(word.strip()) else word
     low = word.lower()
     if low == "freesound":
         return ("freesound", "", "")
@@ -67,15 +79,16 @@ def parse_source(word: str, playground: str = "") -> Source:
     at = low.find(".db")
     if at >= 0 and (at + 3 == len(low) or low[at + 3] == "/"):
         db, folder = word[:at + 3], word[at + 4:].strip("/")
-        places = [os.path.expanduser(db)] if (os.path.isabs(os.path.expanduser(db)) or "/" in db) else []
-        if playground:
-            places.append(os.path.join(playground, "database", db))
-        places.append(os.path.abspath(os.path.expanduser(db)))
-        found = next((os.path.abspath(p) for p in places if os.path.isfile(p)), None)
-        if found is None:
-            where = f" (nor in {os.path.join(playground, 'database')})" if playground else ""
-            raise ValueError(f"no database {db}{where}")
-        return ("db", found, folder)
+        full = os.path.expanduser(db)
+        if os.path.isabs(full):          # a full path: that file
+            place = full
+        elif playground:                 # a name: always in the playground
+            place = os.path.join(playground, "databases", db)
+        else:
+            raise ValueError(f"no database {db}: no playground yet, or give a full path")
+        if not os.path.isfile(place):
+            raise ValueError(f"no database {db} ({os.path.abspath(place)})")
+        return ("db", os.path.abspath(place), folder)
     path = os.path.abspath(os.path.expanduser(word))
     if not os.path.exists(path):
         raise ValueError(f"no such file or folder: {word}")
@@ -139,7 +152,7 @@ class BufferSettings:
 
     def set(self, key: str, words: List[str], playground: str = "") -> Optional[str]:
         """Apply one setting. None when done, else why not (nothing changed). playground: where
-        a database named without a path is looked for (<playground>/database/)."""
+        a database named without a full path is looked for (<playground>/databases/)."""
         words = [w for w in words if w != ""]
         low = [w.lower() for w in words]
         if key in ("soundfile_sources", "soundfile_sources_exclude"):
@@ -229,4 +242,4 @@ class BufferSettings:
         return "[The settings of this buffer instance, set by the user in Max]\n" + "\n".join(rows)
 
 
-__all__ = ["BufferSettings", "parse_source", "DEFAULT_DB", "KEYS", "MAX_VARIATIONS", "treatments"]
+__all__ = ["BufferSettings", "parse_source", "local_path", "DEFAULT_DB", "KEYS", "MAX_VARIATIONS", "treatments"]

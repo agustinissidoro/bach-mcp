@@ -1,19 +1,24 @@
-"""recompose: a process file rendered to sound files, in N variations, each with its manifest and
+"""recompose: a recipe rendered to sound files, in N variations, each with its manifest and
 its measures. For trying, outside Max, the code a buffer instance runs (send_buffer_process).
 
     python py/bach_mcp/audio_processing/recompose.py <file.py> [--n 8] [--seed 0] [--source <sound file>]
         [--db databases/mydatabase.db] [--out playground/renders] [--set name=value ...] [--no-measure]
 
-The file defines `process(x, sr, p)` as any process file does. Its parameters are read from
-`PARAMS` in the file (the panel's declarations, as send_buffer_process takes them) or from
-<file>.json next to it. x is the sound of --source (the reference a variation, a continuation or
-a repair starts from), or no sound at all.
+The file defines `process(x, sr, p)` as any recipe does (a buffer instance's code is a recipe too,
+recipes/<name>.py). What the recipe declares is in <file>.json next to it:
+
+    {"description": "...",                         the panel's title line
+     "params": {"tail_ms": {...}, ...},            the panel's declarations, as send_buffer_process takes them
+     "spread": {"tail_ms": [5000, 10000], ...},    optional: see below
+     "prompt": "a struck metal sound ..."}         optional: the words the renders are measured against
+
+x is the sound of --source (the reference a variation, a continuation or a repair starts from),
+or no sound at all.
 
 Variation i runs with p["variation"] = i and p["seed"] = --seed: a file that draws its chances
 from audio_compose.rng(p) gives a different sound each time, and the same one again for the same
-two numbers. A file may also name parameters that should differ between variations:
-
-    SPREAD = {"tail_ms": [5000, 10000], "colour": [0.4, 1.0]}     each variation its own value in the range
+two numbers. "spread" names parameters that should differ between variations: each variation
+gets its own value in the range.
 
 --set name=value fixes a parameter for all of them.
 
@@ -25,9 +30,9 @@ What is written, in <out>/<file's name>-<seed>/:
                    end) and what was done to them
     set.json       the parameters, and for each variation its files and its measures: the
                    database's own descriptors of the result (loudness, brightness, width, streams,
-                   complexity, pitch ...) and, with a PROMPT in the file, how close it is to those
+                   complexity, pitch ...) and, with a "prompt", how close it is to those
                    words (CLAP, the database's)
-    recipe.py      the file as it was run
+    recipe.py      the file as it was run, and recipe.json its parameters
 """
 
 from __future__ import annotations
@@ -63,15 +68,21 @@ class RecipeError(Exception):
     pass
 
 
+def recipe_json(path: str) -> Dict[str, Any]:
+    """The .json next to the recipe ({} when there is none)."""
+    panel = os.path.splitext(path)[0] + ".json"
+    if not os.path.exists(panel):
+        return {}
+    with open(panel, encoding="utf-8") as f:
+        found = json.load(f)
+    if not isinstance(found, dict):
+        raise RecipeError(f"{os.path.basename(panel)} must hold an object")
+    return found
+
+
 def declared(path: str, fn: Callable[..., Any]) -> Dict[str, Any]:
-    """The file's parameters: PARAMS in it, else {"params": ...} of the .json next to it."""
-    params = getattr(sys.modules.get(fn.__module__), "PARAMS", None) or fn.__globals__.get("PARAMS")
-    if params is None:
-        panel = os.path.splitext(path)[0] + ".json"
-        if os.path.exists(panel):
-            with open(panel, encoding="utf-8") as f:
-                params = json.load(f).get("params", {})
-    return dict(params or {})
+    """The file's parameters: "params" of the .json next to it (none: no parameters)."""
+    return dict(recipe_json(path).get("params") or {})
 
 
 def values_for(params: Dict[str, Any], spread: Dict[str, Any], fixed: Dict[str, Any], rng: np.random.Generator) -> Dict[str, Any]:
@@ -93,8 +104,9 @@ def render(recipe: str, out: str, n: int = 8, seed: int = 0, fixed: Optional[Dic
     recipe = os.path.abspath(recipe)
     fn = worker.load(recipe)
     params = declared(recipe, fn)
-    spread = dict(fn.__globals__.get("SPREAD") or {})
-    prompt = str(fn.__globals__.get("PROMPT") or "")
+    about = recipe_json(recipe)
+    spread = dict(about.get("spread") or {})
+    prompt = str(about.get("prompt") or "")
     unknown = [k for k in list(fixed or {}) + list(spread) if k not in params]
     if unknown:   # before anything is written
         raise RecipeError(f"the file declares no parameter {', '.join(unknown)} (it has: {', '.join(params) or 'none'})")
@@ -109,6 +121,8 @@ def render(recipe: str, out: str, n: int = 8, seed: int = 0, fixed: Optional[Dic
         if old.startswith("v") and old[1:3].isdigit():
             os.remove(os.path.join(folder, old))
     shutil.copy(recipe, os.path.join(folder, "recipe.py"))
+    if os.path.exists(os.path.splitext(recipe)[0] + ".json"):
+        shutil.copy(os.path.splitext(recipe)[0] + ".json", os.path.join(folder, "recipe.json"))
     made: List[Dict[str, Any]] = []
     for i in range(1, int(n) + 1):
         entry: Dict[str, Any] = {"name": f"v{i:02d}"}
